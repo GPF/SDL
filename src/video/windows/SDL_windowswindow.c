@@ -33,6 +33,7 @@
 #include "../SDL_sysvideo.h"
 
 #include "SDL_windowsvideo.h"
+#include "SDL_windowskeyboard.h"
 #include "SDL_windowswindow.h"
 
 // Dropfile support
@@ -185,7 +186,7 @@ static DWORD GetWindowStyleEx(SDL_Window *window)
 }
 
 #ifdef HAVE_SHOBJIDL_CORE_H
-static ITaskbarList3 *GetTaskbarList(SDL_Window* window)
+static ITaskbarList3 *GetTaskbarList(SDL_Window *window)
 {
     const SDL_WindowData *data = window->internal;
     SDL_assert(data->taskbar_button_created);
@@ -779,6 +780,9 @@ bool WIN_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Properties
             }
             return false;
         }
+
+        // Ensure that the IME isn't active on the new window until explicitly requested.
+        WIN_StopTextInput(_this, window);
 
         // Inform Windows of the frame change so we can respond to WM_NCCALCSIZE
         SetWindowPos(hwnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
@@ -2260,7 +2264,7 @@ bool WIN_FlashWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_FlashOperat
     return true;
 }
 
-bool WIN_ApplyWindowProgress(SDL_VideoDevice *_this, SDL_Window* window)
+bool WIN_ApplyWindowProgress(SDL_VideoDevice *_this, SDL_Window *window)
 {
 #ifdef HAVE_SHOBJIDL_CORE_H
     SDL_WindowData *data = window->internal;
