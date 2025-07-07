@@ -276,7 +276,9 @@ else if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO")
     mode.w = default_w;
     mode.h = default_h;
 #endif
-
+        // Assume we have a mouse and keyboard
+    SDL_AddKeyboard(SDL_DEFAULT_KEYBOARD_ID, NULL, true);
+    SDL_AddMouse(SDL_DEFAULT_MOUSE_ID, NULL, true);
     // Add the primary display mode
     if (!SDL_AddBasicVideoDisplay(&mode)) {
         SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Failed to add video display");

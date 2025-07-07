@@ -74,7 +74,7 @@ const static char sdl_mousebtn[] = {
 
 static void mouse_update(void) {
     // printf("DREAMCAST_PumpEvents() mouse_update() called\n");
-    static int mouse_init = 0;
+    // static int mouse_init = 0;
     maple_device_t *dev = maple_enum_type(0, MAPLE_FUNC_MOUSE);
     if (!dev) return;
 
@@ -99,7 +99,7 @@ static void mouse_update(void) {
     if (abs_y > 479) abs_y = 479;
 
     // SDL3 mouse motion
-    SDL_SendMouseMotion(SDL_GetTicksNS(), NULL, SDL_TOUCH_MOUSEID, false, abs_x, abs_y);
+    SDL_SendMouseMotion(SDL_GetTicksNS(), NULL, 0, false, abs_x, abs_y);
 
     Uint8 changed_buttons = state->buttons ^ prev_buttons;
 
@@ -108,10 +108,11 @@ static void mouse_update(void) {
             SDL_SendMouseButton(
                 SDL_GetTicksNS(), 
                 NULL, 
-                SDL_TOUCH_MOUSEID, 
+                0, 
                 sdl_mousebtn[i], 
                 (state->buttons & (1 << i)) ? true : false
             );
+                SDL_Log("Mouse btn %d: %s", sdl_mousebtn[i], (state->buttons & (1 << i)) ? "pressed" : "released");
         }
     }
 
@@ -121,7 +122,7 @@ static void mouse_update(void) {
         SDL_zero(wheel_event);
         wheel_event.timestamp = SDL_GetTicksNS();
         wheel_event.type = SDL_EVENT_MOUSE_WHEEL;
-        wheel_event.which = SDL_TOUCH_MOUSEID;
+        wheel_event.which = 0;
         wheel_event.mouse_x = abs_x;
         wheel_event.mouse_y = abs_y;
         wheel_event.direction = SDL_MOUSEWHEEL_NORMAL;
@@ -132,6 +133,7 @@ static void mouse_update(void) {
 
     prev_buttons = state->buttons;
 }
+
 
 static SDL_KeyboardID get_dreamcast_keyboard_id(void) {
     static SDL_KeyboardID keyboard_id = 0;
@@ -147,27 +149,24 @@ static SDL_KeyboardID get_dreamcast_keyboard_id(void) {
 
     return keyboard_id;
 }
-// extern int dreamcast_text_input_enabled;
-static void keyboard_update(void) {
-    // printf("DREAMCAST_PumpEvents() keyboard_update() called\n");
-    static kbd_state_t old_state;
-    kbd_state_t *state;
-    maple_device_t *dev;
 
-    dev = maple_enum_type(0, MAPLE_FUNC_KEYBOARD);
+static void keyboard_update(void) {
+    static kbd_state_t old_state;
+    static bool caps_lock_enabled = false;
+    static bool num_lock_enabled = false;
+
+    maple_device_t *dev = maple_enum_type(0, MAPLE_FUNC_KEYBOARD);
     if (!dev) return;
 
-    state = maple_dev_status(dev);
+    kbd_state_t *state = maple_dev_status(dev);
     if (!state) return;
+
+    SDL_KeyboardID keyboard_id = get_dreamcast_keyboard_id();
+    if (keyboard_id == 0) return;
 
     kbd_mods_t mods_now = state->last_modifiers;
     kbd_mods_t mods_prev = old_state.last_modifiers;
     uint32 shiftkeys = mods_now.raw ^ mods_prev.raw;
-
-    SDL_KeyboardID keyboard_id = get_dreamcast_keyboard_id();
-    if (keyboard_id == 0) {
-        return;
-    }
 
     // Modifier keys
     for (int i = 0; i < sizeof(sdl_shift) / sizeof(sdl_shift[0]); ++i) {
@@ -177,55 +176,101 @@ static void keyboard_update(void) {
         }
     }
 
-    // Matrix keys
+    // Regular key state changes
     for (int i = 0; i < sizeof(sdl_key) / sizeof(sdl_key[0]); ++i) {
-        if (state->matrix[i] != old_state.matrix[i]) {
-            int key = sdl_key[i];
-            if (key) {
-                bool pressed = state->matrix[i] != 0;
-                SDL_SendKeyboardKey(SDL_GetTicksNS(), keyboard_id, mods_now.raw, key, pressed);
-                                    SDL_Log("Key pressed: %d", key);
-                // Optional: handle SDL_TEXTINPUT if needed
-                if (SDL_TextInputActive(NULL)) {
-                    SDL_Log("Text input active");
-                    char text[2] = {0};
-                    bool shift = mods_now.lshift || mods_now.rshift;
+        bool old_down = old_state.key_states[i].is_down;
+        bool new_down = state->key_states[i].is_down;
+        if (old_down != new_down) {
+            int raw_key = sdl_key[i];
+            if (!raw_key) continue;
 
-                    if (key >= SDL_SCANCODE_A && key <= SDL_SCANCODE_Z) {
-                        text[0] = shift ? 'A' + (key - SDL_SCANCODE_A)
-                                        : 'a' + (key - SDL_SCANCODE_A);
-                    } else if (key >= SDL_SCANCODE_1 && key <= SDL_SCANCODE_0) {
-                        text[0] = '0' + (key - SDL_SCANCODE_1 + 1) % 10;
-                    } else {
-                        switch (key) {
-                            case SDL_SCANCODE_SLASH:       text[0] = shift ? '?' : '/'; break;
-                            case SDL_SCANCODE_BACKSLASH:   text[0] = shift ? '|' : '\\'; break;
-                            case SDL_SCANCODE_COMMA:       text[0] = shift ? '<' : ','; break;
-                            case SDL_SCANCODE_PERIOD:      text[0] = shift ? '>' : '.'; break;
-                            case SDL_SCANCODE_SEMICOLON:   text[0] = shift ? ':' : ';'; break;
-                            case SDL_SCANCODE_APOSTROPHE:  text[0] = shift ? '"' : '\''; break;
-                            case SDL_SCANCODE_MINUS:       text[0] = shift ? '_' : '-'; break;
-                            case SDL_SCANCODE_EQUALS:      text[0] = shift ? '+' : '='; break;
-                            default: break;
-                        }
-                    }
+            int key = raw_key;
 
-                    if (text[0]) {
-                        SDL_TextInputEvent text_event;
-                        SDL_zero(text_event);
-                        text_event.type = SDL_EVENT_TEXT_INPUT;
-                        text_event.timestamp = SDL_GetTicksNS();
-                        SDL_strlcpy((char *)text_event.text, text, sizeof(text_event.text));
-                        SDL_PushEvent((SDL_Event *)&text_event);
-                    }
+            // Remap keypad keys if Num Lock is OFF
+            if (!num_lock_enabled) {
+                switch (raw_key) {
+                    case SDL_SCANCODE_KP_7: key = SDL_SCANCODE_HOME; break;
+                    case SDL_SCANCODE_KP_8: key = SDL_SCANCODE_UP; break;
+                    case SDL_SCANCODE_KP_9: key = SDL_SCANCODE_PAGEUP; break;
+                    case SDL_SCANCODE_KP_4: key = SDL_SCANCODE_LEFT; break;
+                    case SDL_SCANCODE_KP_5: key = SDL_SCANCODE_CLEAR; break;  // or keep as KP_5
+                    case SDL_SCANCODE_KP_6: key = SDL_SCANCODE_RIGHT; break;
+                    case SDL_SCANCODE_KP_1: key = SDL_SCANCODE_END; break;
+                    case SDL_SCANCODE_KP_2: key = SDL_SCANCODE_DOWN; break;
+                    case SDL_SCANCODE_KP_3: key = SDL_SCANCODE_PAGEDOWN; break;
+                    case SDL_SCANCODE_KP_0: key = SDL_SCANCODE_INSERT; break;
+                    case SDL_SCANCODE_KP_PERIOD: key = SDL_SCANCODE_DELETE; break;
+                    // case SDL_SCANCODE_KP_ENTER: key = SDL_SCANCODE_RETURN; break;
+                }
+            }
+
+            // Always remap KP_ENTER to RETURN regardless of Num Lock
+            if (raw_key == SDL_SCANCODE_KP_ENTER) {
+                key = SDL_SCANCODE_RETURN;
+            }
+
+            SDL_SendKeyboardKey(SDL_GetTicksNS(), keyboard_id, mods_now.raw, key, new_down);
+
+            if (new_down) {
+                switch (raw_key) {
+                    case SDL_SCANCODE_CAPSLOCK:
+                        caps_lock_enabled = !caps_lock_enabled;
+                        break;
+                    case SDL_SCANCODE_NUMLOCKCLEAR:
+                        num_lock_enabled = !num_lock_enabled;
+                        break;
+                    // case SDL_SCANCODE_KP_ENTER:
+                    //     key = SDL_SCANCODE_RETURN;
+                    //     break;
+                    default:
+                        // Don't send keypad digit text here — handled below
+                        break;
                 }
             }
         }
     }
 
+    // Save updated state
     old_state = *state;
-    // printf("DREAMCAST_PumpEvents() keyboard_update() done\n");
+
+    // Set keyboard LEDs (optional)
+    kbd_leds_t leds = { .raw = 0 };
+    if (caps_lock_enabled) leds.raw |= KBD_LED_CAPSLOCK;
+    if (num_lock_enabled) leds.raw |= KBD_LED_NUMLOCK;
+    // kbd_set_leds(dev, leds.raw);  // enable when implemented
+
+    // Handle printable character input
+    int ch;
+    while ((ch = kbd_queue_pop(dev, 1)) > 0) {
+        SDL_Window *win = SDL_GetKeyboardFocus();
+        if (!win) {
+            int count = 0;
+            SDL_Window **windows = SDL_GetWindows(&count);
+            if (windows && count > 0) win = windows[0];
+            SDL_free(windows);
+            if (win) SDL_StartTextInput(win);
+        }
+
+        if (win && SDL_TextInputActive(win)) {
+
+            // Skip numeric keypad characters when Num Lock is off
+            if (!num_lock_enabled && ch >= '0' && ch <= '9') {
+                continue;
+            }            
+            char text[2] = { (char)ch, '\0' };
+            bool shift = mods_now.lshift || mods_now.rshift;
+
+            // Apply Caps Lock behavior
+            if ((caps_lock_enabled ^ shift) && text[0] >= 'a' && text[0] <= 'z') {
+                text[0] -= 32;
+            }
+
+            SDL_SendKeyboardText(text);
+        }
+    }
 }
+
+
 
 void DREAMCAST_PumpEvents(SDL_VideoDevice *_this)
 {
