@@ -54,15 +54,40 @@ static int NormalizeAxis(int value)
 {
     if (value < -128) value = -128;
     if (value > 127) value = 127;
-    return (value * SDL_JOYSTICK_AXIS_MAX) / 127;
+
+    int result = (value * SDL_JOYSTICK_AXIS_MAX) / 127;
+
+    // Clamp final result explicitly
+    if (result < -32768) result = -32768;
+    if (result > 32767) result = 32767;
+
+    return result;
 }
+
 
 static int NormalizeTrigger(int value)
 {
+    // const int RAW_DEADZONE = 10;  // Raw Dreamcast trigger range is 0–255
+
+    // Clamp raw value to valid range
     if (value < 0) value = 0;
     if (value > 255) value = 255;
-    return (value * SDL_JOYSTICK_AXIS_MAX) / 255;
+
+    // Apply deadzone: treat lightly pressed triggers as fully unpressed
+    // if (value <= RAW_DEADZONE) {
+    //     return -SDL_JOYSTICK_AXIS_MAX;  // Fully released
+    // }
+
+    // Normalize to SDL range: -32767 (idle) to +32767 (fully pressed)
+    int result = (value * 2 * SDL_JOYSTICK_AXIS_MAX / 255) - SDL_JOYSTICK_AXIS_MAX;
+
+    // Clamp top end for symmetry
+    // if (value == 255) result = SDL_JOYSTICK_AXIS_MAX;
+
+    return result;
 }
+
+
 static const char *DREAMCAST_JoystickGetDeviceName(int index);
 static SDL_GUID DREAMCAST_JoystickGetDeviceGUID(int device_index);
 static uint8_t numdevs = 0;
@@ -277,8 +302,8 @@ static bool DREAMCAST_JoystickRumble(SDL_Joystick *joystick,
     maple_device_t *dev = SYS_Joystick_addr[joystick->instance_id];
     maple_device_t *rumble_dev = SYS_Rumble_device[joystick->instance_id];
 
-    SDL_Log("DREAMCAST_JoystickRumble: instance_id=%ld, low_frequency_rumble=%d, high_frequency_rumble=%d\n",
-            (long)joystick->instance_id, low_frequency_rumble, high_frequency_rumble);
+    // SDL_Log("DREAMCAST_JoystickRumble: instance_id=%ld, low_frequency_rumble=%d, high_frequency_rumble=%d\n",
+    //         (long)joystick->instance_id, low_frequency_rumble, high_frequency_rumble);
 
     /* Check if the device supports rumble */
     if (!dev || !rumble_dev) {
@@ -391,10 +416,11 @@ static void DREAMCAST_JoystickUpdate(SDL_Joystick *joystick)
     }
 
     // Axis updates
-    if (state->joyx != prev_state->joyx)
-        SDL_SendJoystickAxis(timestamp, joystick, 0, NormalizeAxis(state->joyx));
     if (state->joyy != prev_state->joyy)
         SDL_SendJoystickAxis(timestamp, joystick, 1, NormalizeAxis(state->joyy));
+    if (state->joyx != prev_state->joyx)
+        SDL_SendJoystickAxis(timestamp, joystick, 0, NormalizeAxis(state->joyx));
+
     if (state->joy2x != prev_state->joy2x)
         SDL_SendJoystickAxis(timestamp, joystick, 4, NormalizeAxis(state->joy2x));
     if (state->joy2y != prev_state->joy2y)
@@ -410,6 +436,12 @@ static void DREAMCAST_JoystickUpdate(SDL_Joystick *joystick)
         SDL_SendJoystickAxis(timestamp, joystick, 2, rtrig);
     if (ltrig != prev_ltrig)
         SDL_SendJoystickAxis(timestamp, joystick, 3, ltrig);
+
+
+    // SDL_Log("Prev LTRIG: %d  Prev RTRIG: %d  (Norm: %d / %d)",
+    //         NormalizeTrigger(prev_state->ltrig),
+    //         NormalizeTrigger(prev_state->rtrig),
+    //         ltrig, rtrig);
 
     hwdata->prev_state = *state;
 }
@@ -453,8 +485,8 @@ static bool DREAMCAST_JoystickGetGamepadMapping(int device_index, SDL_GamepadMap
         .lefty = { EMappingKind_Axis, 1 },     // Left stick Y (a1)
         .rightx = { EMappingKind_Axis, 4 },    // Right stick X (a4)
         .righty = { EMappingKind_Axis, 5 },    // Right stick Y (a5)
-        .lefttrigger = { EMappingKind_Axis, 3 | 0x80 }, // Left trigger (a3~, inverted)
-        .righttrigger = { EMappingKind_Axis, 2 | 0x80 }, // Right trigger (a2~, inverted)
+        .lefttrigger = { EMappingKind_Axis, 3  }, // Left trigger (a3~, now not inverted)
+        .righttrigger = { EMappingKind_Axis, 2  }, // Right trigger (a2~, now not inverted)
     };
     return true;
     // return false;
