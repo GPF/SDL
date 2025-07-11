@@ -299,49 +299,51 @@ static bool DREAMCAST_JoystickRumble(SDL_Joystick *joystick,
                                      Uint16 low_frequency_rumble,
                                      Uint16 high_frequency_rumble)
 {
-    maple_device_t *dev = SYS_Joystick_addr[joystick->instance_id];
-    maple_device_t *rumble_dev = SYS_Rumble_device[joystick->instance_id];
+    return SDL_Unsupported();
 
-    // SDL_Log("DREAMCAST_JoystickRumble: instance_id=%ld, low_frequency_rumble=%d, high_frequency_rumble=%d\n",
-    //         (long)joystick->instance_id, low_frequency_rumble, high_frequency_rumble);
+    // maple_device_t *dev = SYS_Joystick_addr[joystick->instance_id];
+    // maple_device_t *rumble_dev = SYS_Rumble_device[joystick->instance_id];
 
-    /* Check if the device supports rumble */
-    if (!dev || !rumble_dev) {
-        // SDL_Log("Device or rumble device not found or not open. instance_id=%ld\n", (long)joystick->instance_id);
-        return SDL_Unsupported();
-    }
+    // // SDL_Log("DREAMCAST_JoystickRumble: instance_id=%ld, low_frequency_rumble=%d, high_frequency_rumble=%d\n",
+    // //         (long)joystick->instance_id, low_frequency_rumble, high_frequency_rumble);
 
-    SDL_Log("Sending rumble command to device %ld\n", (long)joystick->instance_id);
+    // /* Check if the device supports rumble */
+    // if (!dev || !rumble_dev) {
+    //     // SDL_Log("Device or rumble device not found or not open. instance_id=%ld\n", (long)joystick->instance_id);
+    //     return SDL_Unsupported();
+    // }
 
-    purupuru_effect_t effect;
-    SDL_memset(&effect, 0, sizeof(effect));
+    // SDL_Log("Sending rumble command to device %ld\n", (long)joystick->instance_id);
 
-    /* Set up the rumble effect:
-     * - We'll use a fixed duration (e.g., 255).
-     * - Convert the low- and high-frequency values to 3-bit intensities (0–7).
-     * - Combine these using the appropriate macros.
-     *
-     * Note: The macros PURUPURU_EFFECT1_INTENSITY, PURUPURU_EFFECT2_LINTENSITY, 
-     * PURUPURU_EFFECT2_UINTENSITY, and PURUPURU_SPECIAL_MOTOR1 are defined in dc/maple/purupuru.h.
-     */
-    effect.duration = 255;  // Adjust duration as needed
+    // purupuru_effect_t effect;
+    // SDL_memset(&effect, 0, sizeof(effect));
 
-    uint32_t low_intensity = convert_rumble_intensity(low_frequency_rumble);
-    uint32_t high_intensity = convert_rumble_intensity(high_frequency_rumble);
+    // /* Set up the rumble effect:
+    //  * - We'll use a fixed duration (e.g., 255).
+    //  * - Convert the low- and high-frequency values to 3-bit intensities (0–7).
+    //  * - Combine these using the appropriate macros.
+    //  *
+    //  * Note: The macros PURUPURU_EFFECT1_INTENSITY, PURUPURU_EFFECT2_LINTENSITY, 
+    //  * PURUPURU_EFFECT2_UINTENSITY, and PURUPURU_SPECIAL_MOTOR1 are defined in dc/maple/purupuru.h.
+    //  */
+    // effect.duration = 255;  // Adjust duration as needed
 
-    effect.effect1 = PURUPURU_EFFECT1_INTENSITY(low_intensity);
-    effect.effect2 = PURUPURU_EFFECT2_LINTENSITY(low_intensity) | PURUPURU_EFFECT2_UINTENSITY(high_intensity);
-    effect.special = PURUPURU_SPECIAL_MOTOR1;  // Use motor 1
+    // uint32_t low_intensity = convert_rumble_intensity(low_frequency_rumble);
+    // uint32_t high_intensity = convert_rumble_intensity(high_frequency_rumble);
 
-    int result = purupuru_rumble(rumble_dev, &effect);
-    if (result == MAPLE_EOK) {
-        // SDL_Log("Rumble command sent successfully to device %ld.\n", (long)joystick->instance_id);
-        return true;
-    } else {
-        SDL_Log("Failed to send rumble command to device %ld. Error: %d\n", (long)joystick->instance_id, result);
-        SDL_SetError("Failed to send rumble command");
-        return false;
-    }
+    // effect.effect1 = PURUPURU_EFFECT1_INTENSITY(low_intensity);
+    // effect.effect2 = PURUPURU_EFFECT2_LINTENSITY(low_intensity) | PURUPURU_EFFECT2_UINTENSITY(high_intensity);
+    // effect.special = PURUPURU_SPECIAL_MOTOR1;  // Use motor 1
+
+    // int result = purupuru_rumble(rumble_dev, &effect);
+    // if (result == MAPLE_EOK) {
+    //     // SDL_Log("Rumble command sent successfully to device %ld.\n", (long)joystick->instance_id);
+    //     return true;
+    // } else {
+    //     SDL_Log("Failed to send rumble command to device %ld. Error: %d\n", (long)joystick->instance_id, result);
+    //     SDL_SetError("Failed to send rumble command");
+    //     return false;
+    // }
 }
 
 
@@ -353,11 +355,12 @@ static bool DREAMCAST_JoystickRumbleTriggers(SDL_Joystick *joystick,
     /* Combine the two rumble values into one.
        Since the hardware only supports one rumble channel,
        we can simply average the two values. */
-    Uint16 combined_rumble = (left_rumble + right_rumble) / 2;
+    // Uint16 combined_rumble = (left_rumble + right_rumble) / 2;
 // SDL_Log("DREAMCAST_JoystickRumbleTriggers: left_rumble=%d, right_rumble=%d, combined_rumble=%d\n",
 //             left_rumble, right_rumble, combined_rumble);
     /* Forward the combined value to the main rumble function */
-    return DREAMCAST_JoystickRumble(joystick, combined_rumble, combined_rumble);
+    // return DREAMCAST_JoystickRumble(joystick, combined_rumble, combined_rumble);
+    return SDL_Unsupported();
 }
 
 static bool DREAMCAST_JoystickSetLED(SDL_Joystick *joystick, Uint8 red, Uint8 green, Uint8 blue)

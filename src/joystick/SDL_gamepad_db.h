@@ -912,7 +912,7 @@ static const char *s_GamepadMappings[] = {
     "000000004e696e74656e646f20334400,Nintendo 3DS,crc:3210,a:b1,b:b0,back:b2,dpdown:b7,dpleft:b5,dpright:b4,dpup:b6,leftshoulder:b9,lefttrigger:b14,leftx:a0,lefty:a1,rightshoulder:b8,righttrigger:b15,rightx:a2,righty:a3,start:b3,x:b11,y:b10,hint:!SDL_GAMECONTROLLER_USE_BUTTON_LABELS:=1,",
 #endif
 #ifdef SDL_JOYSTICK_DREAMCAST
-    "060000001212000001dc000001000000,Sega Dreamcast Controller,crc:f185,a:b2,b:b1,x:b6,y:b5,start:b3,dpup:h0.1,dpleft:h0.8,dpdown:h0.4,dpright:h0.2,dpup2:h1.1,dpleft2:h1.8,dpdown2:h1.4,dpright2:h1.2,righttrigger:a2~,lefttrigger:a3~,leftx:a0,lefty:a1,rightx:a4,righty:a5,",
+    "060000001212000001dc000001000000,Sega Dreamcast Controller,crc:f185,a:b2,b:b1,x:b6,y:b5,start:b3,dpup:h0.1,dpleft:h0.8,dpdown:h0.4,dpright:h0.2,dpup2:h1.1,dpleft2:h1.8,dpdown2:h1.4,dpright2:h1.2,righttrigger:a2,lefttrigger:a3,leftx:a0,lefty:a1,rightx:a4,righty:a5,",
 #endif
     NULL
 };
