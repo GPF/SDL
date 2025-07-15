@@ -48,7 +48,9 @@
 #include "../../events/SDL_events_c.h"
 
 #include "SDL_dreamcastvideo.h"
-#include "SDL_dreamcastevents_c.h"
+// #include "SDL_dreamcastevents_c.h"
+#include "SDL_dreamcastkeyboard.h"
+#include "SDL_dreamcastmouse.h"
 #include "SDL_dreamcastframebuffer_c.h"
 #include <kos.h>
 #include <dc/video.h>
@@ -124,6 +126,22 @@ static void DREAMCAST_DeleteDevice(SDL_VideoDevice *device)
 {
     SDL_free(device);
 }
+
+#define MIN_FRAME_UPDATE 16
+void DREAMCAST_PumpEvents(SDL_VideoDevice *_this)
+{
+    // printf("DREAMCAST_PumpEvents() called\n");
+    static Uint32 last_time = 0;
+    Uint32 now = SDL_GetTicks();
+
+    if ((now - last_time) >= MIN_FRAME_UPDATE) {
+        DREAMCAST_PollKeyboard();
+        DREAMCAST_PollMouse();
+        last_time = now;
+    }
+}
+
+
 
 static SDL_VideoDevice *DREAMCAST_CreateDevice(void)
 {
@@ -276,9 +294,11 @@ else if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO")
     mode.w = default_w;
     mode.h = default_h;
 #endif
-        // Assume we have a mouse and keyboard
-    SDL_AddKeyboard(SDL_DEFAULT_KEYBOARD_ID, NULL, true);
-    SDL_AddMouse(SDL_DEFAULT_MOUSE_ID, NULL, true);
+    //     // Assume we have a mouse and keyboard
+    // SDL_AddKeyboard(SDL_DEFAULT_KEYBOARD_ID, NULL, true);
+    // SDL_AddMouse(SDL_DEFAULT_MOUSE_ID, NULL, true);
+    DREAMCAST_InitMouse();
+    DREAMCAST_InitKeyboard();
     // Add the primary display mode
     if (!SDL_AddBasicVideoDisplay(&mode)) {
         SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Failed to add video display");

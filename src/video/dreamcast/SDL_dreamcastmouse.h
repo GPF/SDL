@@ -1,3 +1,4 @@
+
 /*
   Simple DirectMedia Layer
   Copyright (C) 1997-2024 Sam Lantinga <slouken@libsdl.org>
@@ -19,15 +20,13 @@
   3. This notice may not be removed or altered from any source distribution.
 */
 
-#ifndef SDL_dreamcastevents_c_h_
-#define SDL_dreamcastevents_c_h_
+#ifndef SDL_dreamcastmouse_h_
+#define SDL_dreamcastmouse_h_
 
 #include "../../SDL_internal.h"
 
-#include "SDL_dreamcastvideo.h"
-
-extern void DREAMCAST_PumpEvents(SDL_VideoDevice *_this);
-
-#endif /* SDL_dreamcastevents_c_h_ */
+extern void DREAMCAST_InitMouse(void);
+extern void DREAMCAST_PollMouse(void);
+#endif /* SDL_dreamcastmouse_h_ */
 
 /* vi: set ts=4 sw=4 expandtab: */
