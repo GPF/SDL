@@ -126,7 +126,7 @@ void DREAMCAST_InitKeyboard(void)
 //     }
 // }
 
-void DREAMCAST_PollKeyboard(void *unused) {
+void DREAMCAST_PollKeyboard() {
     maple_device_t *dev = maple_enum_type(0, MAPLE_FUNC_KEYBOARD);
     if (!dev) return;
 

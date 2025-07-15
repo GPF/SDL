@@ -62,15 +62,12 @@ void DREAMCAST_InitMouse(void)
 }
 static bool is_relative_mode = false;
 
-static bool DREAMCAST_SetRelativeMouseMode(bool enabled)
-{
-     is_relative_mode = enabled;
-     return is_relative_mode;
-
+static bool DREAMCAST_SetRelativeMouseMode(bool enabled) {
+    is_relative_mode = enabled;
+    return true; // Always succeed for simplicity
 }
 
-void DREAMCAST_PollMouse()
-{
+void DREAMCAST_PollMouse() {
     static int abs_x = 0, abs_y = 0;
     static Uint8 prev_buttons = 0;
 
@@ -80,48 +77,58 @@ void DREAMCAST_PollMouse()
     mouse_state_t *state = maple_dev_status(dev);
     if (!state) return;
 
-    static float relative_sensitivity_x = 8.0f;  // Start with 8x, adjust as needed
-    static float relative_sensitivity_y = 8.0f;
-    static float accumulated_dx = 0.0f, accumulated_dy = 0.0f;
+    const Uint64 now = SDL_GetTicksNS();
 
+    // --- Relative Mode ---
     if (is_relative_mode) {
-        // Apply sensitivity scaling
-        accumulated_dx += state->dx * relative_sensitivity_x;
-        accumulated_dy += state->dy * relative_sensitivity_y;
-        
-        int final_dx = (int)accumulated_dx;
-        int final_dy = (int)accumulated_dy;
-        
-        if (final_dx != 0 || final_dy != 0) {
-            SDL_SendMouseMotion(SDL_GetTicksNS(), NULL, SDL_DEFAULT_MOUSE_ID, true, final_dx, final_dy);
-            accumulated_dx -= final_dx;
-            accumulated_dy -= final_dy;
-        }
-    } else {
-        // Scale to screen size for absolute mode
-        float mouse_scale_x = 640.0f / 320.0f;
-        float mouse_scale_y = 480.0f / 240.0f;
-
-        int scaled_dx = (int)(state->dx * mouse_scale_x);
-        int scaled_dy = (int)(state->dy * mouse_scale_y);
-
-        abs_x = SDL_clamp(abs_x + scaled_dx, 0, 639);
-        abs_y = SDL_clamp(abs_y + scaled_dy, 0, 479);
-
-        SDL_SendMouseMotion(SDL_GetTicksNS(), NULL, SDL_DEFAULT_MOUSE_ID, false, abs_x, abs_y);
+        // Send motion with x/y = 0 (ignored), only xrel/yrel are used
+        SDL_SendMouseMotion(
+            now,
+            NULL,
+            SDL_DEFAULT_MOUSE_ID,
+            true,  // relative
+            (float)state->dx,
+            (float)state->dy
+        );
+    }
+    // --- Absolute Mode ---
+    else {
+        abs_x = SDL_clamp(abs_x + state->dx, 0, 639);
+        abs_y = SDL_clamp(abs_y + state->dy, 0, 479);
+        SDL_SendMouseMotion(
+            now,
+            NULL,
+            SDL_DEFAULT_MOUSE_ID,
+            false,  // absolute
+            (float)abs_x,
+            (float)abs_y
+        );
     }
 
-    // Mouse buttons
+    // --- Buttons ---
     Uint8 changed_buttons = state->buttons ^ prev_buttons;
     for (int i = 0; i < SDL_arraysize(sdl_mousebtn); ++i) {
         if (changed_buttons & (1 << i)) {
-            SDL_SendMouseButton(SDL_GetTicksNS(), NULL, SDL_DEFAULT_MOUSE_ID, sdl_mousebtn[i], (state->buttons & (1 << i)) != 0);
+            SDL_SendMouseButton(
+                now,
+                NULL,
+                SDL_DEFAULT_MOUSE_ID,
+                sdl_mousebtn[i],
+                (state->buttons & (1 << i)) != 0
+            );
         }
     }
 
-    // Mouse wheel
+    // --- Wheel ---
     if (state->dz != 0) {
-        SDL_SendMouseWheel(SDL_GetTicksNS(), NULL, SDL_DEFAULT_MOUSE_ID, 0, (state->dz < 0) ? 1 : -1, SDL_MOUSEWHEEL_NORMAL);
+        SDL_SendMouseWheel(
+            now,
+            NULL,
+            SDL_DEFAULT_MOUSE_ID,
+            0,
+            (state->dz < 0) ? 1 : -1,
+            SDL_MOUSEWHEEL_NORMAL
+        );
     }
 
     prev_buttons = state->buttons;
