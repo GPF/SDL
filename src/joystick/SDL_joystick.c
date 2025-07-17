@@ -442,6 +442,7 @@ static Uint32 initial_blacklist_devices[] = {
     MAKE_VIDPID(0x04d9, 0x8009), // OBINLB USB-HID Keyboard (Anne Pro II)
     MAKE_VIDPID(0x04d9, 0xa292), // OBINLB USB-HID Keyboard (Anne Pro II)
     MAKE_VIDPID(0x04d9, 0xa293), // OBINLB USB-HID Keyboard (Anne Pro II)
+    MAKE_VIDPID(0x0e6f, 0x018a), // PDP REALMz Wireless Controller for Switch, USB charging
     MAKE_VIDPID(0x1532, 0x0266), // Razer Huntsman V2 Analog, non-functional DInput device
     MAKE_VIDPID(0x1532, 0x0282), // Razer Huntsman Mini Analog, non-functional DInput device
     MAKE_VIDPID(0x26ce, 0x01a2), // ASRock LED Controller
@@ -3202,6 +3203,17 @@ bool SDL_IsJoystickSteamController(Uint16 vendor_id, Uint16 product_id)
 bool SDL_IsJoystickHoriSteamController(Uint16 vendor_id, Uint16 product_id)
 {
     return vendor_id == USB_VENDOR_HORI && (product_id == USB_PRODUCT_HORI_STEAM_CONTROLLER || product_id == USB_PRODUCT_HORI_STEAM_CONTROLLER_BT);
+}
+
+bool SDL_IsJoystickSInputController(Uint16 vendor_id, Uint16 product_id)
+{
+    bool vendor_match = (vendor_id == USB_VENDOR_RASPBERRYPI);
+    bool product_match =
+        (product_id == USB_PRODUCT_HANDHELDLEGEND_SINPUT_GENERIC) |
+        (product_id == USB_PRODUCT_HANDHELDLEGEND_PROGCC) |
+        (product_id == USB_PRODUCT_HANDHELDLEGEND_GCULTIMATE) |
+        (product_id == USB_PRODUCT_BONJIRICHANNEL_FIREBIRD);
+    return (vendor_match && product_match);
 }
 
 bool SDL_IsJoystickFlydigiController(Uint16 vendor_id, Uint16 product_id)
