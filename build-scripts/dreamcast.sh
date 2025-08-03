@@ -6,7 +6,7 @@ SOURCE_DIR="${PWD}/.."
 BUILD_DIR="${PWD}/build"
 # Default options
 ENABLE_OPENGL=ON
-ENABLE_SDL_TESTS=OFF
+ENABLE_SDL_TESTS=ON
 ENABLE_PTHREADS=OFF
 ENABLE_UNIX_TIMERS=OFF
 BUILD_JOBS=$(nproc) # Use all available CPU cores by default
@@ -75,7 +75,7 @@ cmake -DCMAKE_TOOLCHAIN_FILE="$KOS_CMAKE_TOOLCHAIN" \
       $CMAKE_OPTS \
       -DCMAKE_INSTALL_PREFIX=${KOS_BASE}/addons \
       -DCMAKE_INSTALL_LIBDIR=lib/dreamcast \
-      -DCMAKE_INSTALL_INCLUDEDIR=include/ \
+      -DCMAKE_INSTALL_INCLUDEDIR=include/dreamcast \
       "$SOURCE_DIR"
 # Build the project
 make -j"$BUILD_JOBS" install
