@@ -470,6 +470,15 @@ if(SDL_TEST_LIBRARY)
   add_library(SDL3_test STATIC)
   add_library(SDL3::SDL3_test ALIAS SDL3_test)
   SDL_AddCommonCompilerFlags(SDL3_test)
+  
+  # Dreamcast-specific LTO disable (only for this library)
+  if(DREAMCAST)
+    target_compile_options(SDL3_test PRIVATE -fno-lto)
+    set_target_properties(SDL3_test PROPERTIES
+      INTERPROCEDURAL_OPTIMIZATION FALSE
+    )
+    message(STATUS "Disabled LTO for SDL3_test (Dreamcast only)")
+  endif()
 endif()
 
 # Make sure SDL3::SDL3 always exists

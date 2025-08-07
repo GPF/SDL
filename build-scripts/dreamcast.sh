@@ -1,0 +1,1 @@
+kos-cmake -S .. -B dcbuild -DCMAKE_INSTALL_PREFIX=/opt/toolchains/dc/kos/addons -DCMAKE_INSTALL_LIBDIR=lib/dreamcast -DCMAKE_INSTALL_INCLUDEDIR=include/dreamcast -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF 

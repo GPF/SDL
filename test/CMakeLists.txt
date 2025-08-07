@@ -536,9 +536,6 @@ if(N3DS)
 endif()
 
 if(DREAMCAST)
-    string(REPLACE "-flto=auto" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
-    string(REPLACE "-flto=auto" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-    add_compile_options(-fno-lto)
 
     set(DREAMCAST_VALID_APPS
         testsprite
@@ -551,6 +548,7 @@ if(DREAMCAST)
         loopwave
         testaudio
         testmultiaudio
+        testaudiostreamdynamicresample
         teststreaming
         testoverlay
         testiconv
@@ -569,7 +567,7 @@ if(DREAMCAST)
             set(APP_RESOURCE_FILES "icon.bmp")
         elseif(${APP} STREQUAL "testrendercopyex" OR ${APP} STREQUAL "testrendertarget" OR ${APP} STREQUAL "testscale")
             set(APP_RESOURCE_FILES "sample.bmp" "icon.bmp")
-        elseif(${APP} STREQUAL "loopwave" OR ${APP} STREQUAL "testmultiaudio" )
+        elseif(${APP} STREQUAL "loopwave" OR ${APP} STREQUAL "testmultiaudio" OR ${APP} STREQUAL "testaudiostreamdynamicresample")
             set(APP_RESOURCE_FILES "sample.wav" )        
         elseif(${APP} STREQUAL "teststreaming" OR ${APP} STREQUAL "testoverlay")
             set(APP_RESOURCE_FILES "moose.dat")
