@@ -2319,6 +2319,7 @@ void SDL_PrivateJoystickAdded(SDL_JoystickID instance_id)
     SDL_JoystickDriver *driver;
     int device_index;
     int player_index = -1;
+    bool is_gamepad;
 
     SDL_AssertJoysticksLocked();
 
@@ -2353,9 +2354,12 @@ void SDL_PrivateJoystickAdded(SDL_JoystickID instance_id)
         }
     }
 
+    // This might create an automatic gamepad mapping, so wait to send the event
+    is_gamepad = SDL_IsGamepad(instance_id);
+
     SDL_joystick_being_added = false;
 
-    if (SDL_IsGamepad(instance_id)) {
+    if (is_gamepad) {
         SDL_PrivateGamepadAdded(instance_id);
     }
 }
@@ -3207,13 +3211,15 @@ bool SDL_IsJoystickHoriSteamController(Uint16 vendor_id, Uint16 product_id)
 
 bool SDL_IsJoystickSInputController(Uint16 vendor_id, Uint16 product_id)
 {
-    bool vendor_match = (vendor_id == USB_VENDOR_RASPBERRYPI);
-    bool product_match =
-        (product_id == USB_PRODUCT_HANDHELDLEGEND_SINPUT_GENERIC) |
-        (product_id == USB_PRODUCT_HANDHELDLEGEND_PROGCC) |
-        (product_id == USB_PRODUCT_HANDHELDLEGEND_GCULTIMATE) |
-        (product_id == USB_PRODUCT_BONJIRICHANNEL_FIREBIRD);
-    return (vendor_match && product_match);
+    if (vendor_id == USB_VENDOR_RASPBERRYPI) {
+        if (product_id == USB_PRODUCT_HANDHELDLEGEND_SINPUT_GENERIC ||
+            product_id == USB_PRODUCT_HANDHELDLEGEND_PROGCC ||
+            product_id == USB_PRODUCT_HANDHELDLEGEND_GCULTIMATE ||
+            product_id == USB_PRODUCT_BONZIRICHANNEL_FIREBIRD) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool SDL_IsJoystickFlydigiController(Uint16 vendor_id, Uint16 product_id)

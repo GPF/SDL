@@ -411,6 +411,19 @@ bool Cocoa_IsWindowInFullscreenSpace(SDL_Window *window)
     }
 }
 
+bool Cocoa_IsWindowInFullscreenSpaceTransition(SDL_Window *window)
+{
+    @autoreleasepool {
+        SDL_CocoaWindowData *data = (__bridge SDL_CocoaWindowData *)window->internal;
+
+        if ([data.listener isInFullscreenSpaceTransition]) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+}
+
 bool Cocoa_IsWindowZoomed(SDL_Window *window)
 {
     SDL_CocoaWindowData *data = (__bridge SDL_CocoaWindowData *)window->internal;
@@ -1199,21 +1212,27 @@ static NSCursor *Cocoa_GetDesiredCursor(void)
 
     ScheduleContextUpdates(_data);
 
-    /* isZoomed always returns true if the window is not resizable
-     * and fullscreen windows are considered zoomed.
+    /* The OS can resize the window automatically if the display density
+     *  changes while the window is miniaturized or hidden.
      */
-    if ((window->flags & SDL_WINDOW_RESIZABLE) && [nswindow isZoomed] &&
-        !(window->flags & SDL_WINDOW_FULLSCREEN) && ![self isInFullscreenSpace]) {
-        zoomed = YES;
-    } else {
-        zoomed = NO;
-    }
-    if (!zoomed) {
-        SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESTORED, 0, 0);
-    } else {
-        SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_MAXIMIZED, 0, 0);
-        if ([self windowOperationIsPending:PENDING_OPERATION_MINIMIZE]) {
-            [nswindow miniaturize:nil];
+    if ([nswindow isVisible])
+    {
+        /* isZoomed always returns true if the window is not resizable
+         * and fullscreen windows are considered zoomed.
+         */
+        if ((window->flags & SDL_WINDOW_RESIZABLE) && [nswindow isZoomed] &&
+            !(window->flags & SDL_WINDOW_FULLSCREEN) && ![self isInFullscreenSpace]) {
+            zoomed = YES;
+        } else {
+            zoomed = NO;
+        }
+        if (!zoomed) {
+            SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESTORED, 0, 0);
+        } else {
+            SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_MAXIMIZED, 0, 0);
+            if ([self windowOperationIsPending:PENDING_OPERATION_MINIMIZE]) {
+                [nswindow miniaturize:nil];
+            }
         }
     }
 

@@ -1644,7 +1644,7 @@ SDL_DisplayOrientation Android_JNI_GetDisplayCurrentOrientation(void)
     return displayCurrentOrientation;
 }
 
-void Android_JNI_MinizeWindow(void)
+void Android_JNI_MinimizeWindow(void)
 {
     JNIEnv *env = Android_JNI_GetEnv();
     (*env)->CallStaticVoidMethod(env, mActivityClass, midMinimizeWindow);
@@ -1855,7 +1855,7 @@ bool Android_JNI_FileClose(void *userdata)
 
 bool Android_JNI_EnumerateAssetDirectory(const char *path, SDL_EnumerateDirectoryCallback cb, void *userdata)
 {
-    SDL_assert((*path == '\0') || (path[SDL_strlen(path) - 1] == '/'));  // SDL_SYS_EnumerateDirectory() should have verified this.
+    SDL_assert(path != NULL);
 
     if (!asset_manager) {
         Internal_Android_Create_AssetManager();
@@ -1890,20 +1890,23 @@ bool Android_JNI_GetAssetPathInfo(const char *path, SDL_PathInfo *info)
     }
 
     // this is sort of messy, but there isn't a stat()-like interface to the Assets.
-    AAssetDir *adir = AAssetManager_openDir(asset_manager, path);
-    if (adir) {  // it's a directory!
-        AAssetDir_close(adir);
-        info->type = SDL_PATHTYPE_DIRECTORY;
-        info->size = 0;
-        return true;
-    }
-
     AAsset *aasset = AAssetManager_open(asset_manager, path, AASSET_MODE_UNKNOWN);
     if (aasset) {  // it's a file!
         info->type = SDL_PATHTYPE_FILE;
         info->size = (Uint64) AAsset_getLength64(aasset);
         AAsset_close(aasset);
         return true;
+    }
+
+    AAssetDir *adir = AAssetManager_openDir(asset_manager, path);
+    if (adir) {  // This does _not_ return NULL for a missing directory! Treat empty directories as missing. Better than nothing.  :/
+        const bool contains_something = (AAssetDir_getNextFileName(adir) != NULL);  // if not NULL, there are files in this directory, so it's _definitely_ a directory.
+        AAssetDir_close(adir);
+        if (contains_something) {
+            info->type = SDL_PATHTYPE_DIRECTORY;
+            info->size = 0;
+            return true;
+        }
     }
 
     return SDL_SetError("Couldn't open asset '%s'", path);

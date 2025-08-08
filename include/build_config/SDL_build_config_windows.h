@@ -95,9 +95,6 @@ typedef unsigned int uintptr_t;
 #if defined(_WIN32_MAXVER) && _WIN32_MAXVER >= 0x0603  /* Windows 8.1 SDK */
 #define HAVE_SHELLSCALINGAPI_H 1
 #endif
-#if defined(_WIN32_MAXVER) && _WIN32_MAXVER >= 0x0601  /* Windows 7 SDK */
-#define HAVE_SHOBJIDL_CORE_H 1
-#endif
 #define HAVE_MMDEVICEAPI_H 1
 #define HAVE_AUDIOCLIENT_H 1
 #define HAVE_TPCSHRD_H 1
@@ -114,6 +111,9 @@ typedef unsigned int uintptr_t;
 # define SDL_DISABLE_AVX 1
 #endif
 
+#define HAVE_STDARG_H 1
+#define HAVE_STDDEF_H 1
+
 /* This can be disabled to avoid C runtime dependencies and manifest requirements */
 #ifndef HAVE_LIBC
 #define HAVE_LIBC 1
@@ -125,8 +125,6 @@ typedef unsigned int uintptr_t;
 #define HAVE_LIMITS_H 1
 #define HAVE_MATH_H 1
 #define HAVE_SIGNAL_H 1
-#define HAVE_STDARG_H 1
-#define HAVE_STDDEF_H 1
 #define HAVE_STDIO_H 1
 #define HAVE_STDLIB_H 1
 #define HAVE_STRING_H 1
@@ -156,7 +154,6 @@ typedef unsigned int uintptr_t;
 #define HAVE_STRCMP 1
 #define HAVE_STRNCMP 1
 #define HAVE_STRPBRK 1
-#define HAVE_VSSCANF 1
 #define HAVE_VSNPRINTF 1
 #define HAVE_ACOS 1
 #define HAVE_ASIN 1
@@ -214,10 +211,7 @@ typedef unsigned int uintptr_t;
 #if _MSC_VER >= 1400
 #define HAVE__FSEEKI64 1
 #endif
-#endif    /* _MSC_VER */
-#else
-#define HAVE_STDARG_H 1
-#define HAVE_STDDEF_H 1
+#endif /* _MSC_VER */
 #endif
 
 /* Enable various audio drivers */

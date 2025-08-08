@@ -75,6 +75,10 @@
 #include <unistd.h>
 #endif
 
+#ifndef GL_RGBA_FLOAT_MODE_ARB
+#define GL_RGBA_FLOAT_MODE_ARB 0x8820
+#endif /* GL_RGBA_FLOAT_MODE_ARB */
+
 // Available video drivers
 static VideoBootStrap *bootstrap[] = {
 #ifdef SDL_VIDEO_DRIVER_PRIVATE
@@ -179,6 +183,7 @@ static VideoBootStrap *bootstrap[] = {
 #if defined(SDL_PLATFORM_MACOS) && defined(SDL_VIDEO_DRIVER_COCOA)
 // Support for macOS fullscreen spaces, etc.
 extern bool Cocoa_IsWindowInFullscreenSpace(SDL_Window *window);
+extern bool Cocoa_IsWindowInFullscreenSpaceTransition(SDL_Window *window);
 extern bool Cocoa_SetWindowFullscreenSpace(SDL_Window *window, bool state, bool blocking);
 extern bool Cocoa_IsShowingModalDialog(SDL_Window *window);
 #endif
@@ -683,7 +688,7 @@ bool SDL_VideoInit(const char *driver_name)
         }
     }
     if (video) {
-        SDL_LogBackend("video", bootstrap[i]->name);
+        SDL_DebugLogBackend("video", bootstrap[i]->name);
     } else {
         if (driver_name) {
             SDL_SetError("%s not available", driver_name);
@@ -1170,7 +1175,7 @@ float SDL_GetDisplayContentScale(SDL_DisplayID displayID)
 
 void SDL_SetWindowHDRProperties(SDL_Window *window, const SDL_HDROutputProperties *HDR, bool send_event)
 {
-    if (window->HDR.HDR_headroom != HDR->HDR_headroom || window->HDR.SDR_white_level != window->HDR.SDR_white_level) {
+    if (window->HDR.HDR_headroom != HDR->HDR_headroom || window->HDR.SDR_white_level != HDR->SDR_white_level) {
         SDL_PropertiesID window_props = SDL_GetWindowProperties(window);
 
         SDL_SetFloatProperty(window_props, SDL_PROP_WINDOW_HDR_HEADROOM_FLOAT, SDL_max(HDR->HDR_headroom, 1.0f));
@@ -1725,6 +1730,9 @@ SDL_VideoDisplay *SDL_GetVideoDisplayForFullscreenWindow(SDL_Window *window)
      * the current position won't be updated at the time of the fullscreen call.
      */
     if (!displayID) {
+        displayID = window->pending_displayID;
+    }
+    if (!displayID) {
         // Use the pending position and dimensions, if available, otherwise, use the current.
         const int x = window->last_position_pending ? window->pending.x : window->x;
         const int y = window->last_position_pending ? window->pending.y : window->y;
@@ -2120,6 +2128,16 @@ bool SDL_SetWindowFullscreenMode(SDL_Window *window, const SDL_DisplayMode *mode
      * is in progress. It will be overwritten if a new request is made.
      */
     SDL_copyp(&window->current_fullscreen_mode, &window->requested_fullscreen_mode);
+
+#if defined(SDL_PLATFORM_MACOS) && defined(SDL_VIDEO_DRIVER_COCOA)
+    /* If this is called while in the middle of a Cocoa fullscreen spaces transition,
+     * wait until the transition has completed, or the window can wind up in a weird,
+     * broken state if a mode switch occurs while in a fullscreen space.
+     */
+    if (SDL_strcmp(_this->name, "cocoa") == 0 && Cocoa_IsWindowInFullscreenSpaceTransition(window)) {
+        SDL_SyncWindow(window);
+    }
+#endif
     if (SDL_WINDOW_FULLSCREEN_VISIBLE(window)) {
         SDL_UpdateFullscreenMode(window, SDL_FULLSCREEN_OP_UPDATE, true);
         SDL_SyncIfRequired(window);
@@ -2352,6 +2370,7 @@ SDL_Window *SDL_CreateWindowWithProperties(SDL_PropertiesID props)
     SDL_Window *parent = (SDL_Window *)SDL_GetPointerProperty(props, SDL_PROP_WINDOW_CREATE_PARENT_POINTER, NULL);
     SDL_WindowFlags flags = SDL_GetWindowFlagProperties(props);
     SDL_WindowFlags type_flags, graphics_flags;
+    SDL_DisplayID displayID = 0;
     bool undefined_x = false;
     bool undefined_y = false;
     bool external_graphics_context = SDL_GetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_EXTERNAL_GRAPHICS_CONTEXT_BOOLEAN, false);
@@ -2411,7 +2430,6 @@ SDL_Window *SDL_CreateWindowWithProperties(SDL_PropertiesID props)
 
     if (SDL_WINDOWPOS_ISUNDEFINED(x) || SDL_WINDOWPOS_ISUNDEFINED(y) ||
         SDL_WINDOWPOS_ISCENTERED(x) || SDL_WINDOWPOS_ISCENTERED(y)) {
-        SDL_DisplayID displayID = 0;
         SDL_Rect bounds;
 
         if ((SDL_WINDOWPOS_ISUNDEFINED(x) || SDL_WINDOWPOS_ISCENTERED(x)) && (x & 0xFFFF)) {
@@ -2494,6 +2512,7 @@ SDL_Window *SDL_CreateWindowWithProperties(SDL_PropertiesID props)
     window->floating.h = window->windowed.h = window->h = h;
     window->undefined_x = undefined_x;
     window->undefined_y = undefined_y;
+    window->pending_displayID = displayID;
 
     SDL_VideoDisplay *display = SDL_GetVideoDisplayForWindow(window);
     if (display) {
@@ -2873,6 +2892,7 @@ bool SDL_SetWindowPosition(SDL_Window *window, int x, int y)
     const int h = window->last_size_pending ? window->pending.h : window->windowed.h;
 
     original_displayID = SDL_GetDisplayForWindow(window);
+    window->pending_displayID = 0;
 
     if (SDL_WINDOWPOS_ISUNDEFINED(x)) {
         x = window->windowed.x;
@@ -2893,6 +2913,8 @@ bool SDL_SetWindowPosition(SDL_Window *window, int x, int y)
             displayID = SDL_GetPrimaryDisplay();
         }
 
+        window->pending_displayID = displayID;
+
         SDL_zero(bounds);
         if (!SDL_GetDisplayUsableBounds(displayID, &bounds) || w > bounds.w || h > bounds.h) {
             if (!SDL_GetDisplayBounds(displayID, &bounds)) {
@@ -2904,6 +2926,21 @@ bool SDL_SetWindowPosition(SDL_Window *window, int x, int y)
         }
         if (SDL_WINDOWPOS_ISCENTERED(y)) {
             y = bounds.y + (bounds.h - h) / 2;
+        }
+    } else {
+        /* See if the requested window position matches the origin of any displays and set
+         * the pending fullscreen display ID if it does. This needs to be set early in case
+         * the window is prevented from moving to the exact origin due to struts.
+         */
+        for (int i = 0; i < _this->num_displays; ++i) {
+            SDL_Rect rect;
+            const SDL_DisplayID cur_id = _this->displays[i]->id;
+            if (SDL_GetDisplayBounds(cur_id, &rect)) {
+                if (x == rect.x && y == rect.y) {
+                    window->pending_displayID = cur_id;
+                    break;
+                }
+            }
         }
     }
 
@@ -5126,6 +5163,15 @@ bool SDL_GL_GetAttribute(SDL_GLAttr attr, int *value)
     {
         *value = _this->gl_config.egl_platform;
         return true;
+    }
+    case SDL_GL_FLOATBUFFERS:
+    {
+        if (_this->gl_config.HAS_GL_ARB_color_buffer_float) {
+            attrib = GL_RGBA_FLOAT_MODE_ARB;
+            break;
+        } else {
+            return 0;
+        }
     }
     default:
         return SDL_SetError("Unknown OpenGL attribute");

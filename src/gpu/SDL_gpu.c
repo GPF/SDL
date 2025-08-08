@@ -711,7 +711,7 @@ SDL_GPUDevice *SDL_CreateGPUDeviceWithProperties(SDL_PropertiesID props)
 
     selectedBackend = SDL_GPUSelectBackend(props);
     if (selectedBackend != NULL) {
-        SDL_LogBackend("gpu", selectedBackend->name);
+        SDL_DebugLogBackend("gpu", selectedBackend->name);
         debug_mode = SDL_GetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, true);
         preferLowPower = SDL_GetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_PREFERLOWPOWER_BOOLEAN, false);
 
@@ -2242,13 +2242,13 @@ void SDL_DrawGPUIndexedPrimitivesIndirect(
 void SDL_EndGPURenderPass(
     SDL_GPURenderPass *render_pass)
 {
-    CommandBufferCommonHeader *commandBufferCommonHeader;
-    commandBufferCommonHeader = (CommandBufferCommonHeader *)RENDERPASS_COMMAND_BUFFER;
-
     if (render_pass == NULL) {
         SDL_InvalidParamError("render_pass");
         return;
     }
+
+    CommandBufferCommonHeader *commandBufferCommonHeader;
+    commandBufferCommonHeader = (CommandBufferCommonHeader *)RENDERPASS_COMMAND_BUFFER;
 
     if (RENDERPASS_DEVICE->debug_mode) {
         CHECK_RENDERPASS

@@ -215,32 +215,32 @@ static void EnsurePopupPositionIsValid(SDL_Window *window, int *x, int *y)
     int adj_count = 0;
 
     /* Per the xdg-positioner spec, child popup windows must intersect or at
-     * least be partially adjacent to the parent window.
+     * least be partially adjoining the parent window.
      *
      * Failure to ensure this on a compositor that enforces this restriction
      * can result in behavior ranging from the window being spuriously closed
      * to a protocol violation.
      */
-    if (*x + window->w < 0) {
+    if (*x + window->w <= 0) {
         *x = -window->w;
         ++adj_count;
     }
-    if (*y + window->h < 0) {
+    if (*y + window->h <= 0) {
         *y = -window->h;
         ++adj_count;
     }
-    if (*x > window->parent->w) {
+    if (*x >= window->parent->w) {
         *x = window->parent->w;
         ++adj_count;
     }
-    if (*y > window->parent->h) {
+    if (*y >= window->parent->h) {
         *y = window->parent->h;
         ++adj_count;
     }
 
     /* If adjustment was required on the x and y axes, the popup is aligned with
-     * the parent corner-to-corner and is neither overlapping nor adjacent, so it
-     * must be nudged by 1 to be considered adjacent.
+     * the parent corner-to-corner and is neither overlapping nor adjoining, so it
+     * must be nudged by 1 to be considered adjoining.
      */
     if (adj_count > 1) {
         *x += *x < 0 ? 1 : -1;
@@ -589,7 +589,7 @@ static void Wayland_move_window(SDL_Window *window)
     }
 }
 
-static void SetFullscreen(SDL_Window *window, struct wl_output *output)
+static void SetFullscreen(SDL_Window *window, struct wl_output *output, bool fullscreen)
 {
     SDL_WindowData *wind = window->internal;
     SDL_VideoData *viddata = wind->waylandData;
@@ -602,7 +602,7 @@ static void SetFullscreen(SDL_Window *window, struct wl_output *output)
 
         wind->fullscreen_exclusive = output ? window->fullscreen_exclusive : false;
         ++wind->fullscreen_deadline_count;
-        if (output) {
+        if (fullscreen) {
             Wayland_SetWindowResizable(SDL_GetVideoDevice(), window, true);
             wl_surface_commit(wind->surface);
 
@@ -619,7 +619,7 @@ static void SetFullscreen(SDL_Window *window, struct wl_output *output)
 
         wind->fullscreen_exclusive = output ? window->fullscreen_exclusive : false;
         ++wind->fullscreen_deadline_count;
-        if (output) {
+        if (fullscreen) {
             Wayland_SetWindowResizable(SDL_GetVideoDevice(), window, true);
             wl_surface_commit(wind->surface);
 
@@ -655,7 +655,7 @@ static void UpdateWindowFullscreen(SDL_Window *window, bool fullscreen)
                 SDL_VideoDisplay *disp = SDL_GetVideoDisplay(window->current_fullscreen_mode.displayID);
                 if (disp) {
                     wind->fullscreen_was_positioned = true;
-                    SetFullscreen(window, disp->internal->output);
+                    SetFullscreen(window, disp->internal->output, true);
                 }
             }
         }
@@ -2127,12 +2127,6 @@ void Wayland_HideWindow(SDL_VideoDevice *_this, SDL_Window *window)
         wind->server_decoration = NULL;
     }
 
-    // Be sure to detach after this is done, otherwise ShowWindow crashes!
-    if (wind->shell_surface_type != WAYLAND_SHELL_SURFACE_TYPE_XDG_POPUP) {
-        wl_surface_attach(wind->surface, NULL, 0, 0);
-        wl_surface_commit(wind->surface);
-    }
-
     // Clean up the export handle.
     if (wind->exported) {
         zxdg_exported_v2_destroy(wind->exported);
@@ -2169,6 +2163,10 @@ void Wayland_HideWindow(SDL_VideoDevice *_this, SDL_Window *window)
             SDL_SetPointerProperty(props, SDL_PROP_WINDOW_WAYLAND_XDG_SURFACE_POINTER, NULL);
         }
     }
+
+    // Attach a null buffer to unmap the surface.
+    wl_surface_attach(wind->surface, NULL, 0, 0);
+    wl_surface_commit(wind->surface);
 
     SDL_zero(wind->shell_surface);
     wind->show_hide_sync_required = true;
@@ -2314,7 +2312,19 @@ SDL_FullscreenResult Wayland_SetWindowFullscreen(SDL_VideoDevice *_this, SDL_Win
     // Don't send redundant fullscreen set/unset events.
     if (!!fullscreen != wind->is_fullscreen) {
         wind->fullscreen_was_positioned = !!fullscreen;
-        SetFullscreen(window, fullscreen ? output : NULL);
+
+        /* Only use the specified output if an exclusive mode is being used, or a position was explicitly requested
+         * before entering fullscreen desktop. Otherwise, let the compositor handle placement, as it has more
+         * information about where the window is and where it should go, particularly if fullscreen is being requested
+         * before the window is mapped, or the window spans multiple outputs.
+         */
+        if (!window->fullscreen_exclusive) {
+            if (window->undefined_x || window->undefined_y ||
+                (wind->num_outputs && !window->last_position_pending)) {
+                output = NULL;
+            }
+        }
+        SetFullscreen(window, output, !!fullscreen);
     } else if (wind->is_fullscreen) {
         /*
          * If the window is already fullscreen, this is likely a request to switch between
@@ -2325,7 +2335,7 @@ SDL_FullscreenResult Wayland_SetWindowFullscreen(SDL_VideoDevice *_this, SDL_Win
          */
         if (wind->last_displayID != display->id) {
             wind->fullscreen_was_positioned = true;
-            SetFullscreen(window, output);
+            SetFullscreen(window, output, true);
         } else {
             ConfigureWindowGeometry(window);
             CommitLibdecorFrame(window);
@@ -2759,7 +2769,7 @@ bool Wayland_SetWindowPosition(SDL_VideoDevice *_this, SDL_Window *window)
             SDL_VideoDisplay *display = SDL_GetVideoDisplayForFullscreenWindow(window);
             if (display && wind->last_displayID != display->id) {
                 struct wl_output *output = display->internal->output;
-                SetFullscreen(window, output);
+                SetFullscreen(window, output, true);
 
                 return true;
             }

@@ -61,6 +61,7 @@ struct SDL_Window
     bool fullscreen_exclusive;  // The window is currently fullscreen exclusive
     SDL_DisplayID last_fullscreen_exclusive_display;  // The last fullscreen_exclusive display
     SDL_DisplayID last_displayID;
+    SDL_DisplayID pending_displayID;
 
     /* Stored position and size for the window in the non-fullscreen state,
      * including when the window is maximized or tiled.
@@ -455,6 +456,7 @@ struct SDL_VideoDevice
         int retained_backing;
         int egl_platform;
         int driver_loaded;
+        int HAS_GL_ARB_color_buffer_float;
         char driver_path[256];
         SDL_SharedObject *dll_handle;
     } gl_config;
