@@ -286,6 +286,16 @@ static SDL_Window *Emscripten_GetFocusedWindow(SDL_VideoDevice *device)
             break;
         }
     }
+    // If the DOM is focused, then at least one canvas in the DOM should be considered focused.
+    // So in this case, just assume that the first canvas is focused.
+    if (!window) {
+        const int focused = MAIN_THREAD_EM_ASM_INT({
+            return document.hasFocus();
+        });
+        if (focused) {
+            window = device->windows;
+        }
+    }
     return window;
 }
 
@@ -1104,7 +1114,9 @@ static void Emscripten_set_drag_event_callbacks(SDL_WindowData *data)
                     _Emscripten_SendDragTextEvent(data, plain_text);
                     _free(plain_text);
                 } else if (event.dataTransfer.types.includes("Files")) {
-                    for (let i = 0; i < event.dataTransfer.files.length; i++) {
+                    let files_read = 0;
+                    const files_to_read = event.dataTransfer.files.length;
+                    for (let i = 0; i < files_to_read; i++) {
                         const file = event.dataTransfer.files.item(i);
                         const file_reader = new FileReader();
                         file_reader.readAsArrayBuffer(file);
@@ -1123,8 +1135,18 @@ static void Emscripten_set_drag_event_callbacks(SDL_WindowData *data)
 
                             _Emscripten_SendDragFileEvent(data, c_fs_filepath);
                             _free(c_fs_filepath);
-                            _Emscripten_SendDragCompleteEvent(data);
+                            onFileRead();
                         };
+                        file_reader.onerror = function(event) {
+                            // Handle when error occurs to ensure that the drag event can still complete
+                            onFileRead();
+                        };
+                    }
+                    function onFileRead() {
+                        ++files_read;
+                        if (files_read === files_to_read) {
+                            _Emscripten_SendDragCompleteEvent(data);
+                        }
                     }
                 }
                 _Emscripten_SendDragCompleteEvent(data);

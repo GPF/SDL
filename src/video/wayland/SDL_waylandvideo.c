@@ -660,6 +660,7 @@ static SDL_VideoDevice *Wayland_CreateDevice(bool require_preferred_protocols)
     device->ShowWindowSystemMenu = Wayland_ShowWindowSystemMenu;
     device->SyncWindow = Wayland_SyncWindow;
     device->SetWindowFocusable = Wayland_SetWindowFocusable;
+    device->ReconfigureWindow = Wayland_ReconfigureWindow;
 
 #ifdef SDL_USE_LIBDBUS
     if (SDL_SystemTheme_Init())
@@ -1374,7 +1375,7 @@ static void display_remove_global(void *data, struct wl_registry *registry, uint
             if (seat->keyboard.wl_keyboard) {
                 SDL_RemoveKeyboard(seat->keyboard.sdl_id, true);
             }
-            if (seat->keyboard.wl_keyboard) {
+            if (seat->pointer.wl_pointer) {
                 SDL_RemoveMouse(seat->pointer.sdl_id, true);
             }
             Wayland_SeatDestroy(seat, true);
