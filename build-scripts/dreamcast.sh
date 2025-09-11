@@ -3,7 +3,7 @@
 #export KOS_CMAKE_TOOLCHAIN="/opt/toolchains/dc/kos/utils/cmake/dreamcast.toolchain.cmake"
 # Define the source directory and build directory
 SOURCE_DIR="${PWD}/.."
-BUILD_DIR="${PWD}/build"
+BUILD_DIR="${PWD}/dcbuild"
 # Default options
 ENABLE_OPENGL=ON
 ENABLE_SDL_TESTS=ON
