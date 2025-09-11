@@ -884,7 +884,7 @@ macro(CheckPTHREAD)
       set(PTHREAD_LDFLAGS "-pthread")
     elseif(QNX)
       # pthread support is baked in
-    elseif(DREAMCAST)
+    elseif(PLATFORM_DREAMCAST)
       set(PTHREAD_CFLAGS "-D_REENTRANT")
       set(PTHREAD_LDFLAGS "-L${KOS_BASE}/addons/lib/dreamcast -lpthread")
       set(HAVE_PTHREADS 1)  # Force-set since we know it works
