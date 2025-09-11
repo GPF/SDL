@@ -462,7 +462,10 @@ class Releaser:
         tgz_path = self.dist_path / f"{self.project}-devel-{self.version}-mingw.tar.gz"
         txz_path = self.dist_path / f"{self.project}-devel-{self.version}-mingw.tar.xz"
 
+
         with Archiver(zip_path=zip_path, tgz_path=tgz_path, txz_path=txz_path) as archiver:
+            archive_file_tree.add_to_archiver(archive_base="", archiver=archiver)
+            archiver.add_git_hash(arcdir=arc_root, commit=self.commit, time=self.arc_time)
             archive_file_tree.add_to_archiver(archive_base="", archiver=archiver)
             archiver.add_git_hash(arcdir=arc_root, commit=self.commit, time=self.arc_time)
         print("... done")
