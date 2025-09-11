@@ -141,7 +141,7 @@ endif()
 #  for the time being. This default will change to ON once this becomes
 #  commonly supported in browsers or the Emscripten team makes a single
 #  binary work everywhere.
-if (UNIX_OR_MAC_SYS AND NOT EMSCRIPTEN OR DREAMCAST)
+if (UNIX_OR_MAC_SYS AND NOT EMSCRIPTEN OR PLATFORM_DREAMCAST)
   set(SDL_PTHREADS_DEFAULT ON)
 else()
   set(SDL_PTHREADS_DEFAULT OFF)
@@ -223,7 +223,7 @@ if(EMSCRIPTEN)
   set(SDL_SHARED_AVAILABLE OFF)
 endif()
     
-if(VITA OR PSP OR PS2 OR N3DS OR RISCOS OR DREAMCAST OR NGAGE)
+if(VITA OR PSP OR PS2 OR N3DS OR RISCOS OR PLATFORM_DREAMCAST OR NGAGE)
   set(SDL_SHARED_AVAILABLE OFF)
 endif()
 
@@ -474,7 +474,7 @@ if(SDL_TEST_LIBRARY)
   SDL_AddCommonCompilerFlags(SDL3_test)
   
   # Dreamcast-specific LTO disable (only for this library)
-  if(DREAMCAST)
+  if(PLATFORM_DREAMCAST)
     target_compile_options(SDL3_test PRIVATE -fno-lto)
     set_target_properties(SDL3_test PROPERTIES
       INTERPROCEDURAL_OPTIMIZATION FALSE
@@ -2968,7 +2968,8 @@ elseif(N3DS)
 
   sdl_glob_sources("${SDL3_SOURCE_DIR}/src/io/n3ds/*.c")
 
-elseif(DREAMCAST)
+elseif(PLATFORM_DREAMCAST)
+  include(kallistios)
   set(SDL_TESTS true)
   set(SDL_EXAMPLES true)
   set(SDL_THREAD_PTHREAD 1)
