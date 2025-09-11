@@ -535,7 +535,7 @@ if(N3DS)
     endforeach()
 endif()
 
-if(DREAMCAST)
+if(PLATFORM_DREAMCAST)
 
     set(DREAMCAST_VALID_APPS
         testsprite
