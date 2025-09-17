@@ -46,7 +46,8 @@ void DREAMCAST_PollMouse();
 
 void DREAMCAST_InitMouse(void)
 {
-    SDL_AddMouse(SDL_DEFAULT_MOUSE_ID, NULL, true);  // Must call this first
+    // extern void SDL_AddMouse(SDL_MouseID mouseID, const char *name);
+    SDL_AddMouse(SDL_DEFAULT_MOUSE_ID, NULL);  // Must call this first
     SDL_Mouse *mouse = SDL_GetMouse();
 
     // mouse->Poll = DREAMCAST_PollMouse;  // Your update logic

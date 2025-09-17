@@ -64,7 +64,8 @@ const static unsigned short sdl_key[] = {
 
 void DREAMCAST_InitKeyboard(void)
 {
-    SDL_AddKeyboard(SDL_DEFAULT_KEYBOARD_ID, NULL, true);
+    // extern void SDL_AddKeyboard(SDL_KeyboardID keyboardID, const char *name);
+    SDL_AddKeyboard(SDL_DEFAULT_KEYBOARD_ID, NULL);
 }
 
 
