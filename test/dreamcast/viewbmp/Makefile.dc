@@ -2,15 +2,8 @@ TARGET = viewbmp
 OBJS = viewbmp.o romdisk.o
 KOS_ROMDISK_DIR = romdisk
  
-# Update include paths for SDL3
-#KOS_CFLAGS+= -I../../../../build-scripts/build/include -I../../../../build-scripts/build/include-config-/SDL3 -I../../../../build-scripts/build/include/SDL3 -I. -DDREAMCAST
-
-#KOS_CFLAGS+= -O3 -ffast-math -fno-common -fno-builtin -fno-exceptions -fstrict-aliasing 
-
-#KOS_CPPFLAGS=-fno-operator-names -fno-exceptions $(KOS_CFLAGS) 
-
 # Update library paths and libraries for SDL3
-#KOS_LIBS+= -L../../../../build-scripts/build -lSDL3 -lSDL3main
+#KOS_LIBS+= -L../../../../build-scripts/build -lSDL3
 
 all: $(TARGET).bin
 
