@@ -1,0 +1,21 @@
+TARGET = 3d
+OBJS = 3d.o 
+#KOS_ROMDISK_DIR = romdisk
+
+# Update include paths for SDL3
+
+all: $(TARGET).bin
+
+include $(KOS_BASE)/Makefile.rules
+
+clean:
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin #romdisk.o romdisk.img
+
+$(TARGET).elf: $(OBJS)
+	kos-cc -o $(TARGET).elf $(OBJS) -lSDL3 -lGL -lm  -lpthread
+
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin
+
+run: $(TARGET).bin 
+	$(KOS_LOADER) $(TARGET).bin
