@@ -11,11 +11,6 @@ typedef struct {
     float x, y, z;
 } Vec3;
 
-// 2D point for screen projection
-typedef struct {
-    int x, y;
-} Point2D;
-
 // Simple 3D cube vertices
 Vec3 cube_vertices[8] = {
     {-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},  // Back face
@@ -39,24 +34,24 @@ int cube_faces[6][4] = {
     {1, 5, 6, 2}   // Right
 };
 
-// Face colors
-Uint32 face_colors[6] = {
-    0xFF0000FF,  // Red
-    0xFF00FF00,  // Green  
-    0xFFFF0000,  // Blue
-    0xFFFFFF00,  // Cyan
-    0xFFFF00FF,  // Magenta
-    0xFFFFFFFF   // White
+// Face colors (using SDL_FColor for SDL3)
+SDL_FColor face_colors[6] = {
+    {1.0f, 0.0f, 0.0f, 1.0f},  // Red
+    {0.0f, 1.0f, 0.0f, 1.0f},  // Green  
+    {0.0f, 0.0f, 1.0f, 1.0f},  // Blue
+    {0.0f, 1.0f, 1.0f, 1.0f},  // Cyan
+    {1.0f, 0.0f, 1.0f, 1.0f},  // Magenta
+    {1.0f, 1.0f, 1.0f, 1.0f}   // White
 };
 
-// Project 3D point to 2D screen coordinates
-Point2D project_3d_to_2d(Vec3 point, float distance) {
-    Point2D result;
+// Project 3D point to 2D screen coordinates using SDL_FPoint
+SDL_FPoint project_3d_to_2d(Vec3 point, float distance) {
+    SDL_FPoint result;
     float projected_x = (point.x * distance) / (point.z + distance);
     float projected_y = (point.y * distance) / (point.z + distance);
     
-    result.x = (int)(projected_x * 200 + SCREEN_WIDTH / 2);
-    result.y = (int)(projected_y * 200 + SCREEN_HEIGHT / 2);
+    result.x = projected_x * 200.0f + SCREEN_WIDTH / 2.0f;
+    result.y = projected_y * 200.0f + SCREEN_HEIGHT / 2.0f;
     
     return result;
 }
@@ -100,45 +95,14 @@ Vec3 calculate_face_normal(Vec3 v0, Vec3 v1, Vec3 v2) {
     return normal;
 }
 
-// Draw a filled triangle using SDL3
-void draw_filled_triangle(SDL_Renderer* renderer, Point2D p1, Point2D p2, Point2D p3) {
-    // Simple scanline triangle filling
-    // Sort points by Y coordinate
-    Point2D points[3] = {p1, p2, p3};
-    
-    // Bubble sort by y coordinate
-    for (int i = 0; i < 2; i++) {
-        for (int j = 0; j < 2 - i; j++) {
-            if (points[j].y > points[j + 1].y) {
-                Point2D temp = points[j];
-                points[j] = points[j + 1];
-                points[j + 1] = temp;
-            }
-        }
-    }
-    
-    // Draw horizontal lines to fill the triangle
-    for (int y = points[0].y; y <= points[2].y; y++) {
-        int x_start = SCREEN_WIDTH, x_end = 0;
-        
-        // Find intersection points with triangle edges
-        for (int i = 0; i < 3; i++) {
-            int j = (i + 1) % 3;
-            Point2D p_i = points[i], p_j = points[j];
-            
-            if ((p_i.y <= y && y < p_j.y) || (p_j.y <= y && y < p_i.y)) {
-                if (p_j.y != p_i.y) {
-                    int x = p_i.x + (y - p_i.y) * (p_j.x - p_i.x) / (p_j.y - p_i.y);
-                    if (x < x_start) x_start = x;
-                    if (x > x_end) x_end = x;
-                }
-            }
-        }
-        
-        if (x_start <= x_end) {
-            SDL_RenderLine(renderer, x_start, y, x_end, y);
-        }
-    }
+// Create SDL_Vertex from screen position and color
+SDL_Vertex create_vertex(SDL_FPoint pos, SDL_FColor color) {
+    SDL_Vertex vertex;
+    vertex.position = pos;
+    vertex.color = color;
+    vertex.tex_coord.x = 0.0f;  // No texture
+    vertex.tex_coord.y = 0.0f;
+    return vertex;
 }
 
 int main(int argc, char* argv[]) {
@@ -150,7 +114,7 @@ int main(int argc, char* argv[]) {
 
     // Create window
     SDL_Window* window = SDL_CreateWindow(
-        "SDL3 3D Demo",
+        "SDL3 3D Demo - Using Built-in Geometry",
         SCREEN_WIDTH, SCREEN_HEIGHT,
         SDL_WINDOW_RESIZABLE
     );
@@ -213,7 +177,7 @@ int main(int argc, char* argv[]) {
         SDL_RenderClear(renderer);
 
         // Transform and project vertices
-        Point2D projected_vertices[8];
+        SDL_FPoint projected_vertices[8];
         Vec3 transformed_vertices[8];
         
         for (int i = 0; i < 8; i++) {
@@ -231,7 +195,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (render_mode == 0) {
-            // Wireframe rendering
+            // Wireframe rendering using individual SDL_RenderLine calls
             SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
             
             for (int i = 0; i < 12; i++) {
@@ -243,7 +207,7 @@ int main(int argc, char* argv[]) {
                     projected_vertices[v2].x, projected_vertices[v2].y);
             }
         } else {
-            // Filled rendering with backface culling
+            // Filled rendering using SDL_RenderGeometry with backface culling
             for (int face = 0; face < 6; face++) {
                 int v0 = cube_faces[face][0];
                 int v1 = cube_faces[face][1];
@@ -259,24 +223,21 @@ int main(int argc, char* argv[]) {
                 
                 // Simple backface culling (if normal.z > 0, face is facing camera)
                 if (normal.z > 0) {
-                    // Set face color
-                    Uint32 color = face_colors[face];
-                    SDL_SetRenderDrawColor(renderer, 
-                        (color >> 16) & 0xFF,  // R
-                        (color >> 8) & 0xFF,   // G
-                        color & 0xFF,          // B
-                        255);                  // A
+                    // Create vertices for two triangles (quad = 2 triangles)
+                    SDL_Vertex triangle_vertices[6];
                     
-                    // Draw two triangles to make a quad
-                    draw_filled_triangle(renderer,
-                        projected_vertices[v0],
-                        projected_vertices[v1],
-                        projected_vertices[v2]);
+                    // First triangle: v0, v1, v2
+                    triangle_vertices[0] = create_vertex(projected_vertices[v0], face_colors[face]);
+                    triangle_vertices[1] = create_vertex(projected_vertices[v1], face_colors[face]);
+                    triangle_vertices[2] = create_vertex(projected_vertices[v2], face_colors[face]);
                     
-                    draw_filled_triangle(renderer,
-                        projected_vertices[v0],
-                        projected_vertices[v2],
-                        projected_vertices[v3]);
+                    // Second triangle: v0, v2, v3
+                    triangle_vertices[3] = create_vertex(projected_vertices[v0], face_colors[face]);
+                    triangle_vertices[4] = create_vertex(projected_vertices[v2], face_colors[face]);
+                    triangle_vertices[5] = create_vertex(projected_vertices[v3], face_colors[face]);
+                    
+                    // Render the triangles using SDL3's geometry renderer
+                    SDL_RenderGeometry(renderer, NULL, triangle_vertices, 6, NULL, 0);
                 }
             }
         }
