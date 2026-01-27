@@ -75,7 +75,7 @@ cmake -DCMAKE_TOOLCHAIN_FILE="$KOS_CMAKE_TOOLCHAIN" \
       $CMAKE_OPTS \
       -DCMAKE_INSTALL_PREFIX=${KOS_BASE}/addons \
       -DCMAKE_INSTALL_LIBDIR=lib/dreamcast \
-      -DCMAKE_INSTALL_INCLUDEDIR=include/dreamcast \
+      -DCMAKE_INSTALL_INCLUDEDIR=include/ \
       "$SOURCE_DIR"
 # Build the project
 make -j"$BUILD_JOBS" install

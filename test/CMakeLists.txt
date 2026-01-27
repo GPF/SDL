@@ -87,7 +87,7 @@ macro(add_sdl_test_executable TARGET)
     endif()
 endmacro()
 
-if(DREAMCAST)
+if(PLATFORM_DREAMCAST)
     string(REPLACE "-flto=auto" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
     string(REPLACE "-flto=auto" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
     add_compile_options(-fno-lto)
@@ -220,7 +220,7 @@ add_sdl_test_executable(controllermap NEEDS_RESOURCES controllermap.c testutils.
 add_sdl_test_executable(testvulkan testvulkan.c)
 add_sdl_test_executable(testoffscreen testoffscreen.c)
 
-if(DREAMCAST)
+if(PLATFORM_DREAMCAST)
     sdltest_link_librararies(
         SDL2::SDL2main
         SDL2::SDL2test
@@ -409,7 +409,7 @@ if(N3DS)
     endforeach()
 endif()
 
-if(DREAMCAST)
+if(PLATFORM_DREAMCAST)
     set(DREAMCAST_APPS
         ${SDL_TESTS_NEEDS_RESOURCES}
         # Add other apps here
@@ -447,7 +447,7 @@ if(DREAMCAST)
                 file(COPY ${RESOURCE_FILE} DESTINATION "${KOS_ROMDISK_DIR}")
             endforeach()
 
-            # Use kos_add_romdisk function from KOS Dreamcast CMake utilities
+            # Use kos_add_romdisk function from KOS PLATFORM_DREAMCAST CMake utilities
             kos_add_romdisk(${APP} "${KOS_ROMDISK_DIR}" ${APP})
         else()
             message(WARNING "App ${APP} does not have resource files defined!")
