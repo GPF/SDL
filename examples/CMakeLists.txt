@@ -199,27 +199,35 @@ if(PSP)
     endforeach()
 endif()
 
-if(N3DS)
-    set(ROMFS_DIR "${CMAKE_CURRENT_BINARY_DIR}/romfs")
-    file(MAKE_DIRECTORY "${ROMFS_DIR}")
-    file(COPY ${RESOURCE_FILES} DESTINATION "${ROMFS_DIR}")
-
+if(PLATFORM_DREAMCAST)
     foreach(APP ${SDL_EXAMPLE_EXECUTABLES})
+        target_link_libraries(${APP} PRIVATE GL pthread)
+
         get_target_property(TARGET_BINARY_DIR ${APP} BINARY_DIR)
-        set(SMDH_FILE "${TARGET_BINARY_DIR}/${APP}.smdh")
-        ctr_generate_smdh("${SMDH_FILE}"
-            NAME "SDL-${APP}"
-            DESCRIPTION "SDL3 Test suite"
-            AUTHOR "SDL3 Contributors"
-            ICON "${CMAKE_CURRENT_SOURCE_DIR}/../test/n3ds/logo48x48.png"
-        )
-        ctr_create_3dsx(
-            ${APP}
-            ROMFS "${ROMFS_DIR}"
-            SMDH "${SMDH_FILE}"
+        set(ROMDISK_DIR "${TARGET_BINARY_DIR}/romdisk_${APP}")
+        set(OUTPUT_DIR  "${TARGET_BINARY_DIR}/sdl-${APP}")
+        file(MAKE_DIRECTORY "${OUTPUT_DIR}")
+
+        # Use SDL_DATAFILES instead of ADDITIONAL_CLEAN_FILES
+        get_target_property(DATAFILES ${APP} SDL_DATAFILES)
+
+        if(DATAFILES)
+            file(MAKE_DIRECTORY "${ROMDISK_DIR}")
+            foreach(RESOURCE_FILE ${DATAFILES})
+                file(COPY "${RESOURCE_FILE}" DESTINATION "${ROMDISK_DIR}")
+            endforeach()
+            kos_add_romdisk(${APP} "${ROMDISK_DIR}" ${APP})
+        endif()
+
+        add_custom_command(TARGET ${APP} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy
+                "$<TARGET_FILE:${APP}>"
+                "${OUTPUT_DIR}/${APP}.elf"
         )
     endforeach()
 endif()
+
+
 
 if(RISCOS)
     set(SDL_EXAMPLE_EXECUTABLES_AIF)
