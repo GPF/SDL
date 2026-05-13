@@ -3,10 +3,10 @@ set -e
 
 SOURCE_DIR="${PWD}/.."
 BUILD_DIR="${PWD}/dcbuild"
-
 BUILD_JOBS="$(nproc)"
 
 ENABLE_TESTS=ON
+ENABLE_TEST_LIBRARY=ON
 ENABLE_EXAMPLES=ON
 ENABLE_OPENGL=ON
 ENABLE_GPU=OFF
@@ -19,8 +19,14 @@ ENABLE_PTHREADS=ON
 
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
-        --enable-tests) ENABLE_TESTS=ON ;;
-        --disable-tests) ENABLE_TESTS=OFF ;;
+        --enable-tests)
+            ENABLE_TESTS=ON
+            ENABLE_TEST_LIBRARY=ON
+            ;;
+        --disable-tests)
+            ENABLE_TESTS=OFF
+            ENABLE_TEST_LIBRARY=OFF
+            ;;
         --enable-examples) ENABLE_EXAMPLES=ON ;;
         --disable-examples) ENABLE_EXAMPLES=OFF ;;
         --enable-opengl) ENABLE_OPENGL=ON ;;
@@ -41,11 +47,37 @@ while [[ "$#" -gt 0 ]]; do
         --disable-pthreads) ENABLE_PTHREADS=OFF ;;
 
         clean)
-            cmake --build "$BUILD_DIR" --target clean
+            if [ -d "$BUILD_DIR" ]; then
+                cmake --build "$BUILD_DIR" --target clean
+            else
+                echo "Build directory does not exist: $BUILD_DIR"
+            fi
+            exit 0
+            ;;
+
+        install)
+            cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"
+            cmake --install "$BUILD_DIR"
+            exit 0
+            ;;
+
+        uninstall)
+            if [ -f "$BUILD_DIR/install_manifest.txt" ]; then
+                echo "Removing installed SDL3 Dreamcast files..."
+                xargs rm -vf < "$BUILD_DIR/install_manifest.txt"
+            else
+                echo "No install_manifest.txt found in $BUILD_DIR"
+            fi
             exit 0
             ;;
 
         distclean)
+            if [ -f "$BUILD_DIR/install_manifest.txt" ]; then
+                echo "Removing installed SDL3 Dreamcast files..."
+                xargs rm -vf < "$BUILD_DIR/install_manifest.txt"
+            fi
+
+            echo "Removing build directory..."
             rm -rf "$BUILD_DIR"
             exit 0
             ;;
@@ -62,21 +94,22 @@ kos-cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
     -DCMAKE_INSTALL_PREFIX=/opt/toolchains/dc/kos/addons \
     -DCMAKE_INSTALL_LIBDIR=lib/dreamcast \
     -DCMAKE_INSTALL_INCLUDEDIR=include/ \
-    -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
-    -DSDL_TESTS="$ENABLE_TESTS" \
-    -DSDL_EXAMPLES="$ENABLE_EXAMPLES" \
-    -DSDL_OPENGL="$ENABLE_OPENGL" \
-    -DSDL_GPU="$ENABLE_GPU" \
-    -DSDL_CAMERA="$ENABLE_CAMERA" \
-    -DSDL_DIALOG="$ENABLE_DIALOG" \
-    -DSDL_TRAY="$ENABLE_TRAY" \
-    -DSDL_HIDAPI="$ENABLE_HIDAPI" \
-    -DSDL_SENSOR="$ENABLE_SENSOR" \
-    -DSDL_PTHREADS="$ENABLE_PTHREADS" \
-    -DSDL_RENDER_VULKAN=OFF \
-    -DSDL_VULKAN=OFF \
-    -DSDL_OPENVR=OFF \
-    -DSDL_GPU_OPENXR=OFF \
-    -DSDL_RENDER_GPU=OFF
+    -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF \
+    -DSDL_TESTS:BOOL="$ENABLE_TESTS" \
+    -DSDL_TEST_LIBRARY:BOOL=ON \
+    -DSDL_EXAMPLES:BOOL="$ENABLE_EXAMPLES" \
+    -DSDL_OPENGL:BOOL="$ENABLE_OPENGL" \
+    -DSDL_GPU:BOOL="$ENABLE_GPU" \
+    -DSDL_CAMERA:BOOL="$ENABLE_CAMERA" \
+    -DSDL_DIALOG:BOOL="$ENABLE_DIALOG" \
+    -DSDL_TRAY:BOOL="$ENABLE_TRAY" \
+    -DSDL_HIDAPI:BOOL="$ENABLE_HIDAPI" \
+    -DSDL_SENSOR:BOOL="$ENABLE_SENSOR" \
+    -DSDL_PTHREADS:BOOL="$ENABLE_PTHREADS" \
+    -DSDL_RENDER_VULKAN:BOOL=OFF \
+    -DSDL_VULKAN:BOOL=OFF \
+    -DSDL_OPENVR:BOOL=OFF \
+    -DSDL_GPU_OPENXR:BOOL=OFF \
+    -DSDL_RENDER_GPU:BOOL=OFF
 
 cmake --build "$BUILD_DIR" --parallel "$BUILD_JOBS"

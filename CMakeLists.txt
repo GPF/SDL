@@ -3361,8 +3361,6 @@ elseif(N3DS)
 
 elseif(PLATFORM_DREAMCAST)
   include(kallistios)
-  set(SDL_TESTS true)
-  set(SDL_EXAMPLES true)
   set(SDL_THREAD_PTHREAD 1)
   CheckPTHREAD()
   set(HAVE_SDL_THREADS TRUE)
