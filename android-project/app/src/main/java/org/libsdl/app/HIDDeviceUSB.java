@@ -4,6 +4,7 @@ import android.hardware.usb.*;
 import android.os.Build;
 import android.util.Log;
 import java.util.Arrays;
+import java.util.Locale;
 
 class HIDDeviceUSB implements HIDDevice {
 
@@ -31,7 +32,7 @@ class HIDDeviceUSB implements HIDDevice {
     }
 
     String getIdentifier() {
-        return String.format("%s/%x/%x/%d", mDevice.getDeviceName(), mDevice.getVendorId(), mDevice.getProductId(), mInterfaceIndex);
+        return String.format(Locale.ENGLISH, "%s/%x/%x/%d", mDevice.getDeviceName(), mDevice.getVendorId(), mDevice.getProductId(), mInterfaceIndex);
     }
 
     @Override
@@ -131,8 +132,10 @@ class HIDDeviceUSB implements HIDDevice {
             }
         }
 
-        // Make sure the required endpoints were present
-        if (mInputEndpoint == null || mOutputEndpoint == null) {
+        // Make sure the required endpoints were present. The original Steam Controller and the wireless dongle for it do NOT
+        // actually have -- or require -- output endpoints, so we need to accept only an input one for them or else we'll fall
+        // back to the Android system gamepad functionality (and lose our paddles et al).
+        if (mInputEndpoint == null) {
             Log.w(TAG, "Missing required endpoint on USB device " + getDeviceName());
             close();
             return false;
@@ -184,6 +187,11 @@ class HIDDeviceUSB implements HIDDevice {
             }
             return length;
         } else {
+            if (mOutputEndpoint == null)
+            {
+                Log.e(TAG, "Tried to write an output report to an interface with no output endpoint!");
+                return -1;
+            }
             int res = mConnection.bulkTransfer(mOutputEndpoint, report, report.length, 1000);
             if (res != report.length) {
                 Log.w(TAG, "writeOutputReport() returned " + res + " on device " + getDeviceName());

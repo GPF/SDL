@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -95,6 +95,9 @@ static const AudioBootStrap *const bootstrap[] = {
 #ifdef SDL_AUDIO_DRIVER_QNX
     &QSAAUDIO_bootstrap,
 #endif
+#ifdef SDL_AUDIO_DRIVER_DOS_SOUNDBLASTER
+    &DOSSOUNDBLASTER_bootstrap,
+#endif
 #ifdef SDL_AUDIO_DRIVER_DISK
     &DISKAUDIO_bootstrap,
 #endif
@@ -139,11 +142,11 @@ int SDL_GetNumAudioDrivers(void)
 
 const char *SDL_GetAudioDriver(int index)
 {
-    if (index >= 0 && index < SDL_GetNumAudioDrivers()) {
-        return deduped_bootstrap[index]->name;
+    CHECK_PARAM(index < 0 || index >= SDL_GetNumAudioDrivers()) {
+        SDL_InvalidParamError("index");
+        return NULL;
     }
-    SDL_InvalidParamError("index");
-    return NULL;
+    return deduped_bootstrap[index]->name;
 }
 
 const char *SDL_GetCurrentAudioDriver(void)
@@ -174,10 +177,13 @@ int SDL_GetDefaultSampleFramesFromFreq(const int freq)
 
 int *SDL_ChannelMapDup(const int *origchmap, int channels)
 {
-    const size_t chmaplen = sizeof (*origchmap) * channels;
-    int *chmap = (int *)SDL_malloc(chmaplen);
-    if (chmap) {
-        SDL_memcpy(chmap, origchmap, chmaplen);
+    int *chmap = NULL;
+    if ((channels > 0) && origchmap) {
+        const size_t chmaplen = sizeof (*origchmap) * channels;
+        chmap = (int *)SDL_malloc(chmaplen);
+        if (chmap) {
+            SDL_memcpy(chmap, origchmap, chmaplen);
+        }
     }
     return chmap;
 }
@@ -737,11 +743,10 @@ SDL_AudioDevice *SDL_AddAudioDevice(bool recording, const char *name, const SDL_
 }
 
 // Called when a device is removed from the system, or it fails unexpectedly, from any thread, possibly even the audio device's thread.
-void SDL_AudioDeviceDisconnected(SDL_AudioDevice *device)
+static void SDLCALL SDL_AudioDeviceDisconnected_OnMainThread(void *userdata)
 {
-    if (!device) {
-        return;
-    }
+    SDL_AudioDevice *device = (SDL_AudioDevice *) userdata;
+    SDL_assert(device != NULL);
 
     // Save off removal info in a list so we can send events for each, next
     //  time the event queue pumps, in case something tries to close a device
@@ -810,6 +815,23 @@ void SDL_AudioDeviceDisconnected(SDL_AudioDevice *device)
         }
 
         UnrefPhysicalAudioDevice(device);
+    }
+
+    // We always ref this in SDL_AudioDeviceDisconnected(), so if multiple attempts
+    // to disconnect are queued, the pointer stays valid until the last one comes
+    // through.
+    UnrefPhysicalAudioDevice(device);
+}
+
+void SDL_AudioDeviceDisconnected(SDL_AudioDevice *device)
+{
+    // lots of risk of various audio backends deadlocking because they're calling
+    // this while holding a backend-specific lock, which causes problems when we
+    // want to obtain the device lock while its audio thread is also waiting for
+    // that lock to be released. So just queue the work on the main thread.
+    if (device) {
+        RefPhysicalAudioDevice(device);
+        SDL_RunOnMainThread(SDL_AudioDeviceDisconnected_OnMainThread, device, false);
     }
 }
 
@@ -1282,7 +1304,11 @@ void SDL_PlaybackAudioThreadShutdown(SDL_AudioDevice *device)
     const int frames = device->buffer_size / SDL_AUDIO_FRAMESIZE(device->spec);
     // Wait for the audio to drain if device didn't die.
     if (!SDL_GetAtomicInt(&device->zombie)) {
-        SDL_Delay(((frames * 1000) / device->spec.freq) * 2);
+        int delay = ((frames * 1000) / device->spec.freq) * 2;
+        if (delay > 100) {
+            delay = 100;
+        }
+        SDL_Delay(delay);
     }
     current_audio.impl.ThreadDeinit(device);
     SDL_AudioThreadFinalize(device);
@@ -1559,6 +1585,14 @@ const char *SDL_GetAudioDeviceName(SDL_AudioDeviceID devid)
         // remains valid (in case the device is unplugged at the wrong moment), we hold the
         // subsystem_rwlock while we copy the string.
         SDL_LockRWLockForReading(current_audio.subsystem_rwlock);
+
+        // Allow default device IDs to be used, just return the current default physical device's name.
+        if (devid == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK) {
+            devid = current_audio.default_playback_device_id;
+        } else if (devid == SDL_AUDIO_DEVICE_DEFAULT_RECORDING) {
+            devid = current_audio.default_recording_device_id;
+        }
+
         SDL_FindInHashTable(islogical ? current_audio.device_hash_logical : current_audio.device_hash_physical, (const void *) (uintptr_t) devid, &vdev);
         if (!vdev) {
             SDL_SetError("Invalid audio device instance ID");
@@ -1579,7 +1613,7 @@ const char *SDL_GetAudioDeviceName(SDL_AudioDeviceID devid)
 
 bool SDL_GetAudioDeviceFormat(SDL_AudioDeviceID devid, SDL_AudioSpec *spec, int *sample_frames)
 {
-    if (!spec) {
+    CHECK_PARAM(!spec) {
         return SDL_InvalidParamError("spec");
     }
 
@@ -1604,9 +1638,7 @@ int *SDL_GetAudioDeviceChannelMap(SDL_AudioDeviceID devid, int *count)
     SDL_AudioDevice *device = ObtainPhysicalAudioDeviceDefaultAllowed(devid);
     if (device) {
         channels = device->spec.channels;
-        if (channels > 0 && device->chmap) {
-            result = SDL_ChannelMapDup(device->chmap, channels);
-        }
+        result = SDL_ChannelMapDup(device->chmap, channels);
     }
     ReleaseAudioDevice(device);
 
@@ -1940,7 +1972,7 @@ float SDL_GetAudioDeviceGain(SDL_AudioDeviceID devid)
 
 bool SDL_SetAudioDeviceGain(SDL_AudioDeviceID devid, float gain)
 {
-    if (gain < 0.0f) {
+    CHECK_PARAM(gain < 0.0f) {
         return SDL_InvalidParamError("gain");
     }
 
@@ -1989,11 +2021,15 @@ bool SDL_BindAudioStreams(SDL_AudioDeviceID devid, SDL_AudioStream * const *stre
 
     if (num_streams == 0) {
         return true;  // nothing to do
-    } else if (num_streams < 0) {
+    }
+
+    CHECK_PARAM(num_streams < 0) {
         return SDL_InvalidParamError("num_streams");
-    } else if (!streams) {
+    }
+    CHECK_PARAM(!streams) {
         return SDL_InvalidParamError("streams");
-    } else if (SDL_IsAudioDevicePhysical(devid)) {
+    }
+    CHECK_PARAM(SDL_IsAudioDevicePhysical(devid)) {
         return SDL_SetError("Audio streams are bound to device ids from SDL_OpenAudioDevice, not raw physical devices");
     }
 
@@ -2153,7 +2189,7 @@ SDL_AudioDeviceID SDL_GetAudioStreamDevice(SDL_AudioStream *stream)
 {
     SDL_AudioDeviceID result = 0;
 
-    if (!stream) {
+    CHECK_PARAM(!stream) {
         SDL_InvalidParamError("stream");
         return 0;
     }
@@ -2434,11 +2470,9 @@ void SDL_DefaultAudioDeviceChanged(SDL_AudioDevice *new_default_device)
 
                 SDL_SetAudioPostmixCallback(logdev->instance_id, logdev->postmix, logdev->postmix_userdata);
 
-                SDL_PendingAudioDeviceEvent *p;
-
                 // Queue an event for each logical device we moved.
                 if (spec_changed) {
-                    p = (SDL_PendingAudioDeviceEvent *)SDL_malloc(sizeof(SDL_PendingAudioDeviceEvent));
+                    SDL_PendingAudioDeviceEvent *p = (SDL_PendingAudioDeviceEvent *)SDL_malloc(sizeof(SDL_PendingAudioDeviceEvent));
                     if (p) { // if this failed, no event for you, but you have deeper problems anyhow.
                         p->type = SDL_EVENT_AUDIO_DEVICE_FORMAT_CHANGED;
                         p->devid = logdev->instance_id;

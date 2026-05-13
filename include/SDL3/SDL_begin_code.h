@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -282,6 +282,22 @@
 #define SDL_HAS_BUILTIN(x) __has_builtin(x)
 
 /**
+ * Check if the compiler supports a given extension.
+ *
+ * This allows preprocessor checks for things that otherwise might fail to
+ * compile.
+ *
+ * Supported by virtually all clang versions and more-recent GCCs. Use this
+ * instead of checking the clang version if possible.
+ *
+ * On compilers without has_extension support, this is defined to 0 (always
+ * false).
+ *
+ * \since This macro is available since SDL 3.2.0.
+ */
+#define SDL_HAS_EXTENSION(x) __has_extension(x)
+
+/**
  * A macro to specify data alignment.
  *
  * This informs the compiler that a given datatype or variable must be aligned
@@ -341,6 +357,14 @@
 #define SDL_HAS_BUILTIN(x) __has_builtin(x)
 #else
 #define SDL_HAS_BUILTIN(x) 0
+#endif
+#endif
+
+#ifndef SDL_HAS_EXTENSION
+#ifdef __has_extension
+#define SDL_HAS_EXTENSION(x) __has_extension(x)
+#else
+#define SDL_HAS_EXTENSION(x) 0
 #endif
 #endif
 
@@ -431,7 +455,7 @@
 #endif /* SDL_INLINE not defined */
 
 #ifndef SDL_FORCE_INLINE
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && (_MSC_VER >= 1200)
 #define SDL_FORCE_INLINE __forceinline
 #elif ( (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__) )
 #define SDL_FORCE_INLINE __attribute__((always_inline)) static __inline__
@@ -469,7 +493,7 @@
 #define NULL ((void *)0)
 #endif
 #endif /* NULL */
-#endif /* ! macOS - breaks precompiled headers */
+#endif /* __MACH__ */
 
 #ifndef SDL_FALLTHROUGH
 #if (defined(__cplusplus) && __cplusplus >= 201703L) || \

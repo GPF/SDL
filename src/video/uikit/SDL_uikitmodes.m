@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -270,7 +270,8 @@ bool UIKit_AddDisplay(UIScreen *uiscreen, bool send_event)
 #endif
 
 #ifdef SDL_PLATFORM_VISIONOS
-bool UIKit_AddDisplay(bool send_event){
+bool UIKit_AddDisplay(bool send_event)
+{
     CGSize size = CGSizeMake(SDL_XR_SCREENWIDTH, SDL_XR_SCREENHEIGHT);
     SDL_VideoDisplay display;
     SDL_DisplayMode mode;
@@ -278,9 +279,9 @@ bool UIKit_AddDisplay(bool send_event){
     SDL_zero(mode);
     mode.w = (int)size.width;
     mode.h = (int)size.height;
-    mode.pixel_density = 1;
+    mode.pixel_density = 2;
     mode.format = SDL_PIXELFORMAT_ABGR8888;
-    mode.refresh_rate = 60.0f;
+    mode.refresh_rate = 90.0f;
 
     display.natural_orientation = SDL_ORIENTATION_LANDSCAPE;
 
@@ -329,7 +330,10 @@ bool UIKit_IsDisplayLandscape(UIScreen *uiscreen)
 {
 #ifndef SDL_PLATFORM_TVOS
     if (uiscreen == [UIScreen mainScreen]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
         return UIInterfaceOrientationIsLandscape([UIApplication sharedApplication].statusBarOrientation);
+#pragma clang diagnostic pop
     } else
 #endif // !SDL_PLATFORM_TVOS
     {
@@ -483,7 +487,10 @@ void UIKit_QuitModes(SDL_VideoDevice *_this)
 #if !defined(SDL_PLATFORM_TVOS) && !defined(SDL_PLATFORM_VISIONOS)
 void SDL_OnApplicationDidChangeStatusBarOrientation(void)
 {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
     BOOL isLandscape = UIInterfaceOrientationIsLandscape([UIApplication sharedApplication].statusBarOrientation);
+#pragma clang diagnostic pop
     SDL_VideoDisplay *display = SDL_GetVideoDisplay(SDL_GetPrimaryDisplay());
 
     if (display) {
@@ -517,7 +524,10 @@ void SDL_OnApplicationDidChangeStatusBarOrientation(void)
             }
         }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
         switch ([UIApplication sharedApplication].statusBarOrientation) {
+#pragma clang diagnostic pop
         case UIInterfaceOrientationPortrait:
             orientation = SDL_ORIENTATION_PORTRAIT;
             break;

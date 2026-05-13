@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -32,6 +32,7 @@
 
 #include "SDL_waylandshmbuffer.h"
 #include "SDL_waylandvideo.h"
+#include "single-pixel-buffer-v1-client-protocol.h"
 
 static bool SetTempFileSize(int fd, off_t size)
 {
@@ -114,56 +115,99 @@ static struct wl_buffer_listener buffer_listener = {
     buffer_handle_release
 };
 
-bool Wayland_AllocSHMBuffer(int width, int height, struct Wayland_SHMBuffer *shmBuffer)
+struct Wayland_SHMPool
+{
+    struct wl_shm_pool *shm_pool;
+    void *shm_pool_memory;
+    int shm_pool_size;
+    int offset;
+};
+
+Wayland_SHMPool *Wayland_AllocSHMPool(int size)
 {
     SDL_VideoDevice *vd = SDL_GetVideoDevice();
     SDL_VideoData *data = vd->internal;
-    struct wl_shm_pool *shm_pool;
-    const Uint32 SHM_FMT = WL_SHM_FORMAT_ARGB8888;
 
-    if (!shmBuffer) {
-        return SDL_InvalidParamError("shmBuffer");
+    if (size <= 0) {
+        return NULL;
     }
 
-    const int stride = width * 4;
-    shmBuffer->shm_data_size = stride * height;
+    Wayland_SHMPool *shmPool = SDL_calloc(1, sizeof(Wayland_SHMPool));
+    if (!shmPool) {
+        return NULL;
+    }
 
-    const int shm_fd = CreateTempFD(shmBuffer->shm_data_size);
+    shmPool->shm_pool_size = (size + 15) & (~15);
+
+    const int shm_fd = CreateTempFD(shmPool->shm_pool_size);
     if (shm_fd < 0) {
-        return SDL_SetError("Creating SHM buffer failed.");
+        SDL_free(shmPool);
+        SDL_SetError("Creating SHM buffer failed.");
+        return NULL;
     }
 
-    shmBuffer->shm_data = mmap(NULL, shmBuffer->shm_data_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-    if (shmBuffer->shm_data == MAP_FAILED) {
-        shmBuffer->shm_data = NULL;
+    shmPool->shm_pool_memory = mmap(NULL, shmPool->shm_pool_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (shmPool->shm_pool_memory == MAP_FAILED) {
+        shmPool->shm_pool_memory = NULL;
         close(shm_fd);
-        return SDL_SetError("mmap() failed.");
+        SDL_free(shmPool);
+        SDL_SetError("mmap() failed.");
+        return NULL;
     }
 
-    SDL_assert(shmBuffer->shm_data != NULL);
-
-    shm_pool = wl_shm_create_pool(data->shm, shm_fd, shmBuffer->shm_data_size);
-    shmBuffer->wl_buffer = wl_shm_pool_create_buffer(shm_pool, 0, width, height, stride, SHM_FMT);
-    wl_buffer_add_listener(shmBuffer->wl_buffer, &buffer_listener, shmBuffer);
-
-    wl_shm_pool_destroy(shm_pool);
+    shmPool->shm_pool = wl_shm_create_pool(data->shm, shm_fd, shmPool->shm_pool_size);
     close(shm_fd);
 
-    return true;
+    return shmPool;
 }
 
-void Wayland_ReleaseSHMBuffer(struct Wayland_SHMBuffer *shmBuffer)
+struct wl_buffer *Wayland_AllocBufferFromPool(Wayland_SHMPool *shmPool, int width, int height, void **data)
 {
-    if (shmBuffer) {
-        if (shmBuffer->wl_buffer) {
-            wl_buffer_destroy(shmBuffer->wl_buffer);
-            shmBuffer->wl_buffer = NULL;
+    const Uint32 SHM_FMT = WL_SHM_FORMAT_ARGB8888;
+
+    if (!shmPool || !width || !height || !data) {
+        return NULL;
+    }
+
+    *data = (Uint8 *)shmPool->shm_pool_memory + shmPool->offset;
+    struct wl_buffer *buffer = wl_shm_pool_create_buffer(shmPool->shm_pool, shmPool->offset, width, height, width * 4, SHM_FMT);
+    wl_buffer_add_listener(buffer, &buffer_listener, shmPool);
+
+    shmPool->offset += width * height * 4;
+
+    return buffer;
+}
+
+void Wayland_ReleaseSHMPool(Wayland_SHMPool *shmPool)
+{
+    if (shmPool) {
+        wl_shm_pool_destroy(shmPool->shm_pool);
+        munmap(shmPool->shm_pool_memory, shmPool->shm_pool_size);
+        SDL_free(shmPool);
+    }
+}
+
+struct wl_buffer *Wayland_CreateSinglePixelBuffer(Uint32 r, Uint32 g, Uint32 b, Uint32 a)
+{
+    SDL_VideoData *viddata = SDL_GetVideoDevice()->internal;
+
+    // The single-pixel buffer protocol is preferred, as the compositor can choose an optimal format.
+    if (viddata->single_pixel_buffer_manager) {
+        return wp_single_pixel_buffer_manager_v1_create_u32_rgba_buffer(viddata->single_pixel_buffer_manager, r, g, b, a);
+    } else {
+        Wayland_SHMPool *pool = Wayland_AllocSHMPool(4);
+        if (!pool) {
+            return NULL;
         }
-        if (shmBuffer->shm_data) {
-            munmap(shmBuffer->shm_data, shmBuffer->shm_data_size);
-            shmBuffer->shm_data = NULL;
-        }
-        shmBuffer->shm_data_size = 0;
+
+        void *mem;
+        struct wl_buffer *wl_buffer = Wayland_AllocBufferFromPool(pool, 1, 1, &mem);
+
+        const Uint8 pixel[4] = { r >> 24, g >> 24, b >> 24, a >> 24 };
+        SDL_memcpy(mem, pixel, sizeof(pixel));
+
+        Wayland_ReleaseSHMPool(pool);
+        return wl_buffer;
     }
 }
 

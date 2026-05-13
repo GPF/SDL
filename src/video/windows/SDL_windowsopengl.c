@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -24,6 +24,7 @@
 
 #include "SDL_windowsvideo.h"
 #include "SDL_windowsopengles.h"
+#include "../../SDL_hints_c.h"
 
 // WGL implementation of SDL OpenGL support
 
@@ -105,9 +106,34 @@ typedef HGLRC(APIENTRYP PFNWGLCREATECONTEXTATTRIBSARBPROC)(HDC hDC,
 #define SetPixelFormat       _this->gl_data->wglSetPixelFormat
 #endif
 
+static bool WIN_GL_LoadLibrary_EGLFallback(SDL_VideoDevice *_this, const char *path)
+{
+#ifdef SDL_VIDEO_OPENGL_EGL
+    WIN_GL_UnloadLibrary(_this);
+    _this->GL_LoadLibrary = WIN_GLES_LoadLibrary;
+    _this->GL_GetProcAddress = WIN_GLES_GetProcAddress;
+    _this->GL_UnloadLibrary = WIN_GLES_UnloadLibrary;
+    _this->GL_CreateContext = WIN_GLES_CreateContext;
+    _this->GL_MakeCurrent = WIN_GLES_MakeCurrent;
+    _this->GL_SetSwapInterval = WIN_GLES_SetSwapInterval;
+    _this->GL_GetSwapInterval = WIN_GLES_GetSwapInterval;
+    _this->GL_SwapWindow = WIN_GLES_SwapWindow;
+    _this->GL_DestroyContext = WIN_GLES_DestroyContext;
+    _this->GL_GetEGLSurface = WIN_GLES_GetEGLSurface;
+    return WIN_GLES_LoadLibrary(_this, path);
+#else
+    return SDL_SetError("SDL not configured with EGL support");
+#endif
+}
+
 bool WIN_GL_LoadLibrary(SDL_VideoDevice *_this, const char *path)
 {
     void *handle;
+
+    if ((_this->gl_config.profile_mask == SDL_GL_CONTEXT_PROFILE_ES) &&
+        SDL_GetHintBoolean(SDL_HINT_OPENGL_ES_DRIVER, false)) {
+        return WIN_GL_LoadLibrary_EGLFallback(_this, path);
+    }
 
     if (path == NULL) {
         path = SDL_GetHint(SDL_HINT_OPENGL_LIBRARY);
@@ -429,7 +455,7 @@ void WIN_GL_InitExtensions(SDL_VideoDevice *_this)
     if (!hwnd) {
         return;
     }
-    WIN_PumpEvents(_this);
+    WIN_PumpEventsForHWND(_this, hwnd);
 
     hdc = GetDC(hwnd);
 
@@ -489,7 +515,9 @@ void WIN_GL_InitExtensions(SDL_VideoDevice *_this)
     }
 
     // Check for WGL_EXT_create_context_es2_profile
-    if (HasExtension("WGL_EXT_create_context_es2_profile", extensions)) {
+    // see if we can get at OpenGL ES profiles even if EGL isn't available.
+    _this->gl_data->HAS_WGL_EXT_create_context_es2_profile = HasExtension("WGL_EXT_create_context_es2_profile", extensions);
+    if (_this->gl_data->HAS_WGL_EXT_create_context_es2_profile) {
         SDL_GL_DeduceMaxSupportedESProfile(
             &_this->gl_data->es_profile_max_supported_version.major,
             &_this->gl_data->es_profile_max_supported_version.minor);
@@ -510,6 +538,13 @@ void WIN_GL_InitExtensions(SDL_VideoDevice *_this)
         _this->gl_data->HAS_WGL_ARB_create_context_no_error = true;
     }
 
+    // Check for WGL_ARB_framebuffer_sRGB
+    if (HasExtension("WGL_ARB_framebuffer_sRGB", extensions)) {
+        _this->gl_data->HAS_WGL_ARB_framebuffer_sRGB = true;
+    } else if (HasExtension("WGL_EXT_framebuffer_sRGB", extensions)) {  // same thing.
+        _this->gl_data->HAS_WGL_ARB_framebuffer_sRGB = true;
+    }
+
     /* Check for WGL_ARB_pixel_format_float */
     _this->gl_data->HAS_WGL_ARB_pixel_format_float =
         HasExtension("WGL_ARB_pixel_format_float", extensions);
@@ -518,7 +553,7 @@ void WIN_GL_InitExtensions(SDL_VideoDevice *_this)
     _this->gl_data->wglDeleteContext(hglrc);
     ReleaseDC(hwnd, hdc);
     DestroyWindow(hwnd);
-    WIN_PumpEvents(_this);
+    WIN_PumpEventsForHWND(_this, hwnd);
 }
 
 static int WIN_GL_ChoosePixelFormatARB(SDL_VideoDevice *_this, int *iAttribs, float *fAttribs)
@@ -530,13 +565,10 @@ static int WIN_GL_ChoosePixelFormatARB(SDL_VideoDevice *_this, int *iAttribs, fl
     int pixel_format = 0;
     unsigned int matching;
 
-    int qAttrib = WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB;
-    int srgb = 0;
-
     hwnd =
         CreateWindow(SDL_Appname, SDL_Appname, (WS_POPUP | WS_DISABLED), 0, 0,
                      10, 10, NULL, NULL, SDL_Instance, NULL);
-    WIN_PumpEvents(_this);
+    WIN_PumpEventsForHWND(_this, hwnd);
 
     hdc = GetDC(hwnd);
 
@@ -554,7 +586,11 @@ static int WIN_GL_ChoosePixelFormatARB(SDL_VideoDevice *_this, int *iAttribs, fl
                                                     &matching);
 
             // Check whether we actually got an SRGB capable buffer
-            _this->gl_data->wglGetPixelFormatAttribivARB(hdc, pixel_format, 0, 1, &qAttrib, &srgb);
+            int srgb = 0;
+            if (_this->gl_data->HAS_WGL_ARB_framebuffer_sRGB) {
+                int qAttrib = WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB;
+                _this->gl_data->wglGetPixelFormatAttribivARB(hdc, pixel_format, 0, 1, &qAttrib, &srgb);
+            }
             _this->gl_config.framebuffer_srgb_capable = srgb;
         }
 
@@ -563,7 +599,7 @@ static int WIN_GL_ChoosePixelFormatARB(SDL_VideoDevice *_this, int *iAttribs, fl
     }
     ReleaseDC(hwnd, hdc);
     DestroyWindow(hwnd);
-    WIN_PumpEvents(_this);
+    WIN_PumpEventsForHWND(_this, hwnd);
 
     return pixel_format;
 }
@@ -649,9 +685,19 @@ static bool WIN_GL_SetupWindowInternal(SDL_VideoDevice *_this, SDL_Window *windo
         *iAttr++ = WGL_TYPE_RGBA_FLOAT_ARB;
     }
 
-    if (_this->gl_config.framebuffer_srgb_capable) {
-        *iAttr++ = WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB;
-        *iAttr++ = _this->gl_config.framebuffer_srgb_capable;
+    if (_this->gl_data->HAS_WGL_ARB_framebuffer_sRGB) {
+        const char *srgbhint = SDL_GetHint(SDL_HINT_OPENGL_FORCE_SRGB_FRAMEBUFFER);
+        if (srgbhint && *srgbhint) {
+            if (SDL_strcmp(srgbhint, "skip") == 0) {
+                // don't set an attribute at all.
+            } else {
+                *iAttr++ = WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB;
+                *iAttr++ = SDL_GetStringBoolean(srgbhint, false) ? GL_TRUE : GL_FALSE;
+            }
+        } else if (_this->gl_config.framebuffer_srgb_capable) {  // default behavior without the hint.
+            *iAttr++ = WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB;
+            *iAttr++ = GL_TRUE;
+        }
     }
 
     /* We always choose either FULL or NO accel on Windows, because of flaky
@@ -704,7 +750,11 @@ bool WIN_GL_UseEGL(SDL_VideoDevice *_this)
     SDL_assert(_this->gl_data != NULL);
     SDL_assert(_this->gl_config.profile_mask == SDL_GL_CONTEXT_PROFILE_ES);
 
-    return SDL_GetHintBoolean(SDL_HINT_OPENGL_ES_DRIVER, false) || _this->gl_config.major_version == 1 || _this->gl_config.major_version > _this->gl_data->es_profile_max_supported_version.major || (_this->gl_config.major_version == _this->gl_data->es_profile_max_supported_version.major && _this->gl_config.minor_version > _this->gl_data->es_profile_max_supported_version.minor); // No WGL extension for OpenGL ES 1.x profiles.
+    // (we don't need EGL to do OpenGL ES if HAS_WGL_EXT_create_context_es2_profile exists.)
+    return !_this->gl_data->HAS_WGL_EXT_create_context_es2_profile ||
+           SDL_GetHintBoolean(SDL_HINT_OPENGL_ES_DRIVER, false) ||
+           _this->gl_config.major_version > _this->gl_data->es_profile_max_supported_version.major ||
+           (_this->gl_config.major_version == _this->gl_data->es_profile_max_supported_version.major && _this->gl_config.minor_version > _this->gl_data->es_profile_max_supported_version.minor);
 }
 
 SDL_GLContext WIN_GL_CreateContext(SDL_VideoDevice *_this, SDL_Window *window)
@@ -715,19 +765,8 @@ SDL_GLContext WIN_GL_CreateContext(SDL_VideoDevice *_this, SDL_Window *window)
     if (_this->gl_config.profile_mask == SDL_GL_CONTEXT_PROFILE_ES && WIN_GL_UseEGL(_this)) {
 #ifdef SDL_VIDEO_OPENGL_EGL
         // Switch to EGL based functions
-        WIN_GL_UnloadLibrary(_this);
-        _this->GL_LoadLibrary = WIN_GLES_LoadLibrary;
-        _this->GL_GetProcAddress = WIN_GLES_GetProcAddress;
-        _this->GL_UnloadLibrary = WIN_GLES_UnloadLibrary;
-        _this->GL_CreateContext = WIN_GLES_CreateContext;
-        _this->GL_MakeCurrent = WIN_GLES_MakeCurrent;
-        _this->GL_SetSwapInterval = WIN_GLES_SetSwapInterval;
-        _this->GL_GetSwapInterval = WIN_GLES_GetSwapInterval;
-        _this->GL_SwapWindow = WIN_GLES_SwapWindow;
-        _this->GL_DestroyContext = WIN_GLES_DestroyContext;
-        _this->GL_GetEGLSurface = WIN_GLES_GetEGLSurface;
 
-        if (!WIN_GLES_LoadLibrary(_this, NULL)) {
+        if (!WIN_GL_LoadLibrary_EGLFallback(_this, NULL)) {
             return NULL;
         }
 
@@ -885,7 +924,7 @@ bool WIN_GL_GetSwapInterval(SDL_VideoDevice *_this, int *interval)
         *interval = _this->gl_data->wglGetSwapIntervalEXT();
         return true;
     } else {
-        return false;
+        return SDL_Unsupported();
     }
 }
 

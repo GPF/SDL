@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -53,33 +53,7 @@
 
 @end
 
-@interface SDL_uikitwindow : UIWindow
-
-- (void)layoutSubviews;
-
-@end
-
-@implementation SDL_uikitwindow
-
-- (void)layoutSubviews
-{
-#ifndef SDL_PLATFORM_VISIONOS
-    // Workaround to fix window orientation issues in iOS 8.
-    /* As of July 1 2019, I haven't been able to reproduce any orientation
-     * issues with this disabled on iOS 12. The issue this is meant to fix might
-     * only happen on iOS 8, or it might have been fixed another way with other
-     * code... This code prevents split view (iOS 9+) from working on iPads, so
-     * we want to avoid using it if possible. */
-    if (!UIKit_IsSystemVersionAtLeast(9.0)) {
-        self.frame = self.screen.bounds;
-    }
-#endif
-    [super layoutSubviews];
-}
-
-@end
-
-static bool SetupWindowData(SDL_VideoDevice *_this, SDL_Window *window, UIWindow *uiwindow, bool created)
+static bool SetupWindowData(SDL_VideoDevice *_this, SDL_Window *window, UIWindow *uiwindow, SDL_PropertiesID create_props, bool created)
 {
     SDL_VideoDisplay *display = SDL_GetVideoDisplayForWindow(window);
     SDL_UIKitDisplayData *displaydata = (__bridge SDL_UIKitDisplayData *)display->internal;
@@ -132,6 +106,19 @@ static bool SetupWindowData(SDL_VideoDevice *_this, SDL_Window *window, UIWindow
 #endif
     window->w = width;
     window->h = height;
+    
+    SDL_PropertiesID props = SDL_GetWindowProperties(window);
+    SDL_SetPointerProperty(props, SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER, (__bridge void *)data.uiwindow);
+    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_UIKIT_METAL_VIEW_TAG_NUMBER, SDL_METALVIEW_TAG);
+
+#ifdef SDL_PLATFORM_VISIONOS
+    float curvature = SDL_GetFloatProperty(create_props, SDL_PROP_WINDOW_CREATE_CURVATURE_FLOAT, -1.0f);
+    if (curvature > 0.0f && curvature <= 1.0f) {
+        curvature = 0.0f;
+    }
+    data.curvature = curvature;
+    SDL_SetFloatProperty(props, SDL_PROP_WINDOW_CURVATURE_FLOAT, curvature);
+#endif
 
     /* The View Controller will handle rotating the view when the device
      * orientation changes. This will trigger resize events, if appropriate. */
@@ -144,10 +131,6 @@ static bool SetupWindowData(SDL_VideoDevice *_this, SDL_Window *window, UIWindow
     /* Sets this view as the controller's view, and adds the view to the window
      * hierarchy. */
     [view setSDLWindow:window];
-
-    SDL_PropertiesID props = SDL_GetWindowProperties(window);
-    SDL_SetPointerProperty(props, SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER, (__bridge void *)data.uiwindow);
-    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_UIKIT_METAL_VIEW_TAG_NUMBER, SDL_METALVIEW_TAG);
 
     return true;
 }
@@ -189,30 +172,72 @@ bool UIKit_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Properti
         }
 
         if (data.uiscreen == [UIScreen mainScreen]) {
-            if (window->flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_BORDERLESS)) {
-                [UIApplication sharedApplication].statusBarHidden = YES;
+            if (@available(iOS 13.0, *)) {
+                // iOS 13+ uses view controller's prefersStatusBarHidden
             } else {
-                [UIApplication sharedApplication].statusBarHidden = NO;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+                if (window->flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_BORDERLESS)) {
+                    [UIApplication sharedApplication].statusBarHidden = YES;
+                } else {
+                    [UIApplication sharedApplication].statusBarHidden = NO;
+                }
+#pragma clang diagnostic pop
             }
         }
 #endif // !SDL_PLATFORM_TVOS
 
-        // ignore the size user requested, and make a fullscreen window
-        // !!! FIXME: can we have a smaller view?
+        UIWindow *uiwindow = nil;
+        if (@available(iOS 13.0, tvOS 13.0, *)) {
+            UIWindowScene *scene = (__bridge UIWindowScene *)SDL_GetPointerProperty(create_props, SDL_PROP_WINDOW_CREATE_WINDOWSCENE_POINTER, NULL);
+            if (!scene) {
+                scene = UIKit_GetActiveWindowScene();
+            }
+            if (scene) {
+                uiwindow = [[UIWindow alloc] initWithWindowScene:scene];
+
 #ifdef SDL_PLATFORM_VISIONOS
-        UIWindow *uiwindow = [[SDL_uikitwindow alloc] initWithFrame:CGRectMake(window->x, window->y, window->w, window->h)];
-#else
-        UIWindow *uiwindow = [[SDL_uikitwindow alloc] initWithFrame:data.uiscreen.bounds];
+                /* On visionOS, the window scene may not have its final geometry yet
+                 * when the UIWindow is first created. Request the desired size now
+                 * and set the UIWindow frame to match so views have valid initial
+                 * dimensions before the async geometry update completes. */
+                CGSize desiredSize = CGSizeMake(window->w, window->h);
+                uiwindow.frame = CGRectMake(0, 0, desiredSize.width, desiredSize.height);
+
+                UIWindowSceneGeometryPreferences *preferences =
+                    [[UIWindowSceneGeometryPreferencesVision alloc] initWithSize:desiredSize];
+                [scene requestGeometryUpdateWithPreferences:preferences errorHandler:^(NSError * _Nonnull error) {
+                    SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO,
+                                "Initial geometry request failed: %s",
+                                [[error localizedDescription] UTF8String]);
+                }];
 #endif
+            }
+        }
+        if (!uiwindow) {
+            // ignore the size user requested, and make a fullscreen window
+#ifdef SDL_PLATFORM_VISIONOS
+            uiwindow = [[UIWindow alloc] initWithFrame:CGRectMake(0, 0, SDL_XR_SCREENWIDTH, SDL_XR_SCREENHEIGHT)];
+#else
+            uiwindow = [[UIWindow alloc] initWithFrame:data.uiscreen.bounds];
+#endif
+        }
 
         // put the window on an external display if appropriate.
 #ifndef SDL_PLATFORM_VISIONOS
         if (data.uiscreen != [UIScreen mainScreen]) {
-            [uiwindow setScreen:data.uiscreen];
+            if (@available(iOS 13.0, tvOS 13.0, *)) {
+                // iOS 13+ uses UIWindowScene to manage screen association
+            } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+                [uiwindow setScreen:data.uiscreen];
+#pragma clang diagnostic pop
+            }
         }
 #endif
 
-        if (!SetupWindowData(_this, window, uiwindow, true)) {
+        if (!SetupWindowData(_this, window, uiwindow, create_props, true)) {
             return false;
         }
     }
@@ -226,6 +251,21 @@ void UIKit_SetWindowTitle(SDL_VideoDevice *_this, SDL_Window *window)
         SDL_UIKitWindowData *data = (__bridge SDL_UIKitWindowData *)window->internal;
         data.viewcontroller.title = @(window->title);
     }
+}
+
+void UIKit_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
+{
+#ifdef SDL_PLATFORM_VISIONOS
+    @autoreleasepool {
+        SDL_UIKitWindowData *data = (__bridge SDL_UIKitWindowData *)window->internal;
+        UIWindowScene *scene = data.uiwindow.windowScene;
+        CGSize size = { window->pending.w, window->pending.h };
+        UIWindowSceneGeometryPreferences *preferences = [[UIWindowSceneGeometryPreferencesVision alloc] initWithSize:size];
+        [scene requestGeometryUpdateWithPreferences:preferences errorHandler:^(NSError * _Nonnull error) {
+            // Request failed, no worries
+        }];
+    }
+#endif
 }
 
 void UIKit_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
@@ -273,10 +313,17 @@ static void UIKit_UpdateWindowBorder(SDL_VideoDevice *_this, SDL_Window *window)
 
 #if !defined(SDL_PLATFORM_TVOS) && !defined(SDL_PLATFORM_VISIONOS)
     if (data.uiwindow.screen == [UIScreen mainScreen]) {
-        if (window->flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_BORDERLESS)) {
-            [UIApplication sharedApplication].statusBarHidden = YES;
+        if (@available(iOS 13.0, *)) {
+            // iOS 13+ uses view controller's prefersStatusBarHidden
         } else {
-            [UIApplication sharedApplication].statusBarHidden = NO;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            if (window->flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_BORDERLESS)) {
+                [UIApplication sharedApplication].statusBarHidden = YES;
+            } else {
+                [UIApplication sharedApplication].statusBarHidden = NO;
+            }
+#pragma clang diagnostic pop
         }
 
         [viewcontroller setNeedsStatusBarAppearanceUpdate];

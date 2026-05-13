@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
   Copyright (C) 2021 NVIDIA Corporation
 
   This software is provided 'as-is', without any express or implied
@@ -25,6 +25,7 @@
 
 #include "SDL_x11video.h"
 #include "SDL_x11xsync.h"
+#include "../../SDL_hints_c.h"
 
 // GLX implementation of SDL OpenGL support
 
@@ -162,6 +163,26 @@ typedef GLXContext (*PFNGLXCREATECONTEXTATTRIBSARBPROC)(Display *dpy,
 
 static void X11_GL_InitExtensions(SDL_VideoDevice *_this);
 
+static bool X11_GL_LoadLibrary_EGLFallback(SDL_VideoDevice *_this, const char *path)
+{
+#ifdef SDL_VIDEO_OPENGL_EGL
+    X11_GL_UnloadLibrary(_this);
+    _this->GL_LoadLibrary = X11_GLES_LoadLibrary;
+    _this->GL_GetProcAddress = X11_GLES_GetProcAddress;
+    _this->GL_UnloadLibrary = X11_GLES_UnloadLibrary;
+    _this->GL_CreateContext = X11_GLES_CreateContext;
+    _this->GL_MakeCurrent = X11_GLES_MakeCurrent;
+    _this->GL_SetSwapInterval = X11_GLES_SetSwapInterval;
+    _this->GL_GetSwapInterval = X11_GLES_GetSwapInterval;
+    _this->GL_SwapWindow = X11_GLES_SwapWindow;
+    _this->GL_DestroyContext = X11_GLES_DestroyContext;
+    _this->GL_GetEGLSurface = X11_GLES_GetEGLSurface;
+    return X11_GLES_LoadLibrary(_this, path);
+#else
+    return SDL_SetError("SDL not configured with EGL support");
+#endif
+}
+
 bool X11_GL_LoadLibrary(SDL_VideoDevice *_this, const char *path)
 {
     Display *display;
@@ -169,6 +190,11 @@ bool X11_GL_LoadLibrary(SDL_VideoDevice *_this, const char *path)
 
     if (_this->gl_data) {
         return SDL_SetError("OpenGL context already created");
+    }
+
+    if ((_this->gl_config.profile_mask == SDL_GL_CONTEXT_PROFILE_ES) &&
+        SDL_GetHintBoolean(SDL_HINT_OPENGL_ES_DRIVER, false)) {
+        return X11_GL_LoadLibrary_EGLFallback(_this, path);
     }
 
     // Load the OpenGL library
@@ -253,21 +279,7 @@ bool X11_GL_LoadLibrary(SDL_VideoDevice *_this, const char *path)
     if (((_this->gl_config.profile_mask == SDL_GL_CONTEXT_PROFILE_ES) ||
          SDL_GetHintBoolean(SDL_HINT_VIDEO_FORCE_EGL, false)) &&
         X11_GL_UseEGL(_this)) {
-#ifdef SDL_VIDEO_OPENGL_EGL
-        X11_GL_UnloadLibrary(_this);
-        _this->GL_LoadLibrary = X11_GLES_LoadLibrary;
-        _this->GL_GetProcAddress = X11_GLES_GetProcAddress;
-        _this->GL_UnloadLibrary = X11_GLES_UnloadLibrary;
-        _this->GL_CreateContext = X11_GLES_CreateContext;
-        _this->GL_MakeCurrent = X11_GLES_MakeCurrent;
-        _this->GL_SetSwapInterval = X11_GLES_SetSwapInterval;
-        _this->GL_GetSwapInterval = X11_GLES_GetSwapInterval;
-        _this->GL_SwapWindow = X11_GLES_SwapWindow;
-        _this->GL_DestroyContext = X11_GLES_DestroyContext;
-        return X11_GLES_LoadLibrary(_this, NULL);
-#else
-        return SDL_SetError("SDL not configured with EGL support");
-#endif
+        return X11_GL_LoadLibrary_EGLFallback(_this, NULL);
     }
 
     return true;
@@ -342,9 +354,9 @@ static void X11_GL_InitExtensions(SDL_VideoDevice *_this)
     const int screen = DefaultScreen(display);
     XVisualInfo *vinfo = NULL;
     Window w = 0;
-    GLXContext prev_ctx = 0;
+    GLXContext prev_ctx = NULL;
     GLXDrawable prev_drawable = 0;
-    GLXContext context = 0;
+    GLXContext context = NULL;
     const char *(*glXQueryExtensionsStringFunc)(Display *, int);
     const char *extensions;
 
@@ -466,6 +478,13 @@ static void X11_GL_InitExtensions(SDL_VideoDevice *_this)
         _this->gl_data->HAS_GLX_ARB_create_context_no_error = true;
     }
 
+    // Check for GLX_ARB_framebuffer_sRGB
+    if (HasExtension("GLX_ARB_framebuffer_sRGB", extensions)) {
+        _this->gl_data->HAS_GLX_ARB_framebuffer_sRGB = true;
+    } else if (HasExtension("GLX_EXT_framebuffer_sRGB", extensions)) {   // same thing.
+        _this->gl_data->HAS_GLX_ARB_framebuffer_sRGB = true;
+    }
+
     if (context) {
         _this->gl_data->glXMakeCurrent(display, None, NULL);
         _this->gl_data->glXDestroyContext(display, context);
@@ -576,9 +595,19 @@ static int X11_GL_GetAttributes(SDL_VideoDevice *_this, Display *display, int sc
         attribs[i++] = GLX_RGBA_FLOAT_TYPE_ARB;
     }
 
-    if (_this->gl_config.framebuffer_srgb_capable) {
-        attribs[i++] = GLX_FRAMEBUFFER_SRGB_CAPABLE_ARB;
-        attribs[i++] = True; // always needed, for_FBConfig or not!
+    if (_this->gl_data->HAS_GLX_ARB_framebuffer_sRGB) {
+        const char *srgbhint = SDL_GetHint(SDL_HINT_OPENGL_FORCE_SRGB_FRAMEBUFFER);
+        if (srgbhint && *srgbhint) {
+            if (SDL_strcmp(srgbhint, "skip") == 0) {
+                // don't set an attribute at all.
+            } else {
+                attribs[i++] = GLX_FRAMEBUFFER_SRGB_CAPABLE_ARB;
+                attribs[i++] = SDL_GetStringBoolean(srgbhint, false) ? True : False;  // always needed, for_FBConfig or not!
+            }
+        } else if (_this->gl_config.framebuffer_srgb_capable) {  // default behavior without the hint.
+            attribs[i++] = GLX_FRAMEBUFFER_SRGB_CAPABLE_ARB;
+            attribs[i++] = True; // always needed, for_FBConfig or not!
+        }
     }
 
     if (_this->gl_config.accelerated >= 0 &&

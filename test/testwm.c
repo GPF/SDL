@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -106,6 +106,9 @@ draw_modes_menu(SDL_Window *window, SDL_Renderer *renderer, SDL_FRect viewport)
             for (j = 0; modes[j]; ++j) {
                 SDL_FRect cell_rect;
                 const SDL_DisplayMode *mode = modes[j];
+                if (mode->format == SDL_PIXELFORMAT_INDEX8) {
+                    continue;
+                }
 
                 (void)SDL_snprintf(text, sizeof(text), "%s mode %d: %dx%d@%gx %gHz",
                                    SDL_GetDisplayName(display),

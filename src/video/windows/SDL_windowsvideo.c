@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -70,7 +70,7 @@ typedef enum THUMBBUTTONFLAGS
     THBF_HIDDEN = 0x8,
     THBF_NONINTERACTIVE = 0x10
 } THUMBBUTTONFLAGS;
- 
+
 #if defined(_MSC_VER)
 #pragma warning(disable: 4103)
 #endif
@@ -147,6 +147,20 @@ static void SDLCALL UpdateWindowsRawKeyboard(void *userdata, const char *name, c
     SDL_VideoDevice *_this = (SDL_VideoDevice *)userdata;
     bool enabled = SDL_GetStringBoolean(newValue, false);
     WIN_SetRawKeyboardEnabled(_this, enabled);
+}
+
+static void SDLCALL UpdateWindowsRawKeyboardNoHotkeys(void *userdata, const char *name, const char *oldValue, const char *newValue)
+{
+    SDL_VideoDevice *_this = (SDL_VideoDevice *)userdata;
+    bool enabled = SDL_GetStringBoolean(newValue, false);
+    WIN_SetRawKeyboardFlag_NoHotkeys(_this, enabled);
+}
+
+static void SDLCALL UpdateWindowsRawKeyboardInputsink(void *userdata, const char *name, const char *oldValue, const char *newValue)
+{
+    SDL_VideoDevice *_this = (SDL_VideoDevice *)userdata;
+    bool enabled = SDL_GetStringBoolean(newValue, false);
+    WIN_SetRawKeyboardFlag_Inputsink(_this, enabled);
 }
 
 static void SDLCALL UpdateWindowsEnableMessageLoop(void *userdata, const char *name, const char *oldValue, const char *newValue)
@@ -260,6 +274,7 @@ static SDL_VideoDevice *WIN_CreateDevice(void)
         data->DisplayConfigGetDeviceInfo = (LONG (WINAPI *)(DISPLAYCONFIG_DEVICE_INFO_HEADER*))SDL_LoadFunction(data->userDLL, "DisplayConfigGetDeviceInfo");
         data->GetPointerType = (BOOL (WINAPI *)(UINT32, POINTER_INPUT_TYPE *))SDL_LoadFunction(data->userDLL, "GetPointerType");
         data->GetPointerPenInfo = (BOOL (WINAPI *)(UINT32, POINTER_PEN_INFO *))SDL_LoadFunction(data->userDLL, "GetPointerPenInfo");
+        data->GetPointerDeviceRects = (BOOL (WINAPI *)(HANDLE, RECT *, RECT *))SDL_LoadFunction(data->userDLL, "GetPointerDeviceRects");
         /* *INDENT-ON* */ // clang-format on
     } else {
         SDL_ClearError();
@@ -423,7 +438,6 @@ static SDL_VideoDevice *WIN_CreateDevice(void)
     device->HasScreenKeyboardSupport = GDK_HasScreenKeyboardSupport;
     device->ShowScreenKeyboard = GDK_ShowScreenKeyboard;
     device->HideScreenKeyboard = GDK_HideScreenKeyboard;
-    device->IsScreenKeyboardShown = GDK_IsScreenKeyboardShown;
 #endif
 
     device->free = WIN_DeleteDevice;
@@ -603,7 +617,7 @@ static bool WIN_VideoInit(SDL_VideoDevice *_this)
     SDL_Log("DPI awareness: %s", WIN_GetDPIAwareness(_this));
 #endif
 
-    if (SDL_GetHintBoolean(SDL_HINT_WINDOWS_GAMEINPUT, true)) {
+    if (SDL_GetHintBoolean(SDL_HINT_WINDOWS_GAMEINPUT, false)) {
         WIN_InitGameInput(_this);
     }
 
@@ -624,15 +638,16 @@ static bool WIN_VideoInit(SDL_VideoDevice *_this)
         return false;
     }
 
+    _this->internal->detect_device_hotplug = SDL_GetHintBoolean("SDL_WINDOWS_DETECT_DEVICE_HOTPLUG", true);
+
     WIN_InitKeyboard(_this);
     WIN_InitMouse(_this);
     WIN_InitDeviceNotification();
-    if (!_this->internal->gameinput_context) {
-        WIN_CheckKeyboardAndMouseHotplug(_this, true);
-    }
 #endif
 
     SDL_AddHintCallback(SDL_HINT_WINDOWS_RAW_KEYBOARD, UpdateWindowsRawKeyboard, _this);
+    SDL_AddHintCallback(SDL_HINT_WINDOWS_RAW_KEYBOARD_EXCLUDE_HOTKEYS, UpdateWindowsRawKeyboardNoHotkeys, _this);
+    SDL_AddHintCallback(SDL_HINT_WINDOWS_RAW_KEYBOARD_INPUTSINK, UpdateWindowsRawKeyboardInputsink, _this);
     SDL_AddHintCallback(SDL_HINT_WINDOWS_ENABLE_MESSAGELOOP, UpdateWindowsEnableMessageLoop, NULL);
     SDL_AddHintCallback(SDL_HINT_WINDOWS_ENABLE_MENU_MNEMONICS, UpdateWindowsEnableMenuMnemonics, NULL);
     SDL_AddHintCallback(SDL_HINT_WINDOW_FRAME_USABLE_WHILE_CURSOR_HIDDEN, UpdateWindowFrameUsableWhileCursorHidden, NULL);
@@ -650,12 +665,13 @@ void WIN_VideoQuit(SDL_VideoDevice *_this)
     SDL_VideoData *data = _this->internal;
 
     SDL_RemoveHintCallback(SDL_HINT_WINDOWS_RAW_KEYBOARD, UpdateWindowsRawKeyboard, _this);
+    SDL_RemoveHintCallback(SDL_HINT_WINDOWS_RAW_KEYBOARD_EXCLUDE_HOTKEYS, UpdateWindowsRawKeyboardNoHotkeys, _this);
+    SDL_RemoveHintCallback(SDL_HINT_WINDOWS_RAW_KEYBOARD_INPUTSINK, UpdateWindowsRawKeyboardInputsink, _this);
     SDL_RemoveHintCallback(SDL_HINT_WINDOWS_ENABLE_MESSAGELOOP, UpdateWindowsEnableMessageLoop, NULL);
     SDL_RemoveHintCallback(SDL_HINT_WINDOWS_ENABLE_MENU_MNEMONICS, UpdateWindowsEnableMenuMnemonics, NULL);
     SDL_RemoveHintCallback(SDL_HINT_WINDOW_FRAME_USABLE_WHILE_CURSOR_HIDDEN, UpdateWindowFrameUsableWhileCursorHidden, NULL);
 
-    WIN_SetRawMouseEnabled(_this, false);
-    WIN_SetRawKeyboardEnabled(_this, false);
+    WIN_QuitRawInput(_this);
     WIN_QuitGameInput(_this);
 
 #if !defined(SDL_PLATFORM_XBOXONE) && !defined(SDL_PLATFORM_XBOXSERIES)
@@ -801,11 +817,11 @@ bool SDL_GetDXGIOutputInfo(SDL_DisplayID displayID, int *adapterIndex, int *outp
     IDXGIAdapter *pDXGIAdapter;
     IDXGIOutput *pDXGIOutput;
 
-    if (!adapterIndex) {
+    CHECK_PARAM(!adapterIndex) {
         return SDL_InvalidParamError("adapterIndex");
     }
 
-    if (!outputIndex) {
+    CHECK_PARAM(!outputIndex) {
         return SDL_InvalidParamError("outputIndex");
     }
 

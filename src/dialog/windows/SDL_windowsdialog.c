@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -38,52 +38,25 @@ typedef struct _COMDLG_FILTERSPEC
 
 typedef enum FDE_OVERWRITE_RESPONSE
 {
-    FDEOR_DEFAULT
-    FDEOR_ACCEPT
-    FDEOR_REFUSE
+    FDEOR_DEFAULT,
+    FDEOR_ACCEPT,
+    FDEOR_REFUSE,
 } FDE_OVERWRITE_RESPONSE;
 
 typedef enum FDE_SHAREVIOLATION_RESPONSE
 {
-    FDESVR_DEFAULT
-    FDESVR_ACCEPT
-    FDESVR_REFUSE
+    FDESVR_DEFAULT,
+    FDESVR_ACCEPT,
+    FDESVR_REFUSE,
 } FDE_SHAREVIOLATION_RESPONSE;
 
 typedef enum FDAP
 {
-    FDAP_BOTTOM
-    FDAP_TOP
+    FDAP_BOTTOM,
+    FDAP_TOP,
 } FDAP;
 
 typedef ULONG SFGAOF;
-
-typedef enum GETPROPERTYSTOREFLAGS
-{
-    GPS_DEFAULT = 0x0,
-    GPS_HANDLERPROPERTIESONLY = 0x1,
-    GPS_READWRITE = 0x2,
-    GPS_TEMPORARY = 0x4,
-    GPS_FASTPROPERTIESONLY = 0x8,
-    GPS_OPENSLOWITEM = 0x10,
-    GPS_DELAYCREATION = 0x20,
-    GPS_BESTEFFORT = 0x40,
-    GPS_NO_OPLOCK = 0x80,
-    GPS_PREFERQUERYPROPERTIES = 0x100,
-    GPS_EXTRINSICPROPERTIES = 0x200,
-    GPS_EXTRINSICPROPERTIESONLY = 0x400,
-    GPS_VOLATILEPROPERTIES = 0x800,
-    GPS_VOLATILEPROPERTIESONLY = 0x1000,
-    GPS_MASK_VALID = 0x1FFF
-} GETPROPERTYSTOREFLAGS;
-
-typedef struct _tagpropertykey {
-    GUID fmtid;
-    DWORD pid;
-} PROPERTYKEY;
-
-#define REFPROPERTYKEY const PROPERTYKEY * const
-
 typedef DWORD SHCONTF;
 
 #endif // WINVER < _WIN32_WINNT_VISTA
@@ -483,6 +456,9 @@ char *clear_filt_names(const char *filt)
     return cleared;
 }
 
+// This function returns NOT success or error, but rather whether the callback
+// was invoked or not (and if it was, no fallback should be attempted to prevent
+// calling the callback twice). See https://github.com/libsdl-org/SDL/issues/15194
 bool windows_ShowModernFileFolderDialog(SDL_FileDialogType dialog_type, const char *default_file, SDL_Window *parent, bool allow_many, SDL_DialogFileCallback callback, void *userdata, const char *title, const char *accept, const char *cancel, wchar_t *filter_wchar, int nfilters)
 {
     bool is_save = dialog_type == SDL_FILEDIALOG_SAVEFILE;
@@ -515,12 +491,9 @@ bool windows_ShowModernFileFolderDialog(SDL_FileDialogType dialog_type, const ch
     wchar_t *default_file_w = NULL;
     wchar_t *default_folder_w = NULL;
 
-    bool success = false;
+    bool callback_called = false;
+    bool call_callback_on_error = false;
     bool co_init = false;
-
-    if (!WIN_IsWindows7OrGreater()) {
-        goto quit;
-    }
 
     // We can assume shell32 is already loaded here.
     shell32_handle = GetModuleHandle(TEXT("shell32.dll"));
@@ -626,16 +599,18 @@ bool windows_ShowModernFileFolderDialog(SDL_FileDialogType dialog_type, const ch
         CHECK(pFileDialog->lpVtbl->SetFileTypes(pFileDialog, nfilters, filter_data));
     }
 
-    // SetFolder would enforce using the same location each and every time, but
-    // Windows docs recommend against it
     if (default_folder_w) {
         CHECK(pSHCreateItemFromParsingName(default_folder_w, NULL, &IID_IShellItem, (void**)&pFolderItem));
-        CHECK(pFileDialog->lpVtbl->SetDefaultFolder(pFileDialog, pFolderItem));
+        CHECK(pFileDialog->lpVtbl->SetFolder(pFileDialog, pFolderItem));
     }
 
     if (default_file_w) {
         CHECK(pFileDialog->lpVtbl->SetFileName(pFileDialog, default_file_w));
     }
+
+    // Right after this, a dialog is shown. No fallback should be attempted on
+    // error to prevent showing two dialogs to the user.
+    call_callback_on_error = true;
 
     if (parent) {
         HWND window = (HWND) SDL_GetPointerProperty(SDL_GetWindowProperties(parent), SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
@@ -649,7 +624,7 @@ bool windows_ShowModernFileFolderDialog(SDL_FileDialogType dialog_type, const ch
             // This is a one-based index, not zero-based. Doc link in similar comment below
             CHECK(pFileDialog->lpVtbl->GetFileTypeIndex(pFileDialog, &selected_filter));
             callback(userdata, results, selected_filter - 1);
-            success = true;
+            callback_called = true;
             goto quit;
         } else if (!SUCCEEDED(hr)) {
             goto quit;
@@ -664,7 +639,7 @@ bool windows_ShowModernFileFolderDialog(SDL_FileDialogType dialog_type, const ch
             // This is a one-based index, not zero-based. Doc link in similar comment below
             CHECK(pFileDialog->lpVtbl->GetFileTypeIndex(pFileDialog, &selected_filter));
             callback(userdata, results, selected_filter - 1);
-            success = true;
+            callback_called = true;
             goto quit;
         } else if (!SUCCEEDED(hr)) {
             goto quit;
@@ -698,7 +673,7 @@ bool windows_ShowModernFileFolderDialog(SDL_FileDialogType dialog_type, const ch
         }
 
         callback(userdata, (const char * const *) files, selected_filter - 1);
-        success = true;
+        callback_called = true;
     } else {
         // This is a one-based index, not zero-based.
         // https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifiledialog-getfiletypeindex#parameters
@@ -714,18 +689,17 @@ bool windows_ShowModernFileFolderDialog(SDL_FileDialogType dialog_type, const ch
         }
         const char * const results[] = { file, NULL };
         callback(userdata, results, selected_filter - 1);
-        success = true;
+        callback_called = true;
         SDL_free(file);
     }
-
-    success = true;
 
 #undef CHECK
 
 quit:
-    if (!success) {
-        WIN_SetError("dialogg");
+    if (!callback_called && call_callback_on_error) {
+        WIN_SetError("dialog");
         callback(userdata, NULL, -1);
+        callback_called = true;
     }
 
     if (co_init) {
@@ -764,25 +738,17 @@ quit:
     // default_file_w is a pointer into default_folder_w.
     if (default_folder_w) {
         SDL_free(default_folder_w);
-    } else if (default_file_w) {
+    } else {
         SDL_free(default_file_w);
     }
 
-    if (title_w) {
-        SDL_free(title_w);
-    }
+    SDL_free(title_w);
 
-    if (accept_w) {
-        SDL_free(accept_w);
-    }
+    SDL_free(accept_w);
 
-    if (cancel_w) {
-        SDL_free(cancel_w);
-    }
+    SDL_free(cancel_w);
 
-    if (filter_data) {
-        SDL_free(filter_data);
-    }
+    SDL_free(filter_data);
 
     if (files) {
         for (char** files_ptr = files; *files_ptr; files_ptr++) {
@@ -791,7 +757,7 @@ quit:
         SDL_free(files);
     }
 
-    return success;
+    return callback_called;
 }
 
 // TODO: The new version of file dialogs
@@ -1177,7 +1143,7 @@ wchar_t *win_get_filters(const SDL_DialogFileFilter *filters, int nfilters)
         // suffix needs two null bytes in case the filter list is empty
         char *filterlist = convert_filters(filters, nfilters, clear_filt_names,
                                            "", "", "\x01\x01", "", "\x01",
-                                           "\x01", "*.", ";*.", "");
+                                           "\x01", "*.", ";*.", "", false);
 
         if (!filterlist) {
             return NULL;
@@ -1328,5 +1294,5 @@ void SDL_SYS_ShowFileDialogWithProperties(SDL_FileDialogType type, SDL_DialogFil
     case SDL_FILEDIALOG_OPENFOLDER:
         ShowFolderDialog(callback, userdata, window, default_location, allow_many, title, accept, cancel);
         break;
-    };
+    }
 }

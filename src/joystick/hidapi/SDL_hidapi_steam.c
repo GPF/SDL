@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -221,7 +221,7 @@ static void hexdump(const uint8_t *ptr, int len)
 
 static void ResetSteamControllerPacketAssembler(SteamControllerPacketAssembler *pAssembler)
 {
-    SDL_memset(pAssembler->uBuffer, 0, sizeof(pAssembler->uBuffer));
+    SDL_zeroa(pAssembler->uBuffer);
     pAssembler->nExpectedSegmentNumber = 0;
 }
 
@@ -320,7 +320,7 @@ static int SetFeatureReport(SDL_HIDAPI_Device *dev, const unsigned char uBuffer[
             nActualDataLen -= nBytesInPacket;
 
             // Construct packet
-            SDL_memset(uPacketBuffer, 0, sizeof(uPacketBuffer));
+            SDL_zeroa(uPacketBuffer);
             uPacketBuffer[0] = BLE_REPORT_NUMBER;
             uPacketBuffer[1] = GetSegmentHeader(nSegmentNumber, nActualDataLen == 0);
             SDL_memcpy(&uPacketBuffer[2], pBufferPtr, nBytesInPacket);
@@ -370,7 +370,7 @@ static int GetFeatureReport(SDL_HIDAPI_Device *dev, unsigned char uBuffer[65])
 #endif
 
         while (nRetries < BLE_MAX_READ_RETRIES) {
-            SDL_memset(uSegmentBuffer, 0, sizeof(uSegmentBuffer));
+            SDL_zeroa(uSegmentBuffer);
             uSegmentBuffer[0] = BLE_REPORT_NUMBER;
             nRet = SDL_hid_get_feature_report(dev->dev, uSegmentBuffer, ucBytesToRead);
 
@@ -539,7 +539,7 @@ static bool ResetSteamController(SDL_HIDAPI_Device *dev, bool bSuppressErrorSpew
     buf[3 + nSettings * 3] = SETTING;                      \
     buf[3 + nSettings * 3 + 1] = ((uint16_t)VALUE) & 0xFF; \
     buf[3 + nSettings * 3 + 2] = ((uint16_t)VALUE) >> 8;   \
-    ++nSettings;
+    ++nSettings
 
     SDL_zero(buf);
     buf[1] = ID_SET_SETTINGS_VALUES;
@@ -708,13 +708,6 @@ static void RotatePad(int *pX, int *pY, float flAngleInRad)
     *pX = (int)(SDL_cosf(flAngleInRad) * origX - SDL_sinf(flAngleInRad) * origY);
     *pY = (int)(SDL_sinf(flAngleInRad) * origX + SDL_cosf(flAngleInRad) * origY);
 }
-static void RotatePadShort(short *pX, short *pY, float flAngleInRad)
-{
-    int origX = *pX, origY = *pY;
-
-    *pX = (short)(SDL_cosf(flAngleInRad) * origX - SDL_sinf(flAngleInRad) * origY);
-    *pY = (short)(SDL_sinf(flAngleInRad) * origX + SDL_cosf(flAngleInRad) * origY);
-}
 
 //---------------------------------------------------------------------------
 // Format the first part of the state packet
@@ -838,8 +831,15 @@ static void FormatStatePacketUntilGyro(SteamControllerStateInternal_t *pState, V
 //---------------------------------------------------------------------------
 static bool UpdateBLESteamControllerState(const uint8_t *pData, int nDataSize, SteamControllerStateInternal_t *pState)
 {
-    const float flRotationAngle = 0.261799f;
+    int nLeftPadX;
+    int nLeftPadY;
+    int nRightPadX;
+    int nRightPadY;
+    int nPadOffset;
     uint32_t ucOptionDataMask;
+
+    // 15 degrees in rad
+    const float flRotationAngle = 0.261799f;
 
     pState->unPacketNum++;
     ucOptionDataMask = (*pData++ & 0xF0);
@@ -869,7 +869,6 @@ static bool UpdateBLESteamControllerState(const uint8_t *pData, int nDataSize, S
     }
     if (ucOptionDataMask & k_EBLELeftTrackpadChunk) {
         int nLength = sizeof(pState->sLeftPadX) + sizeof(pState->sLeftPadY);
-        int nPadOffset;
         SDL_memcpy(&pState->sLeftPadX, pData, nLength);
         if (pState->ulButtons & STEAM_LEFTPAD_FINGERDOWN_MASK) {
             nPadOffset = 1000;
@@ -877,14 +876,15 @@ static bool UpdateBLESteamControllerState(const uint8_t *pData, int nDataSize, S
             nPadOffset = 0;
         }
 
-        RotatePadShort(&pState->sLeftPadX, &pState->sLeftPadY, -flRotationAngle);
-        pState->sLeftPadX = (short)clamp(pState->sLeftPadX + nPadOffset, SDL_MIN_SINT16, SDL_MAX_SINT16);
-        pState->sLeftPadY = (short)clamp(pState->sLeftPadY + nPadOffset, SDL_MIN_SINT16, SDL_MAX_SINT16);
+        nLeftPadX = pState->sLeftPadX;
+        nLeftPadY = pState->sLeftPadY;
+        RotatePad(&nLeftPadX, &nLeftPadY, -flRotationAngle);
+        pState->sLeftPadX = (short)clamp(nLeftPadX + nPadOffset, SDL_MIN_SINT16, SDL_MAX_SINT16);
+        pState->sLeftPadY = (short)clamp(nLeftPadY + nPadOffset, SDL_MIN_SINT16, SDL_MAX_SINT16);
         pData += nLength;
     }
     if (ucOptionDataMask & k_EBLERightTrackpadChunk) {
         int nLength = sizeof(pState->sRightPadX) + sizeof(pState->sRightPadY);
-        int nPadOffset = 0;
 
         SDL_memcpy(&pState->sRightPadX, pData, nLength);
 
@@ -894,9 +894,11 @@ static bool UpdateBLESteamControllerState(const uint8_t *pData, int nDataSize, S
             nPadOffset = 0;
         }
 
-        RotatePadShort(&pState->sRightPadX, &pState->sRightPadY, flRotationAngle);
-        pState->sRightPadX = (short)clamp(pState->sRightPadX + nPadOffset, SDL_MIN_SINT16, SDL_MAX_SINT16);
-        pState->sRightPadY = (short)clamp(pState->sRightPadY + nPadOffset, SDL_MIN_SINT16, SDL_MAX_SINT16);
+        nRightPadX = pState->sRightPadX;
+        nRightPadY = pState->sRightPadY;
+        RotatePad(&nRightPadX, &nRightPadY, flRotationAngle);
+        pState->sRightPadX = (short)clamp(nRightPadX + nPadOffset, SDL_MIN_SINT16, SDL_MAX_SINT16);
+        pState->sRightPadY = (short)clamp(nRightPadY + nPadOffset, SDL_MIN_SINT16, SDL_MAX_SINT16);
         pData += nLength;
     }
     if (ucOptionDataMask & k_EBLEIMUAccelChunk) {
@@ -1008,6 +1010,13 @@ typedef struct
     uint32_t update_rate_in_us;
     Uint64 sensor_timestamp;
     Uint64 pairing_time;
+
+    bool left_touch_down;
+    float left_touch_x;
+    float left_touch_y;
+    bool right_touch_down;
+    float right_touch_x;
+    float right_touch_y;
 
     SteamControllerPacketAssembler m_assembler;
     SteamControllerStateInternal_t m_state;
@@ -1267,6 +1276,9 @@ static bool HIDAPI_DriverSteam_OpenJoystick(SDL_HIDAPI_Device *device, SDL_Joyst
     SDL_PrivateJoystickAddSensor(joystick, SDL_SENSOR_GYRO, update_rate_in_hz);
     SDL_PrivateJoystickAddSensor(joystick, SDL_SENSOR_ACCEL, update_rate_in_hz);
 
+    SDL_PrivateJoystickAddTouchpad(joystick, 1);
+    SDL_PrivateJoystickAddTouchpad(joystick, 1);
+
     SDL_AddHintCallback(SDL_HINT_JOYSTICK_HIDAPI_STEAM_HOME_LED,
                         SDL_HomeLEDHintChanged, ctx);
 
@@ -1344,6 +1356,21 @@ static bool ControllerConnected(SDL_HIDAPI_Device *device, SDL_Joystick **joysti
     *joystick = SDL_GetJoystickFromID(device->joysticks[0]);
     ctx->connected = true;
     return true;
+}
+
+static float FilterTouch(float newValue, float oldValue)
+{
+    const float jitter = 256.0f / (1 << 16);
+    if (newValue > (oldValue - jitter * 0.5f) && newValue < (oldValue + jitter * 0.5f)) {
+        return oldValue;
+    }
+    if (newValue > (oldValue - jitter) && newValue < (oldValue + jitter)) {
+        return oldValue * 0.75f + newValue * 0.25f;
+    }
+    if (newValue > (oldValue - jitter * 2.0f) && newValue < (oldValue + jitter * 2.0f)) {
+        return (oldValue + newValue) * 0.5f;
+    }
+    return newValue;
 }
 
 static void ControllerDisconnected(SDL_HIDAPI_Device *device, SDL_Joystick **joystick)
@@ -1466,6 +1493,46 @@ static bool HIDAPI_DriverSteam_UpdateDevice(SDL_HIDAPI_Device *device)
             SDL_SendJoystickAxis(timestamp, joystick, SDL_GAMEPAD_AXIS_LEFTY, ~ctx->m_state.sLeftStickY);
             SDL_SendJoystickAxis(timestamp, joystick, SDL_GAMEPAD_AXIS_RIGHTX, ctx->m_state.sRightPadX);
             SDL_SendJoystickAxis(timestamp, joystick, SDL_GAMEPAD_AXIS_RIGHTY, ~ctx->m_state.sRightPadY);
+
+            // Note that the left pad is normally mapped to D-Pad, so you should ignore that input if you use the touchpad instead.
+            {
+                const bool down = (ctx->m_state.ulButtons & STEAM_LEFTPAD_FINGERDOWN_MASK) ? true : false;
+                if (down || ctx->left_touch_down) {
+                    const bool clicked = (ctx->m_state.ulButtons & STEAM_BUTTON_LEFTPAD_CLICKED_MASK) ? true : false;
+                    const float leftX = (float)ctx->m_state.sLeftPadX / (1 << 16) + 0.5f;
+                    const float leftY = -(float)ctx->m_state.sLeftPadY / (1 << 16) + 0.5f;
+                    float pressure = down ? 0.5f : 0.0f;
+                    if (clicked) {
+                        pressure += 0.5f;
+                    }
+                    if (down) {
+                        ctx->left_touch_x = FilterTouch(leftX, ctx->left_touch_x);
+                        ctx->left_touch_y = FilterTouch(leftY, ctx->left_touch_y);
+                    }
+                    SDL_SendJoystickTouchpad(timestamp, joystick, 0, 0, down, ctx->left_touch_x, ctx->left_touch_y, pressure);
+                    ctx->left_touch_down = down;
+                }
+            }
+
+            // Note that the right pad is normally mapped to right thumbstick, so you should ignore that input if you use the touchpad instead.
+            {
+                const bool down = (ctx->m_state.ulButtons & STEAM_RIGHTPAD_FINGERDOWN_MASK) ? true : false;
+                if (down || ctx->right_touch_down) {
+                    const bool clicked = (ctx->m_state.ulButtons & STEAM_BUTTON_RIGHTPAD_CLICKED_MASK) ? true : false;
+                    const float rightX = (float)ctx->m_state.sRightPadX / (1 << 16) + 0.5f;
+                    const float rightY = -(float)ctx->m_state.sRightPadY / (1 << 16) + 0.5f;
+                    float pressure = down ? 0.5f : 0.0f;
+                    if (clicked) {
+                        pressure += 0.5f;
+                    }
+                    if (down) {
+                        ctx->right_touch_x = FilterTouch(rightX, ctx->right_touch_x);
+                        ctx->right_touch_y = FilterTouch(rightY, ctx->right_touch_y);
+                    }
+                    SDL_SendJoystickTouchpad(timestamp, joystick, 1, 0, down, ctx->right_touch_x, ctx->right_touch_y, pressure);
+                    ctx->right_touch_down = down;
+                }
+            }
 
             if (ctx->report_sensors) {
                 float values[3];

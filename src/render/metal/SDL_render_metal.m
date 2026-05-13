@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -35,6 +35,9 @@
 #endif
 #ifdef SDL_VIDEO_DRIVER_UIKIT
 #import <UIKit/UIKit.h>
+#ifdef SDL_PLATFORM_VISIONOS
+#import "../../video/uikit/SDL_UIKitBridge-objc.h"
+#endif
 #endif
 
 // Regenerate these with build-metal-shaders.sh
@@ -88,6 +91,7 @@ typedef enum SDL_MetalVertexFunction
 typedef enum SDL_MetalFragmentFunction
 {
     SDL_METAL_FRAGMENT_SOLID = 0,
+    SDL_METAL_FRAGMENT_PALETTE,
     SDL_METAL_FRAGMENT_COPY,
     SDL_METAL_FRAGMENT_YUV,
     SDL_METAL_FRAGMENT_NV12,
@@ -138,13 +142,25 @@ typedef struct METAL_ShaderPipelines
 @property(nonatomic, assign) METAL_ShaderPipelines *activepipelines;
 @property(nonatomic, assign) METAL_ShaderPipelines *allpipelines;
 @property(nonatomic, assign) int pipelinescount;
+#ifdef SDL_PLATFORM_VISIONOS
+@property(nonatomic, retain) id<MTLTexture> mtlrealitykittexture;
+#endif
 @end
 
 @implementation SDL3METAL_RenderData
 @end
 
+@interface SDL3METAL_PaletteData : NSObject
+@property(nonatomic, retain) id<MTLTexture> mtltexture;
+@property(nonatomic, assign) BOOL hasdata;
+@end
+
+@implementation SDL3METAL_PaletteData
+@end
+
 @interface SDL3METAL_TextureData : NSObject
 @property(nonatomic, retain) id<MTLTexture> mtltexture;
+@property(nonatomic, retain) id<MTLTexture> mtlpalette;
 @property(nonatomic, retain) id<MTLTexture> mtltextureUv;
 @property(nonatomic, assign) SDL_MetalFragmentFunction fragmentFunction;
 #ifdef SDL_HAVE_YUV
@@ -159,6 +175,10 @@ typedef struct METAL_ShaderPipelines
 
 @implementation SDL3METAL_TextureData
 @end
+
+static bool METAL_UpdateTextureInternal(SDL_Renderer *renderer, BOOL hasdata,
+                                        id<MTLTexture> texture, SDL_Rect rect, int slice,
+                                        const void *pixels, int pitch);
 
 static const MTLBlendOperation invalidBlendOperation = (MTLBlendOperation)0xFFFFFFFF;
 static const MTLBlendFactor invalidBlendFactor = (MTLBlendFactor)0xFFFFFFFF;
@@ -226,6 +246,8 @@ static NSString *GetFragmentFunctionName(SDL_MetalFragmentFunction function)
     switch (function) {
     case SDL_METAL_FRAGMENT_SOLID:
         return @"SDL_Solid_fragment";
+    case SDL_METAL_FRAGMENT_PALETTE:
+        return @"SDL_Palette_fragment";
     case SDL_METAL_FRAGMENT_COPY:
         return @"SDL_Copy_fragment";
     case SDL_METAL_FRAGMENT_YUV:
@@ -367,6 +389,7 @@ void MakeShaderPipelines(SDL3METAL_RenderData *data, METAL_ShaderPipelines *pipe
     pipelines->renderTargetFormat = rtformat;
 
     MakePipelineCache(data, &pipelines->caches[SDL_METAL_FRAGMENT_SOLID], "SDL primitives pipeline", rtformat, SDL_METAL_VERTEX_SOLID, SDL_METAL_FRAGMENT_SOLID);
+    MakePipelineCache(data, &pipelines->caches[SDL_METAL_FRAGMENT_PALETTE], "SDL palette pipeline", rtformat, SDL_METAL_VERTEX_COPY, SDL_METAL_FRAGMENT_PALETTE);
     MakePipelineCache(data, &pipelines->caches[SDL_METAL_FRAGMENT_COPY], "SDL copy pipeline", rtformat, SDL_METAL_VERTEX_COPY, SDL_METAL_FRAGMENT_COPY);
     MakePipelineCache(data, &pipelines->caches[SDL_METAL_FRAGMENT_YUV], "SDL YUV pipeline", rtformat, SDL_METAL_VERTEX_COPY, SDL_METAL_FRAGMENT_YUV);
     MakePipelineCache(data, &pipelines->caches[SDL_METAL_FRAGMENT_NV12], "SDL NV12 pipeline", rtformat, SDL_METAL_VERTEX_COPY, SDL_METAL_FRAGMENT_NV12);
@@ -436,16 +459,25 @@ static bool METAL_ActivateRenderCommandEncoder(SDL_Renderer *renderer, MTLLoadAc
             SDL3METAL_TextureData *texdata = (__bridge SDL3METAL_TextureData *)renderer->target->internal;
             mtltexture = texdata.mtltexture;
         } else {
-            if (data.mtlbackbuffer == nil) {
-                /* The backbuffer's contents aren't guaranteed to persist after
-                 * presenting, so we can leave it undefined when loading it. */
-                data.mtlbackbuffer = [data.mtllayer nextDrawable];
-                if (load == MTLLoadActionLoad) {
-                    load = MTLLoadActionDontCare;
+#ifdef SDL_PLATFORM_VISIONOS
+            if (renderer->window && SDL_UIKit_IsCurvedWindow(renderer->window)) {
+                data.mtlrealitykittexture = SDL_UIKit_GetCurvedDisplayTexture(renderer->window, [data.mtlcmdqueue commandBuffer], (int)data.mtllayer.drawableSize.width, (int)data.mtllayer.drawableSize.height, data.mtllayer.pixelFormat);
+                mtltexture = data.mtlrealitykittexture;
+            } else
+#endif
+            {
+                // Standard rendering path: use CAMetalLayer drawable
+                if (data.mtlbackbuffer == nil) {
+                    // The backbuffer's contents aren't guaranteed to persist after
+                    // presenting, so we can leave it undefined when loading it.
+                    data.mtlbackbuffer = [data.mtllayer nextDrawable];
+                    if (load == MTLLoadActionLoad) {
+                        load = MTLLoadActionDontCare;
+                    }
                 }
-            }
-            if (data.mtlbackbuffer != nil) {
-                mtltexture = data.mtlbackbuffer.texture;
+                if (data.mtlbackbuffer != nil) {
+                    mtltexture = data.mtlbackbuffer.texture;
+                }
             }
         }
 
@@ -606,11 +638,66 @@ size_t GetYCbCRtoRGBConversionMatrix(SDL_Colorspace colorspace, int w, int h, in
     return 0;
 }
 
-static bool METAL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_PropertiesID create_props)
+static bool METAL_CreatePalette(SDL_Renderer *renderer, SDL_TexturePalette *palette)
 {
     @autoreleasepool {
         SDL3METAL_RenderData *data = (__bridge SDL3METAL_RenderData *)renderer->internal;
         MTLPixelFormat pixfmt;
+        MTLTextureDescriptor *mtltexdesc;
+        id<MTLTexture> mtltexture = nil;
+        SDL3METAL_PaletteData *palettedata;
+
+        if (renderer->output_colorspace == SDL_COLORSPACE_SRGB_LINEAR) {
+            pixfmt = MTLPixelFormatRGBA8Unorm_sRGB;
+        } else {
+            pixfmt = MTLPixelFormatRGBA8Unorm;
+        }
+        mtltexdesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pixfmt
+                                                                        width:256
+                                                                       height:1
+                                                                    mipmapped:NO];
+        mtltexdesc.usage = MTLTextureUsageShaderRead;
+
+        mtltexture = [data.mtldevice newTextureWithDescriptor:mtltexdesc];
+        if (mtltexture == nil) {
+            return SDL_SetError("Palette allocation failed");
+        }
+
+        palettedata = [[SDL3METAL_PaletteData alloc] init];
+        palettedata.mtltexture = mtltexture;
+        palette->internal = (void *)CFBridgingRetain(palettedata);
+
+        return true;
+    }
+}
+
+static bool METAL_UpdatePalette(SDL_Renderer *renderer, SDL_TexturePalette *palette, int ncolors, SDL_Color *colors)
+{
+    @autoreleasepool {
+        SDL3METAL_PaletteData *palettedata = (__bridge SDL3METAL_PaletteData *)palette->internal;
+        SDL_Rect rect = { 0, 0, ncolors, 1 };
+
+        if (!METAL_UpdateTextureInternal(renderer, palettedata.hasdata, palettedata.mtltexture, rect, 0, colors, ncolors * sizeof(*colors))) {
+            return false;
+        }
+        palettedata.hasdata = true;
+        return true;
+    }
+}
+
+static void METAL_DestroyPalette(SDL_Renderer *renderer, SDL_TexturePalette *palette)
+{
+    @autoreleasepool {
+        CFBridgingRelease(palette->internal);
+        palette->internal = NULL;
+    }
+}
+
+static bool METAL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_PropertiesID create_props)
+{
+    @autoreleasepool {
+        SDL3METAL_RenderData *data = (__bridge SDL3METAL_RenderData *)renderer->internal;
+        MTLPixelFormat pixfmt = MTLPixelFormatInvalid;
         MTLTextureDescriptor *mtltexdesc;
         id<MTLTexture> mtltexture = nil, mtltextureUv = nil;
         SDL3METAL_TextureData *texturedata;
@@ -643,6 +730,27 @@ static bool METAL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SD
         case SDL_PIXELFORMAT_ABGR2101010:
             pixfmt = MTLPixelFormatRGB10A2Unorm;
             break;
+        case SDL_PIXELFORMAT_RGB565:
+            if (@available(macOS 11.0, *)) {
+                pixfmt = MTLPixelFormatB5G6R5Unorm;
+            }
+            break;
+        case SDL_PIXELFORMAT_RGBA5551:
+            if (@available(macOS 11.0, *)) {
+                pixfmt = MTLPixelFormatA1BGR5Unorm;
+            }
+            break;
+        case SDL_PIXELFORMAT_ARGB1555:
+            if (@available(macOS 11.0, *)) {
+                pixfmt = MTLPixelFormatBGR5A1Unorm;
+            }
+            break;
+        case SDL_PIXELFORMAT_RGBA4444:
+            if (@available(macOS 11.0, *)) {
+                pixfmt = MTLPixelFormatABGR4Unorm;
+            }
+            break;
+        case SDL_PIXELFORMAT_INDEX8:
         case SDL_PIXELFORMAT_IYUV:
         case SDL_PIXELFORMAT_YV12:
         case SDL_PIXELFORMAT_NV12:
@@ -659,6 +767,10 @@ static bool METAL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SD
             pixfmt = MTLPixelFormatRGBA32Float;
             break;
         default:
+            break;
+        }
+
+        if (pixfmt == MTLPixelFormatInvalid) {
             return SDL_SetError("Texture format %s not supported by Metal", SDL_GetPixelFormatName(texture->format));
         }
 
@@ -715,14 +827,15 @@ static bool METAL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SD
         }
 #endif // SDL_HAVE_YUV
         texturedata = [[SDL3METAL_TextureData alloc] init];
+        if (texture->format == SDL_PIXELFORMAT_INDEX8) {
+            texturedata.fragmentFunction = SDL_METAL_FRAGMENT_PALETTE;
 #ifdef SDL_HAVE_YUV
-        if (yuv) {
+        } else if (yuv) {
             texturedata.fragmentFunction = SDL_METAL_FRAGMENT_YUV;
         } else if (nv12) {
             texturedata.fragmentFunction = SDL_METAL_FRAGMENT_NV12;
-        } else
 #endif
-        {
+        } else {
             texturedata.fragmentFunction = SDL_METAL_FRAGMENT_COPY;
         }
         texturedata.mtltexture = mtltexture;
@@ -760,7 +873,7 @@ static MTLStorageMode METAL_GetStorageMode(id<MTLResource> resource)
     return resource.storageMode;
 }
 
-static bool METAL_UpdateTextureInternal(SDL_Renderer *renderer, SDL3METAL_TextureData *texturedata,
+static bool METAL_UpdateTextureInternal(SDL_Renderer *renderer, BOOL hasdata,
                                        id<MTLTexture> texture, SDL_Rect rect, int slice,
                                        const void *pixels, int pitch)
 {
@@ -773,7 +886,7 @@ static bool METAL_UpdateTextureInternal(SDL_Renderer *renderer, SDL3METAL_Textur
     /* If the texture is managed or shared and this is the first upload, we can
      * use replaceRegion to upload to it directly. Otherwise we upload the data
      * to a staging texture and copy that over. */
-    if (!texturedata.hasdata && METAL_GetStorageMode(texture) != MTLStorageModePrivate) {
+    if (!hasdata && METAL_GetStorageMode(texture) != MTLStorageModePrivate) {
         METAL_UploadTextureData(texture, rect, slice, pixels, pitch);
         return true;
     }
@@ -834,7 +947,7 @@ static bool METAL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
     @autoreleasepool {
         SDL3METAL_TextureData *texturedata = (__bridge SDL3METAL_TextureData *)texture->internal;
 
-        if (!METAL_UpdateTextureInternal(renderer, texturedata, texturedata.mtltexture, *rect, 0, pixels, pitch)) {
+        if (!METAL_UpdateTextureInternal(renderer, texturedata.hasdata, texturedata.mtltexture, *rect, 0, pixels, pitch)) {
             return false;
         }
 #ifdef SDL_HAVE_YUV
@@ -846,13 +959,13 @@ static bool METAL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
 
             // Skip to the correct offset into the next texture
             pixels = (const void *)((const Uint8 *)pixels + rect->h * pitch);
-            if (!METAL_UpdateTextureInternal(renderer, texturedata, texturedata.mtltextureUv, UVrect, Uslice, pixels, UVpitch)) {
+            if (!METAL_UpdateTextureInternal(renderer, texturedata.hasdata, texturedata.mtltextureUv, UVrect, Uslice, pixels, UVpitch)) {
                 return false;
             }
 
             // Skip to the correct offset into the next texture
             pixels = (const void *)((const Uint8 *)pixels + UVrect.h * UVpitch);
-            if (!METAL_UpdateTextureInternal(renderer, texturedata, texturedata.mtltextureUv, UVrect, Vslice, pixels, UVpitch)) {
+            if (!METAL_UpdateTextureInternal(renderer, texturedata.hasdata, texturedata.mtltextureUv, UVrect, Vslice, pixels, UVpitch)) {
                 return false;
             }
         }
@@ -863,7 +976,7 @@ static bool METAL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
 
             // Skip to the correct offset into the next texture
             pixels = (const void *)((const Uint8 *)pixels + rect->h * pitch);
-            if (!METAL_UpdateTextureInternal(renderer, texturedata, texturedata.mtltextureUv, UVrect, 0, pixels, UVpitch)) {
+            if (!METAL_UpdateTextureInternal(renderer, texturedata.hasdata, texturedata.mtltextureUv, UVrect, 0, pixels, UVpitch)) {
                 return false;
             }
         }
@@ -892,13 +1005,13 @@ static bool METAL_UpdateTextureYUV(SDL_Renderer *renderer, SDL_Texture *texture,
             return true;
         }
 
-        if (!METAL_UpdateTextureInternal(renderer, texturedata, texturedata.mtltexture, *rect, 0, Yplane, Ypitch)) {
+        if (!METAL_UpdateTextureInternal(renderer, texturedata.hasdata, texturedata.mtltexture, *rect, 0, Yplane, Ypitch)) {
             return false;
         }
-        if (!METAL_UpdateTextureInternal(renderer, texturedata, texturedata.mtltextureUv, UVrect, Uslice, Uplane, Upitch)) {
+        if (!METAL_UpdateTextureInternal(renderer, texturedata.hasdata, texturedata.mtltextureUv, UVrect, Uslice, Uplane, Upitch)) {
             return false;
         }
-        if (!METAL_UpdateTextureInternal(renderer, texturedata, texturedata.mtltextureUv, UVrect, Vslice, Vplane, Vpitch)) {
+        if (!METAL_UpdateTextureInternal(renderer, texturedata.hasdata, texturedata.mtltextureUv, UVrect, Vslice, Vplane, Vpitch)) {
             return false;
         }
 
@@ -922,11 +1035,11 @@ static bool METAL_UpdateTextureNV(SDL_Renderer *renderer, SDL_Texture *texture,
             return true;
         }
 
-        if (!METAL_UpdateTextureInternal(renderer, texturedata, texturedata.mtltexture, *rect, 0, Yplane, Ypitch)) {
+        if (!METAL_UpdateTextureInternal(renderer, texturedata.hasdata, texturedata.mtltexture, *rect, 0, Yplane, Ypitch)) {
             return false;
         }
 
-        if (!METAL_UpdateTextureInternal(renderer, texturedata, texturedata.mtltextureUv, UVrect, 0, UVplane, UVpitch)) {
+        if (!METAL_UpdateTextureInternal(renderer, texturedata.hasdata, texturedata.mtltextureUv, UVrect, 0, UVplane, UVpitch)) {
             return false;
         }
 
@@ -1176,7 +1289,7 @@ static bool METAL_QueueDrawLines(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
        angles. Maybe !!! FIXME for later, though. */
 
     points -= 2; // update the last line.
-    verts -= 2 + 1;
+    verts -= 6;
 
     {
         const float xstart = points[0].x;
@@ -1258,9 +1371,12 @@ static const float TONEMAP_CHROME = 2;
 //static const float TEXTURETYPE_NONE = 0;
 static const float TEXTURETYPE_RGB = 1;
 static const float TEXTURETYPE_RGB_PIXELART = 2;
-static const float TEXTURETYPE_NV12 = 3;
-static const float TEXTURETYPE_NV21 = 4;
-static const float TEXTURETYPE_YUV = 5;
+static const float TEXTURETYPE_PALETTE_NEAREST = 3;
+static const float TEXTURETYPE_PALETTE_LINEAR = 4;
+static const float TEXTURETYPE_PALETTE_PIXELART = 5;
+static const float TEXTURETYPE_NV12 = 6;
+static const float TEXTURETYPE_NV21 = 7;
+static const float TEXTURETYPE_YUV = 8;
 
 //static const float INPUTTYPE_UNSPECIFIED = 0;
 static const float INPUTTYPE_SRGB = 1;
@@ -1291,6 +1407,8 @@ typedef struct
     __unsafe_unretained id<MTLBuffer> vertex_buffer;
     size_t constants_offset;
     SDL_Texture *texture;
+    bool texture_palette;
+    SDL_PixelFormat texture_format;
     SDL_ScaleMode texture_scale_mode;
     SDL_TextureAddressMode texture_address_mode_u;
     SDL_TextureAddressMode texture_address_mode_v;
@@ -1315,6 +1433,22 @@ static void SetupShaderConstants(SDL_Renderer *renderer, const SDL_RenderCommand
 
     if (texture) {
         switch (texture->format) {
+        case SDL_PIXELFORMAT_INDEX8:
+            switch (cmd->data.draw.texture_scale_mode) {
+            case SDL_SCALEMODE_NEAREST:
+                constants->texture_type = TEXTURETYPE_PALETTE_NEAREST;
+                break;
+            case SDL_SCALEMODE_LINEAR:
+                constants->texture_type = TEXTURETYPE_PALETTE_LINEAR;
+                break;
+            case SDL_SCALEMODE_PIXELART:
+                constants->texture_type = TEXTURETYPE_PALETTE_PIXELART;
+                break;
+            default:
+                SDL_assert(!"Unknown scale mode");
+                break;
+            }
+            break;
         case SDL_PIXELFORMAT_YV12:
         case SDL_PIXELFORMAT_IYUV:
             constants->texture_type = TEXTURETYPE_YUV;
@@ -1331,10 +1465,6 @@ static void SetupShaderConstants(SDL_Renderer *renderer, const SDL_RenderCommand
         default:
             if (cmd->data.draw.texture_scale_mode == SDL_SCALEMODE_PIXELART) {
                 constants->texture_type = TEXTURETYPE_RGB_PIXELART;
-                constants->texture_width = texture->w;
-                constants->texture_height = texture->h;
-                constants->texel_width = 1.0f / constants->texture_width;
-                constants->texel_height = 1.0f / constants->texture_height;
             } else {
                 constants->texture_type = TEXTURETYPE_RGB;
             }
@@ -1352,6 +1482,15 @@ static void SetupShaderConstants(SDL_Renderer *renderer, const SDL_RenderCommand
             break;
         }
 
+        if (constants->texture_type == TEXTURETYPE_PALETTE_LINEAR ||
+            constants->texture_type == TEXTURETYPE_PALETTE_PIXELART ||
+            constants->texture_type == TEXTURETYPE_RGB_PIXELART) {
+            constants->texture_width = texture->w;
+            constants->texture_height = texture->h;
+            constants->texel_width = 1.0f / constants->texture_width;
+            constants->texel_height = 1.0f / constants->texture_height;
+        }
+
         constants->sdr_white_point = texture->SDR_white_point;
 
         if (renderer->target) {
@@ -1360,7 +1499,7 @@ static void SetupShaderConstants(SDL_Renderer *renderer, const SDL_RenderCommand
             output_headroom = renderer->HDR_headroom;
         }
 
-        if (texture->HDR_headroom > output_headroom) {
+        if (texture->HDR_headroom > output_headroom && output_headroom > 0.0f) {
             constants->tonemap_method = TONEMAP_CHROME;
             constants->tonemap_factor1 = (output_headroom / (texture->HDR_headroom * texture->HDR_headroom));
             constants->tonemap_factor2 = (1.0f / output_headroom);
@@ -1459,8 +1598,13 @@ static bool SetDrawState(SDL_Renderer *renderer, const SDL_RenderCommand *cmd, c
     return true;
 }
 
-static id<MTLSamplerState> GetSampler(SDL3METAL_RenderData *data, SDL_ScaleMode scale_mode, SDL_TextureAddressMode address_u, SDL_TextureAddressMode address_v)
+static id<MTLSamplerState> GetSampler(SDL3METAL_RenderData *data, SDL_PixelFormat format, SDL_ScaleMode scale_mode, SDL_TextureAddressMode address_u, SDL_TextureAddressMode address_v)
 {
+    if (format == SDL_PIXELFORMAT_INDEX8) {
+        // We'll do linear sampling in the shader if needed
+        scale_mode = SDL_SCALEMODE_NEAREST;
+    }
+
     NSNumber *key = [NSNumber numberWithInteger:RENDER_SAMPLER_HASHKEY(scale_mode, address_u, address_v)];
     id<MTLSamplerState> mtlsampler = data.mtlsamplers[key];
     if (mtlsampler == nil) {
@@ -1528,6 +1672,10 @@ static bool SetCopyState(SDL_Renderer *renderer, const SDL_RenderCommand *cmd, c
 
     if (texture != statecache->texture) {
         [data.mtlcmdencoder setFragmentTexture:texturedata.mtltexture atIndex:0];
+        if (texture->palette) {
+            SDL3METAL_PaletteData *palette = (__bridge SDL3METAL_PaletteData *)texture->palette->internal;
+            [data.mtlcmdencoder setFragmentTexture:palette.mtltexture atIndex:1];
+        }
 #ifdef SDL_HAVE_YUV
         if (texturedata.yuv || texturedata.nv12) {
             [data.mtlcmdencoder setFragmentTexture:texturedata.mtltextureUv atIndex:1];
@@ -1537,18 +1685,32 @@ static bool SetCopyState(SDL_Renderer *renderer, const SDL_RenderCommand *cmd, c
         statecache->texture = texture;
     }
 
-    if (cmd->data.draw.texture_scale_mode != statecache->texture_scale_mode ||
+    if (texture->format != statecache->texture_format ||
+        cmd->data.draw.texture_scale_mode != statecache->texture_scale_mode ||
         cmd->data.draw.texture_address_mode_u != statecache->texture_address_mode_u ||
         cmd->data.draw.texture_address_mode_v != statecache->texture_address_mode_v) {
-        id<MTLSamplerState> mtlsampler = GetSampler(data, cmd->data.draw.texture_scale_mode, cmd->data.draw.texture_address_mode_u, cmd->data.draw.texture_address_mode_v);
+        id<MTLSamplerState> mtlsampler = GetSampler(data, texture->format, cmd->data.draw.texture_scale_mode, cmd->data.draw.texture_address_mode_u, cmd->data.draw.texture_address_mode_v);
         if (mtlsampler == nil) {
             return false;
         }
         [data.mtlcmdencoder setFragmentSamplerState:mtlsampler atIndex:0];
 
+        statecache->texture_format = texture->format;
         statecache->texture_scale_mode = cmd->data.draw.texture_scale_mode;
         statecache->texture_address_mode_u = cmd->data.draw.texture_address_mode_u;
         statecache->texture_address_mode_v = cmd->data.draw.texture_address_mode_v;
+    }
+    if (texture->palette) {
+        if (!statecache->texture_palette) {
+            id<MTLSamplerState> mtlsampler = GetSampler(data, SDL_PIXELFORMAT_UNKNOWN, SDL_SCALEMODE_NEAREST, SDL_TEXTURE_ADDRESS_CLAMP, SDL_TEXTURE_ADDRESS_CLAMP);
+            if (mtlsampler == nil) {
+                return false;
+            }
+            [data.mtlcmdencoder setFragmentSamplerState:mtlsampler atIndex:1];
+            statecache->texture_palette = true;
+        }
+    } else {
+        statecache->texture_palette = false;
     }
     return true;
 }
@@ -1663,13 +1825,42 @@ static bool METAL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd
                 break;
             }
 
-            case SDL_RENDERCMD_DRAW_POINTS:
             case SDL_RENDERCMD_DRAW_LINES:
             {
-                const size_t count = cmd->data.draw.count;
-                const MTLPrimitiveType primtype = (cmd->command == SDL_RENDERCMD_DRAW_POINTS) ? MTLPrimitiveTypePoint : MTLPrimitiveTypeLineStrip;
                 if (SetDrawState(renderer, cmd, SDL_METAL_FRAGMENT_SOLID, NULL, CONSTANTS_OFFSET_HALF_PIXEL_TRANSFORM, mtlbufvertex, &statecache)) {
-                    [data.mtlcmdencoder drawPrimitives:primtype vertexStart:0 vertexCount:count];
+                    size_t count = cmd->data.draw.count;
+                    if (count > 2) {
+                        // joined lines cannot be grouped
+                        [data.mtlcmdencoder drawPrimitives:MTLPrimitiveTypeLineStrip vertexStart:0 vertexCount:count];
+                    } else {
+                        // let's group non joined lines
+                        SDL_RenderCommand *finalcmd = cmd;
+                        SDL_RenderCommand *nextcmd;
+                        float thiscolorscale = cmd->data.draw.color_scale;
+                        SDL_BlendMode thisblend = cmd->data.draw.blend;
+
+                        for (nextcmd = cmd->next; nextcmd; nextcmd = nextcmd->next) {
+                            const SDL_RenderCommandType nextcmdtype = nextcmd->command;
+                            if (nextcmdtype != SDL_RENDERCMD_DRAW_LINES) {
+                                if (nextcmdtype == SDL_RENDERCMD_SETDRAWCOLOR) {
+                                    // The vertex data has the draw color built in, ignore this
+                                    continue;
+                                }
+                                break; // can't go any further on this draw call, different render command up next.
+                            } else if (nextcmd->data.draw.count != 2) {
+                                break; // can't go any further on this draw call, those are joined lines
+                            } else if (nextcmd->data.draw.blend != thisblend ||
+                                       nextcmd->data.draw.color_scale != thiscolorscale) {
+                                break; // can't go any further on this draw call, different blendmode copy up next.
+                            } else {
+                                finalcmd = nextcmd; // we can combine copy operations here. Mark this one as the furthest okay command.
+                                count += nextcmd->data.draw.count;
+                            }
+                        }
+
+                        [data.mtlcmdencoder drawPrimitives:MTLPrimitiveTypeLine vertexStart:0 vertexCount:count];
+                        cmd = finalcmd; // skip any copy commands we just combined in here.
+                    }
                 }
                 break;
             }
@@ -1683,20 +1874,56 @@ static bool METAL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd
             case SDL_RENDERCMD_COPY_EX: // unused
                 break;
 
+            case SDL_RENDERCMD_DRAW_POINTS:
             case SDL_RENDERCMD_GEOMETRY:
             {
-                const size_t count = cmd->data.draw.count;
-                SDL_Texture *texture = cmd->data.draw.texture;
-
-                if (texture) {
-                    if (SetCopyState(renderer, cmd, CONSTANTS_OFFSET_IDENTITY, mtlbufvertex, &statecache)) {
-                        [data.mtlcmdencoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:count];
-                    }
-                } else {
-                    if (SetDrawState(renderer, cmd, SDL_METAL_FRAGMENT_SOLID, NULL, CONSTANTS_OFFSET_IDENTITY, mtlbufvertex, &statecache)) {
-                        [data.mtlcmdencoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:count];
+                float thiscolorscale = cmd->data.draw.color_scale;
+                SDL_Texture *thistexture = cmd->data.draw.texture;
+                SDL_BlendMode thisblend = cmd->data.draw.blend;
+                SDL_ScaleMode thisscalemode = cmd->data.draw.texture_scale_mode;
+                SDL_TextureAddressMode thisaddressmode_u = cmd->data.draw.texture_address_mode_u;
+                SDL_TextureAddressMode thisaddressmode_v = cmd->data.draw.texture_address_mode_v;
+                const SDL_RenderCommandType thiscmdtype = cmd->command;
+                SDL_RenderCommand *finalcmd = cmd;
+                SDL_RenderCommand *nextcmd;
+                size_t count = cmd->data.draw.count;
+                for (nextcmd = cmd->next; nextcmd; nextcmd = nextcmd->next) {
+                    const SDL_RenderCommandType nextcmdtype = nextcmd->command;
+                    if (nextcmdtype != thiscmdtype) {
+                        if (nextcmdtype == SDL_RENDERCMD_SETDRAWCOLOR) {
+                            // The vertex data has the draw color built in, ignore this
+                            continue;
+                        }
+                        break; // can't go any further on this draw call, different render command up next.
+                    } else if (nextcmd->data.draw.texture != thistexture ||
+                               nextcmd->data.draw.texture_scale_mode != thisscalemode ||
+                               nextcmd->data.draw.texture_address_mode_u != thisaddressmode_u ||
+                               nextcmd->data.draw.texture_address_mode_v != thisaddressmode_v ||
+                               nextcmd->data.draw.blend != thisblend ||
+                               nextcmd->data.draw.color_scale != thiscolorscale) {
+                        break; // can't go any further on this draw call, different texture/blendmode copy up next.
+                    } else {
+                        finalcmd = nextcmd; // we can combine copy operations here. Mark this one as the furthest okay command.
+                        count += nextcmd->data.draw.count;
                     }
                 }
+
+                if (thiscmdtype == SDL_RENDERCMD_GEOMETRY) {
+                    if (thistexture) {
+                        if (SetCopyState(renderer, cmd, CONSTANTS_OFFSET_IDENTITY, mtlbufvertex, &statecache)) {
+                            [data.mtlcmdencoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:count];
+                        }
+                    } else {
+                        if (SetDrawState(renderer, cmd, SDL_METAL_FRAGMENT_SOLID, NULL, CONSTANTS_OFFSET_IDENTITY, mtlbufvertex, &statecache)) {
+                            [data.mtlcmdencoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:count];
+                        }
+                    }
+                } else {
+                    if (SetDrawState(renderer, cmd, SDL_METAL_FRAGMENT_SOLID, NULL, CONSTANTS_OFFSET_HALF_PIXEL_TRANSFORM, mtlbufvertex, &statecache)) {
+                        [data.mtlcmdencoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:0 vertexCount:count];
+                    }
+                }
+                cmd = finalcmd; // skip any copy commands we just combined in here.
                 break;
             }
 
@@ -1710,12 +1937,57 @@ static bool METAL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd
     }
 }
 
+#ifdef SDL_PLATFORM_VISIONOS
+static id<MTLTexture> METAL_CopyToStagingTexture(SDL_Renderer *renderer, id<MTLTexture> texture, SDL_Rect *rect)
+{
+    SDL3METAL_RenderData *data = (__bridge SDL3METAL_RenderData *)renderer->internal;
+    MTLTextureDescriptor *desc;
+    id<MTLTexture> stagingtex;
+    id<MTLBlitCommandEncoder> blitcmd;
+
+    desc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:texture.pixelFormat
+                                                              width:rect->w
+                                                             height:rect->h
+                                                          mipmapped:NO];
+    if (desc == nil) {
+        SDL_OutOfMemory();
+        return nil;
+    }
+
+    stagingtex = [data.mtldevice newTextureWithDescriptor:desc];
+    if (stagingtex == nil) {
+        SDL_OutOfMemory();
+        return nil;
+    }
+
+    blitcmd = [data.mtlcmdbuffer blitCommandEncoder];
+
+    [blitcmd copyFromTexture:texture
+                 sourceSlice:0
+                 sourceLevel:0
+                sourceOrigin:MTLOriginMake(rect->x, rect->y, 0)
+                  sourceSize:MTLSizeMake(rect->w, rect->h, 1)
+                   toTexture:stagingtex
+            destinationSlice:0
+            destinationLevel:0
+           destinationOrigin:MTLOriginMake(0, 0, 0)];
+
+    [blitcmd endEncoding];
+
+    rect->x = 0;
+    rect->y = 0;
+
+    return stagingtex;
+}
+#endif // SDL_PLATFORM_VISIONOS
+
 static SDL_Surface *METAL_RenderReadPixels(SDL_Renderer *renderer, const SDL_Rect *rect)
 {
     @autoreleasepool {
         SDL3METAL_RenderData *data = (__bridge SDL3METAL_RenderData *)renderer->internal;
         id<MTLTexture> mtltexture;
         MTLRegion mtlregion;
+        SDL_Rect read_rect = *rect;
         Uint32 format;
         SDL_Surface *surface;
 
@@ -1739,6 +2011,15 @@ static SDL_Surface *METAL_RenderReadPixels(SDL_Renderer *renderer, const SDL_Rec
         }
 #endif
 
+#ifdef SDL_PLATFORM_VISIONOS
+        if (!renderer->target && data.mtlrealitykittexture) {
+            mtltexture = METAL_CopyToStagingTexture(renderer, mtltexture, &read_rect);
+            if (mtltexture == nil) {
+                return NULL;
+            }
+        }
+#endif
+
         /* Commit the current command buffer and wait until it's completed, to make
          * sure the GPU has finished rendering to it by the time we read it. */
         [data.mtlcmdbuffer commit];
@@ -1746,7 +2027,7 @@ static SDL_Surface *METAL_RenderReadPixels(SDL_Renderer *renderer, const SDL_Rec
         data.mtlcmdencoder = nil;
         data.mtlcmdbuffer = nil;
 
-        mtlregion = MTLRegionMake2D(rect->x, rect->y, rect->w, rect->h);
+        mtlregion = MTLRegionMake2D(read_rect.x, read_rect.y, read_rect.w, read_rect.h);
 
         switch (mtltexture.pixelFormat) {
         case MTLPixelFormatBGRA8Unorm:
@@ -1763,13 +2044,32 @@ static SDL_Surface *METAL_RenderReadPixels(SDL_Renderer *renderer, const SDL_Rec
         case MTLPixelFormatRGBA16Float:
             format = SDL_PIXELFORMAT_RGBA64_FLOAT;
             break;
+        case MTLPixelFormatB5G6R5Unorm:
+            format = SDL_PIXELFORMAT_RGB565;
+            break;
+        case MTLPixelFormatA1BGR5Unorm:
+            format = SDL_PIXELFORMAT_RGBA5551;
+            break;
+        case MTLPixelFormatBGR5A1Unorm:
+            format = SDL_PIXELFORMAT_ARGB1555;
+            break;
+        case MTLPixelFormatABGR4Unorm:
+            format = SDL_PIXELFORMAT_RGBA4444;
+            break;
         default:
             SDL_SetError("Unknown framebuffer pixel format");
             return NULL;
         }
-        surface = SDL_CreateSurface(rect->w, rect->h, format);
+        surface = SDL_CreateSurface(read_rect.w, read_rect.h, format);
         if (surface) {
             [mtltexture getBytes:surface->pixels bytesPerRow:surface->pitch fromRegion:mtlregion mipmapLevel:0];
+            if (SDL_RenderingLinearSpace(renderer) &&
+                (!SDL_ISPIXELFORMAT_10BIT(format) && !SDL_ISPIXELFORMAT_FLOAT(format))) {
+                if (!SDL_ConvertPixelsAndColorspace(surface->w, surface->h, format, SDL_COLORSPACE_SRGB_LINEAR, 0, surface->pixels, surface->pitch, format, SDL_COLORSPACE_SRGB, 0, surface->pixels, surface->pitch)) {
+                    SDL_DestroySurface(surface);
+                    return NULL;
+                }
+            }
         }
         return surface;
     }
@@ -1798,8 +2098,22 @@ static bool METAL_RenderPresent(SDL_Renderer *renderer)
         // If we don't have a drawable to present, don't try to present it.
         //  But we'll still try to commit the command buffer in case it was already enqueued.
         if (ready) {
-            SDL_assert(data.mtlbackbuffer != nil);
-            [data.mtlcmdbuffer presentDrawable:data.mtlbackbuffer];
+#ifdef SDL_PLATFORM_VISIONOS
+            if (data.mtlrealitykittexture) {
+                // Generate mipmaps
+                id<MTLBlitCommandEncoder> blitcmd = [data.mtlcmdbuffer blitCommandEncoder];
+
+                [blitcmd generateMipmapsForTexture:data.mtlrealitykittexture];
+                [blitcmd endEncoding];
+
+                data.mtlrealitykittexture = nil;
+            }
+            else
+#endif
+            {
+                SDL_assert(data.mtlbackbuffer != nil);
+                [data.mtlcmdbuffer presentDrawable:data.mtlbackbuffer];
+            }
         }
 
         [data.mtlcmdbuffer commit];
@@ -1831,6 +2145,11 @@ static void METAL_DestroyRenderer(SDL_Renderer *renderer)
 
             if (data.mtlcmdencoder != nil) {
                 [data.mtlcmdencoder endEncoding];
+            }
+
+            if (data.mtlcmdbuffer != nil) {
+                [data.mtlcmdbuffer commit];
+                [data.mtlcmdbuffer waitUntilCompleted];
             }
 
             DestroyAllPipelines(data.allpipelines, data.pipelinescount);
@@ -2146,6 +2465,9 @@ static bool METAL_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL
         renderer->WindowEvent = METAL_WindowEvent;
         renderer->GetOutputSize = METAL_GetOutputSize;
         renderer->SupportsBlendMode = METAL_SupportsBlendMode;
+        renderer->CreatePalette = METAL_CreatePalette;
+        renderer->UpdatePalette = METAL_UpdatePalette;
+        renderer->DestroyPalette = METAL_DestroyPalette;
         renderer->CreateTexture = METAL_CreateTexture;
         renderer->UpdateTexture = METAL_UpdateTexture;
 #ifdef SDL_HAVE_YUV
@@ -2176,6 +2498,15 @@ static bool METAL_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL
         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ABGR2101010);
         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBA64_FLOAT);
         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBA128_FLOAT);
+        if (@available(macOS 11.0, iOS 13.0, tvOS 13.0, *)) {
+            if ([mtldevice supportsFamily:MTLGPUFamilyApple1]) {
+                SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGB565);
+                SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBA5551);
+                SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB1555);
+                SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGBA4444);
+            }
+        }
+        SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_INDEX8);
         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_YV12);
         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_IYUV);
         SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_NV12);

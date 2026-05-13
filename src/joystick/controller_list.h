@@ -60,10 +60,34 @@ static const ControllerDescription_t arrControllers[] = {
 	{ MAKE_CONTROLLER_ID( 0x0f0d, 0x0088 ), k_eControllerType_PS3Controller, NULL },	// HORI Fighting Stick mini 4
 	{ MAKE_CONTROLLER_ID( 0x0f30, 0x1100 ), k_eControllerType_PS3Controller, NULL },	// Qanba Q1 fight stick
 	{ MAKE_CONTROLLER_ID( 0x11ff, 0x3331 ), k_eControllerType_PS3Controller, NULL },	// SRXJ-PH2400
+	{ MAKE_CONTROLLER_ID( 0x12ba, 0x0100 ), k_eControllerType_PS3Controller, NULL },	// PS3 Guitar Hero Guitar
+	{ MAKE_CONTROLLER_ID( 0x12ba, 0x0120 ), k_eControllerType_PS3Controller, NULL },	// PS3 Guitar Hero Drums
+	{ MAKE_CONTROLLER_ID( 0x12ba, 0x0140 ), k_eControllerType_PS3Controller, NULL },	// PS3 DJ Hero Turntable
+	{ MAKE_CONTROLLER_ID( 0x12ba, 0x0200 ), k_eControllerType_PS3Controller, NULL },	// PS3 Rock Band Guitar
+	{ MAKE_CONTROLLER_ID( 0x12ba, 0x0210 ), k_eControllerType_PS3Controller, NULL },	// PS3 Rock Band Drums
+	{ MAKE_CONTROLLER_ID( 0x12ba, 0x0218 ), k_eControllerType_PS3Controller, NULL },	// PS3 Midi Pro Adapter - Drums Mode
+	{ MAKE_CONTROLLER_ID( 0x12ba, 0x074b ), k_eControllerType_PS3Controller, NULL },	// PS3 / Wii U Guitar Hero Live Guitar
+	{ MAKE_CONTROLLER_ID( 0x12ba, 0x2330 ), k_eControllerType_PS3Controller, NULL },	// PS3 Rock Band Keyboard
+	{ MAKE_CONTROLLER_ID( 0x12ba, 0x2338 ), k_eControllerType_PS3Controller, NULL },	// PS3 Midi Pro Adapter - Keyboard Mode
+	{ MAKE_CONTROLLER_ID( 0x12ba, 0x2430 ), k_eControllerType_PS3Controller, NULL },	// PS3 Mustang Guitar
+	{ MAKE_CONTROLLER_ID( 0x12ba, 0x2438 ), k_eControllerType_PS3Controller, NULL },	// PS3 Midi Pro Adapter - Mustang Guitar Mode
+	{ MAKE_CONTROLLER_ID( 0x12ba, 0x2530 ), k_eControllerType_PS3Controller, NULL },	// PS3 Squire Guitar
+	{ MAKE_CONTROLLER_ID( 0x12ba, 0x2538 ), k_eControllerType_PS3Controller, NULL },	// PS3 Midi Pro Adapter - Squire Guitar Mode
 	{ MAKE_CONTROLLER_ID( 0x1345, 0x1000 ), k_eControllerType_PS3Controller, NULL },	// PS2 ACME GA-D5
 	{ MAKE_CONTROLLER_ID( 0x1345, 0x6005 ), k_eControllerType_PS3Controller, NULL },	// ps2 maybe break out later
 	{ MAKE_CONTROLLER_ID( 0x146b, 0x5500 ), k_eControllerType_PS3Controller, NULL },	// From SDL
 	{ MAKE_CONTROLLER_ID( 0x1a34, 0x0836 ), k_eControllerType_PS3Controller, NULL },	// Afterglow PS3
+	{ MAKE_CONTROLLER_ID( 0x1BAD, 0x0004 ), k_eControllerType_PS3Controller, NULL },	// Wii RB1 Guitar (Uses PS3 protocol)
+	{ MAKE_CONTROLLER_ID( 0x1BAD, 0x0005 ), k_eControllerType_PS3Controller, NULL },	// Wii RB1 Drums (Uses PS3 protocol)
+	{ MAKE_CONTROLLER_ID( 0x1BAD, 0x3010 ), k_eControllerType_PS3Controller, NULL },	// Wii RB2 Guitar (Uses PS3 protocol)
+	{ MAKE_CONTROLLER_ID( 0x1BAD, 0x3110 ), k_eControllerType_PS3Controller, NULL },	// Wii RB2 Drums (Uses PS3 protocol)
+	{ MAKE_CONTROLLER_ID( 0x1BAD, 0x3138 ), k_eControllerType_PS3Controller, NULL },	// Wii RB3 Midi Pro Adapter - Drums Mode (Uses PS3 protocol)
+	{ MAKE_CONTROLLER_ID( 0x1BAD, 0x3330 ), k_eControllerType_PS3Controller, NULL },	// Wii RB3 Keyboard (Uses PS3 protocol)
+	{ MAKE_CONTROLLER_ID( 0x1BAD, 0x3338 ), k_eControllerType_PS3Controller, NULL },	// Wii RB3 Midi Pro Adapter - Keyboard Mode (Uses PS3 protocol)
+	{ MAKE_CONTROLLER_ID( 0x1BAD, 0x3430 ), k_eControllerType_PS3Controller, NULL },	// Wii RB3 Mustang Guitar (Uses PS3 protocol)
+	{ MAKE_CONTROLLER_ID( 0x1BAD, 0x3438 ), k_eControllerType_PS3Controller, NULL },	// Wii RB3 Midi Pro Adapter - Mustang Guitar Mode (Uses PS3 protocol)
+	{ MAKE_CONTROLLER_ID( 0x1BAD, 0x3530 ), k_eControllerType_PS3Controller, NULL },	// Wii RB3 Squire Guitar (Uses PS3 protocol)
+	{ MAKE_CONTROLLER_ID( 0x1BAD, 0x3538 ), k_eControllerType_PS3Controller, NULL },	// Wii RB3 Midi Pro Adapter - Squire Guitar Mode (Uses PS3 protocol)
 	{ MAKE_CONTROLLER_ID( 0x20bc, 0x5500 ), k_eControllerType_PS3Controller, NULL },	// ShanWan PS3
 	{ MAKE_CONTROLLER_ID( 0x20d6, 0x576d ), k_eControllerType_PS3Controller, NULL },	// Power A PS3
 	{ MAKE_CONTROLLER_ID( 0x20d6, 0xca6d ), k_eControllerType_PS3Controller, NULL },	// BDA Pro Ex
@@ -159,13 +183,18 @@ static const ControllerDescription_t arrControllers[] = {
 	{ MAKE_CONTROLLER_ID( 0x1532, 0x100b ), k_eControllerType_PS5Controller, NULL },	// Razer Wolverine V2 Pro (Wired)
 	{ MAKE_CONTROLLER_ID( 0x1532, 0x100c ), k_eControllerType_PS5Controller, NULL },	// Razer Wolverine V2 Pro (Wireless)
 	{ MAKE_CONTROLLER_ID( 0x1532, 0x1012 ), k_eControllerType_PS5Controller, NULL },	// Razer Kitsune
+	{ MAKE_CONTROLLER_ID( 0x1532, 0x1024 ), k_eControllerType_PS5Controller, NULL },	// Razer Raiju V5 Pro (PS5 mode wired)
+	{ MAKE_CONTROLLER_ID( 0x1532, 0x1026 ), k_eControllerType_PS5Controller, NULL },	// Razer Raiju V5 Pro (PS5 mode with dongle)
 	{ MAKE_CONTROLLER_ID( 0x3285, 0x0d18 ), k_eControllerType_PS5Controller, NULL },	// NACON Revolution 5 Pro (PS5 mode with dongle)
 	{ MAKE_CONTROLLER_ID( 0x3285, 0x0d19 ), k_eControllerType_PS5Controller, NULL },	// NACON Revolution 5 Pro (PS5 mode wired)
 	{ MAKE_CONTROLLER_ID( 0x358a, 0x0104 ), k_eControllerType_PS5Controller, NULL },	// Backbone One PlayStation Edition for iOS
+	{ MAKE_CONTROLLER_ID( 0x358a, 0x0304 ), k_eControllerType_PS5Controller, NULL },	// Backbone One PlayStation Edition Gen 2
 
 	{ MAKE_CONTROLLER_ID( 0x0079, 0x0006 ), k_eControllerType_UnknownNonSteamController, NULL },	// DragonRise Generic USB PCB, sometimes configured as a PC Twin Shock Controller - looks like a DS3 but the face buttons are 1-4 instead of symbols
 
 	{ MAKE_CONTROLLER_ID( 0x0079, 0x18d4 ), k_eControllerType_XBox360Controller, NULL },	// GPD Win 2 X-Box Controller
+	{ MAKE_CONTROLLER_ID( 0x0351, 0x1000 ), k_eControllerType_XBox360Controller, NULL },	// CRKD Guitar
+	{ MAKE_CONTROLLER_ID( 0x0351, 0x2000 ), k_eControllerType_XBox360Controller, NULL },	// CRKD Guitar
 	{ MAKE_CONTROLLER_ID( 0x03eb, 0xff02 ), k_eControllerType_XBox360Controller, NULL },	// Wooting Two
 	{ MAKE_CONTROLLER_ID( 0x044f, 0xb326 ), k_eControllerType_XBox360Controller, NULL },	// Thrustmaster Gamepad GP XID
 	{ MAKE_CONTROLLER_ID( 0x045e, 0x028e ), k_eControllerType_XBox360Controller, "Xbox 360 Controller" },          // Microsoft Xbox 360 Wired Controller
@@ -173,6 +202,7 @@ static const ControllerDescription_t arrControllers[] = {
 	{ MAKE_CONTROLLER_ID( 0x045e, 0x0291 ), k_eControllerType_XBox360Controller, "Xbox 360 Wireless Controller" }, // X-box 360 Wireless Receiver (third party knockoff)
 	{ MAKE_CONTROLLER_ID( 0x045e, 0x02a0 ), k_eControllerType_XBox360Controller, NULL },                           // Microsoft Xbox 360 Big Button IR
 	{ MAKE_CONTROLLER_ID( 0x045e, 0x02a1 ), k_eControllerType_XBox360Controller, "Xbox 360 Wireless Controller" }, // Microsoft Xbox 360 Wireless Controller with XUSB driver on Windows
+	{ MAKE_CONTROLLER_ID( 0x045e, 0x02a2 ), k_eControllerType_XBox360Controller, "Xbox 360 Wireless Racing Wheel" },	   // Xbox 360 Wireless Racing Wheel with XUSB driver on Windows
 	{ MAKE_CONTROLLER_ID( 0x045e, 0x02a9 ), k_eControllerType_XBox360Controller, "Xbox 360 Wireless Controller" }, // X-box 360 Wireless Receiver (third party knockoff)
 	{ MAKE_CONTROLLER_ID( 0x045e, 0x0719 ), k_eControllerType_XBox360Controller, "Xbox 360 Wireless Controller" }, // Microsoft Xbox 360 Wireless Receiver
 	{ MAKE_CONTROLLER_ID( 0x046d, 0xc21d ), k_eControllerType_XBox360Controller, NULL },	// Logitech Gamepad F310
@@ -182,6 +212,8 @@ static const ControllerDescription_t arrControllers[] = {
 	{ MAKE_CONTROLLER_ID( 0x056e, 0x2004 ), k_eControllerType_XBox360Controller, NULL },	// Elecom JC-U3613M
 // This isn't actually an Xbox 360 controller, it just looks like one
 //	{ MAKE_CONTROLLER_ID( 0x06a3, 0xf51a ), k_eControllerType_XBox360Controller, NULL },	// Saitek P3600
+	{ MAKE_CONTROLLER_ID( 0x0738, 0x02A6 ), k_eControllerType_XBox360Controller, NULL },	// Mad Catz Wireless Rock Band Guitar
+	{ MAKE_CONTROLLER_ID( 0x0738, 0x02AB ), k_eControllerType_XBox360Controller, NULL },	// Mad Catz Wireless Precision Bass Guitar
 	{ MAKE_CONTROLLER_ID( 0x0738, 0x4716 ), k_eControllerType_XBox360Controller, NULL },	// Mad Catz Wired Xbox 360 Controller
 	{ MAKE_CONTROLLER_ID( 0x0738, 0x4718 ), k_eControllerType_XBox360Controller, NULL },	// Mad Catz Street Fighter IV FightStick SE
 	{ MAKE_CONTROLLER_ID( 0x0738, 0x4726 ), k_eControllerType_XBox360Controller, NULL },	// Mad Catz Xbox 360 Controller
@@ -189,6 +221,7 @@ static const ControllerDescription_t arrControllers[] = {
 	{ MAKE_CONTROLLER_ID( 0x0738, 0x4736 ), k_eControllerType_XBox360Controller, NULL },	// Mad Catz MicroCon Gamepad
 	{ MAKE_CONTROLLER_ID( 0x0738, 0x4738 ), k_eControllerType_XBox360Controller, NULL },	// Mad Catz Wired Xbox 360 Controller (SFIV)
 	{ MAKE_CONTROLLER_ID( 0x0738, 0x4740 ), k_eControllerType_XBox360Controller, NULL },	// Mad Catz Beat Pad
+	{ MAKE_CONTROLLER_ID( 0x0738, 0x9806 ), k_eControllerType_XBox360Controller, NULL },	// Mad Catz Precision Bass Guitar
 	{ MAKE_CONTROLLER_ID( 0x0738, 0xb726 ), k_eControllerType_XBox360Controller, NULL },	// Mad Catz Xbox controller - MW2
 	{ MAKE_CONTROLLER_ID( 0x0738, 0xbeef ), k_eControllerType_XBox360Controller, NULL },	// Mad Catz JOYTECH NEO SE Advanced GamePad
 	{ MAKE_CONTROLLER_ID( 0x0738, 0xcb02 ), k_eControllerType_XBox360Controller, NULL },	// Saitek Cyborg Rumble Pad - PC/Xbox 360
@@ -232,6 +265,14 @@ static const ControllerDescription_t arrControllers[] = {
 	{ MAKE_CONTROLLER_ID( 0x12ab, 0x0301 ), k_eControllerType_XBox360Controller, NULL },	// PDP AFTERGLOW AX.1
 	{ MAKE_CONTROLLER_ID( 0x12ab, 0x0303 ), k_eControllerType_XBox360Controller, NULL },	// Mortal Kombat Klassic FightStick
 	{ MAKE_CONTROLLER_ID( 0x1430, 0x02a0 ), k_eControllerType_XBox360Controller, NULL },	// RedOctane Controller Adapter
+	{ MAKE_CONTROLLER_ID( 0x1430, 0x02a7 ), k_eControllerType_XBox360Controller, NULL },	// Guitar Hero Wireless Guitar (Linux)
+	{ MAKE_CONTROLLER_ID( 0x1430, 0x02a8 ), k_eControllerType_XBox360Controller, NULL },	// Guitar Hero Wireless Drum Kit (Linux)
+	{ MAKE_CONTROLLER_ID( 0x1430, 0x0705 ), k_eControllerType_XBox360Controller, NULL },	// Guitar Hero 5 Guitar
+	{ MAKE_CONTROLLER_ID( 0x1430, 0x070B ), k_eControllerType_XBox360Controller, NULL },	// Guitar Hero Live Guitar
+	{ MAKE_CONTROLLER_ID( 0x1430, 0x0805 ), k_eControllerType_XBox360Controller, NULL },	// Band Hero Wireless Drum Kit
+	{ MAKE_CONTROLLER_ID( 0x1430, 0x1715 ), k_eControllerType_XBox360Controller, NULL },	// DJ Hero Turntable (Wired)
+	{ MAKE_CONTROLLER_ID( 0x1430, 0x1705 ), k_eControllerType_XBox360Controller, NULL },	// DJ Hero Turntable (Wireless)
+	{ MAKE_CONTROLLER_ID( 0x1430, 0x4734 ), k_eControllerType_XBox360Controller, NULL },	// Guitar Hero World Tour Kiosk
 	{ MAKE_CONTROLLER_ID( 0x1430, 0x4748 ), k_eControllerType_XBox360Controller, NULL },	// RedOctane Guitar Hero X-plorer
 	{ MAKE_CONTROLLER_ID( 0x1430, 0xf801 ), k_eControllerType_XBox360Controller, NULL },	// RedOctane Controller
 	{ MAKE_CONTROLLER_ID( 0x146b, 0x0601 ), k_eControllerType_XBox360Controller, NULL },	// BigBen Interactive XBOX 360 Controller
@@ -244,8 +285,17 @@ static const ControllerDescription_t arrControllers[] = {
 	{ MAKE_CONTROLLER_ID( 0x1689, 0xfd01 ), k_eControllerType_XBox360Controller, NULL },	// Razer Onza Classic Edition
 	{ MAKE_CONTROLLER_ID( 0x1689, 0xfe00 ), k_eControllerType_XBox360Controller, NULL },	// Razer Sabertooth
 	{ MAKE_CONTROLLER_ID( 0x1949, 0x041a ), k_eControllerType_XBox360Controller, "Amazon Luna Controller" },	// Amazon Luna Controller
-	{ MAKE_CONTROLLER_ID( 0x1bad, 0x0002 ), k_eControllerType_XBox360Controller, NULL },	// Harmonix Rock Band Guitar
+	{ MAKE_CONTROLLER_ID( 0x1bad, 0x0002 ), k_eControllerType_XBox360Controller, NULL },	// Harmonix Rock Band 1 Guitar
 	{ MAKE_CONTROLLER_ID( 0x1bad, 0x0003 ), k_eControllerType_XBox360Controller, NULL },	// Harmonix Rock Band Drumkit
+	{ MAKE_CONTROLLER_ID( 0x1bad, 0x0130 ), k_eControllerType_XBox360Controller, NULL },	// ION Drum Rocker
+	{ MAKE_CONTROLLER_ID( 0x1bad, 0x02a6 ), k_eControllerType_XBox360Controller, NULL },	// Rock Band 2 Wireless Guitar (Linux)
+	{ MAKE_CONTROLLER_ID( 0x1bad, 0x02ab ), k_eControllerType_XBox360Controller, NULL },	// Rock Band Wireless Bass Guitar (Linux)
+	{ MAKE_CONTROLLER_ID( 0x1bad, 0x1330 ), k_eControllerType_XBox360Controller, NULL },	// Rock Band Keyboard (Mustang)
+	{ MAKE_CONTROLLER_ID( 0x1bad, 0x1338 ), k_eControllerType_XBox360Controller, NULL },	// Rock Band MIDI Pro Adapter (Keyboard)
+	{ MAKE_CONTROLLER_ID( 0x1bad, 0x1430 ), k_eControllerType_XBox360Controller, NULL },	// Rock Band Pro Guitar (Mustang)
+	{ MAKE_CONTROLLER_ID( 0x1bad, 0x1530 ), k_eControllerType_XBox360Controller, NULL },	// Rock Band Pro Guitar (Squire)
+	{ MAKE_CONTROLLER_ID( 0x1bad, 0x1438 ), k_eControllerType_XBox360Controller, NULL },	// Rock Band MIDI Pro Adapter (Mustang Guitar)
+	{ MAKE_CONTROLLER_ID( 0x1bad, 0x1538 ), k_eControllerType_XBox360Controller, NULL },	// Rock Band MIDI Pro Adapter (Squire Guitar)
 	{ MAKE_CONTROLLER_ID( 0x1bad, 0xf016 ), k_eControllerType_XBox360Controller, NULL },	// Mad Catz Xbox 360 Controller
 	{ MAKE_CONTROLLER_ID( 0x1bad, 0xf018 ), k_eControllerType_XBox360Controller, NULL },	// Mad Catz Street Fighter IV SE Fighting Stick
 	{ MAKE_CONTROLLER_ID( 0x1bad, 0xf019 ), k_eControllerType_XBox360Controller, NULL },	// Mad Catz Brawlstick for Xbox 360
@@ -279,6 +329,8 @@ static const ControllerDescription_t arrControllers[] = {
 	{ MAKE_CONTROLLER_ID( 0x1bad, 0xfa01 ), k_eControllerType_XBox360Controller, NULL },	// MadCatz GamePad
 	{ MAKE_CONTROLLER_ID( 0x1bad, 0xfd00 ), k_eControllerType_XBox360Controller, NULL },	// Razer Onza TE
 	{ MAKE_CONTROLLER_ID( 0x1bad, 0xfd01 ), k_eControllerType_XBox360Controller, NULL },	// Razer Onza
+	{ MAKE_CONTROLLER_ID( 0x2068, 0x0001 ), k_eControllerType_XBox360Controller, NULL },	// Power Gig Guitar
+	{ MAKE_CONTROLLER_ID( 0x2068, 0x0002 ), k_eControllerType_XBox360Controller, NULL },	// Power Gig Drums
 	{ MAKE_CONTROLLER_ID( 0x24c6, 0x5000 ), k_eControllerType_XBox360Controller, NULL },	// Razer Atrox Arcade Stick
 	{ MAKE_CONTROLLER_ID( 0x24c6, 0x5300 ), k_eControllerType_XBox360Controller, NULL },	// PowerA MINI PROEX Controller
 	{ MAKE_CONTROLLER_ID( 0x24c6, 0x5303 ), k_eControllerType_XBox360Controller, NULL },	// Xbox Airflo wired controller
@@ -303,6 +355,8 @@ static const ControllerDescription_t arrControllers[] = {
 	{ MAKE_CONTROLLER_ID( 0x24c6, 0xfafc ), k_eControllerType_XBox360Controller, NULL },	// Afterglow Gamepad 1
 	{ MAKE_CONTROLLER_ID( 0x24c6, 0xfafd ), k_eControllerType_XBox360Controller, NULL },	// Afterglow Gamepad 3
 	{ MAKE_CONTROLLER_ID( 0x24c6, 0xfafe ), k_eControllerType_XBox360Controller, NULL },	// Rock Candy Gamepad for Xbox 360
+	{ MAKE_CONTROLLER_ID( 0x3651, 0x1000 ), k_eControllerType_XBox360Controller, NULL },	// CRKD Guitar
+	{ MAKE_CONTROLLER_ID( 0x3651, 0x6000 ), k_eControllerType_XBox360Controller, NULL },	// CRKD Guitar
 
 	{ MAKE_CONTROLLER_ID( 0x03f0, 0x0495 ), k_eControllerType_XBoxOneController, NULL },	// HP HyperX Clutch Gladiate
 	{ MAKE_CONTROLLER_ID( 0x044f, 0xd012 ), k_eControllerType_XBoxOneController, NULL },	// ThrustMaster eSwap PRO Controller Xbox
@@ -435,15 +489,14 @@ static const ControllerDescription_t arrControllers[] = {
 	{ MAKE_CONTROLLER_ID( 0x24c6, 0x592a ), k_eControllerType_XBoxOneController, NULL },	// BDA XB1 Spectra Pro
 	{ MAKE_CONTROLLER_ID( 0x24c6, 0x791a ), k_eControllerType_XBoxOneController, NULL },	// PowerA Fusion Fight Pad
 	{ MAKE_CONTROLLER_ID( 0x2dc8, 0x2002 ), k_eControllerType_XBoxOneController, NULL },	// 8BitDo Ultimate Wired Controller for Xbox
-	{ MAKE_CONTROLLER_ID( 0x2dc8, 0x3106 ), k_eControllerType_XBoxOneController, NULL },	// 8Bitdo Ultimate Wired Controller. Windows, Android, Switch.
+	{ MAKE_CONTROLLER_ID( 0x2dc8, 0x3106 ), k_eControllerType_XBoxOneController, NULL },	// 8BitDo Ultimate Wired Controller. Windows, Android, Switch.
+	{ MAKE_CONTROLLER_ID( 0x2dc8, 0x310a ), k_eControllerType_XBoxOneController, NULL },	// 8BitDo Ultimate 2C Wireless Controller
 	{ MAKE_CONTROLLER_ID( 0x2e24, 0x0652 ), k_eControllerType_XBoxOneController, NULL },	// Hyperkin Duke
 	{ MAKE_CONTROLLER_ID( 0x2e24, 0x1618 ), k_eControllerType_XBoxOneController, NULL },	// Hyperkin Duke
 	{ MAKE_CONTROLLER_ID( 0x2e24, 0x1688 ), k_eControllerType_XBoxOneController, NULL },	// Hyperkin X91
 	{ MAKE_CONTROLLER_ID( 0x146b, 0x0611 ), k_eControllerType_XBoxOneController, NULL },	// Xbox Controller Mode for NACON Revolution 3
 
 	// These have been added via Minidump for unrecognized Xinput controller assert
-	{ MAKE_CONTROLLER_ID( 0x0000, 0x0000 ), k_eControllerType_XBox360Controller, NULL },	// Unknown Controller
-	{ MAKE_CONTROLLER_ID( 0x045e, 0x02a2 ), k_eControllerType_XBox360Controller, NULL },	// Unknown Controller - Microsoft VID
 	{ MAKE_CONTROLLER_ID( 0x0e6f, 0x1414 ), k_eControllerType_XBox360Controller, NULL },	// Unknown Controller
 	{ MAKE_CONTROLLER_ID( 0x0e6f, 0x0159 ), k_eControllerType_XBox360Controller, NULL },	// Unknown Controller
 	{ MAKE_CONTROLLER_ID( 0x24c6, 0xfaff ), k_eControllerType_XBox360Controller, NULL },	// Unknown Controller
@@ -468,7 +521,6 @@ static const ControllerDescription_t arrControllers[] = {
 	{ MAKE_CONTROLLER_ID( 0x046d, 0x0291 ), k_eControllerType_XBox360Controller, NULL },	// logitech xinput
 	{ MAKE_CONTROLLER_ID( 0x0079, 0x18d3 ), k_eControllerType_XBox360Controller, NULL },	// Unknown Controller
 	{ MAKE_CONTROLLER_ID( 0x0f0d, 0x00b1 ), k_eControllerType_XBox360Controller, NULL },	// Unknown Controller
-	{ MAKE_CONTROLLER_ID( 0x0001, 0x0001 ), k_eControllerType_XBox360Controller, NULL },	// Unknown Controller
 	{ MAKE_CONTROLLER_ID( 0x0079, 0x188e ), k_eControllerType_XBox360Controller, NULL },	// Unknown Controller
 	{ MAKE_CONTROLLER_ID( 0x0079, 0x187c ), k_eControllerType_XBox360Controller, NULL },	// Unknown Controller
 	{ MAKE_CONTROLLER_ID( 0x0079, 0x189c ), k_eControllerType_XBox360Controller, NULL },	// Unknown Controller
@@ -587,9 +639,10 @@ static const ControllerDescription_t arrControllers[] = {
 	{ MAKE_CONTROLLER_ID( 0x20d6, 0xa715 ), k_eControllerType_SwitchInputOnlyController, NULL },  // Power A Fusion Wireless Arcade Stick (USB Mode) Over BT is shows up as 057e 2009
 	{ MAKE_CONTROLLER_ID( 0x20d6, 0xa716 ), k_eControllerType_SwitchInputOnlyController, NULL },  // PowerA Nintendo Switch Fusion Pro Controller - USB requires toggling switch on back of device
 	{ MAKE_CONTROLLER_ID( 0x20d6, 0xa718 ), k_eControllerType_SwitchInputOnlyController, NULL },  // PowerA Nintendo Switch Nano Wired Controller
-    { MAKE_CONTROLLER_ID( 0x33dd, 0x0001 ), k_eControllerType_SwitchInputOnlyController, NULL },  // ZUIKI MasCon for Nintendo Switch Black
-    { MAKE_CONTROLLER_ID( 0x33dd, 0x0002 ), k_eControllerType_SwitchInputOnlyController, NULL },  // ZUIKI MasCon for Nintendo Switch ??
-    { MAKE_CONTROLLER_ID( 0x33dd, 0x0003 ), k_eControllerType_SwitchInputOnlyController, NULL },  // ZUIKI MasCon for Nintendo Switch Red
+	{ MAKE_CONTROLLER_ID( 0x33dd, 0x0001 ), k_eControllerType_SwitchInputOnlyController, NULL },  // ZUIKI MasCon for Nintendo Switch Black
+	{ MAKE_CONTROLLER_ID( 0x33dd, 0x0002 ), k_eControllerType_SwitchInputOnlyController, NULL },  // ZUIKI MasCon for Nintendo Switch ??
+	{ MAKE_CONTROLLER_ID( 0x33dd, 0x0003 ), k_eControllerType_SwitchInputOnlyController, NULL },  // ZUIKI MasCon for Nintendo Switch Red
+	{ MAKE_CONTROLLER_ID( 0x0f0d, 0x00f0 ), k_eControllerType_SwitchInputOnlyController, NULL },  // HORI Taiko Controller For Switch
 
 	// Valve products
 	{ MAKE_CONTROLLER_ID( 0x0000, 0x11fb ), k_eControllerType_MobileTouch, NULL },	// Streaming mobile touch virtual controls
@@ -602,4 +655,8 @@ static const ControllerDescription_t arrControllers[] = {
 	{ MAKE_CONTROLLER_ID( 0x28de, 0x1201 ), k_eControllerType_SteamControllerV2, NULL },	// Valve wired Steam Controller (HEADCRAB)
 	{ MAKE_CONTROLLER_ID( 0x28de, 0x1202 ), k_eControllerType_SteamControllerV2, NULL },	// Valve Bluetooth Steam Controller (HEADCRAB)
 	{ MAKE_CONTROLLER_ID( 0x28de, 0x1205 ), k_eControllerType_SteamControllerNeptune, NULL },	// Valve Steam Deck Builtin Controller
+	{ MAKE_CONTROLLER_ID( 0x28de, 0x1302 ), k_eControllerType_SteamControllerTriton, NULL },	// Valve Steam Triton Controller
+	{ MAKE_CONTROLLER_ID( 0x28de, 0x1303 ), k_eControllerType_SteamControllerTriton, NULL },	// Valve Steam Triton Controller (BLE)
+	{ MAKE_CONTROLLER_ID( 0x28de, 0x1304 ), k_eControllerType_SteamControllerTriton, NULL },	// Valve Steam Proteus Dongle (Proprietary)
+	{ MAKE_CONTROLLER_ID( 0x28de, 0x1305 ), k_eControllerType_SteamControllerTriton, NULL },	// Valve Steam Nereid Dongle (Proprietary)
 };

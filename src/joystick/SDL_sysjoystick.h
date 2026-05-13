@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -264,6 +264,7 @@ extern SDL_JoystickDriver SDL_VITA_JoystickDriver;
 extern SDL_JoystickDriver SDL_N3DS_JoystickDriver;
 extern SDL_JoystickDriver SDL_DREAMCAST_JoystickDriver;
 extern SDL_JoystickDriver SDL_GAMEINPUT_JoystickDriver;
+extern SDL_JoystickDriver SDL_DOS_JoystickDriver;
 
 // Ends C function definitions when using C++
 #ifdef __cplusplus

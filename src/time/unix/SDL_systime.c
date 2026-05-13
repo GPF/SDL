@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -25,10 +25,9 @@
 #include "../SDL_time_c.h"
 #include <errno.h>
 
-#if !defined(SDL_PLATFORM_DREAMCAST)
+#if !defined(SDL_PLATFORM_DREAMCAST) && !defined(SDL_PLATFORM_DOS)
 #include <langinfo.h>
 #endif
-
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
@@ -107,7 +106,7 @@ found_date:
 
 bool SDL_GetCurrentTime(SDL_Time *ticks)
 {
-    if (!ticks) {
+    CHECK_PARAM(!ticks) {
         return SDL_InvalidParamError("ticks");
     }
 #if defined(HAVE_CLOCK_GETTIME)
@@ -163,7 +162,7 @@ bool SDL_TimeToDateTime(SDL_Time ticks, SDL_DateTime *dt, bool localTime)
     struct tm tm_storage;
 #endif
 
-    if (!dt) {
+    CHECK_PARAM(!dt) {
         return SDL_InvalidParamError("dt");
     }
 
