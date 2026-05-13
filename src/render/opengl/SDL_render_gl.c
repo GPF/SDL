@@ -163,6 +163,9 @@ typedef struct
     SDL_TextureAddressMode texture_address_mode_u;
     SDL_TextureAddressMode texture_address_mode_v;
     GL_FBOList *fbo;
+#ifdef SDL_PLATFORM_DREAMCAST
+    Uint32 original_format;
+#endif    
 } GL_TextureData;
 
 static const char *GL_TranslateError(GLenum error)
@@ -592,65 +595,30 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
     GLenum format, type;
     int texture_w, texture_h;
 
+#ifdef SDL_PLATFORM_DREAMCAST
+    Uint32 dreamcast_original_format = texture->format;
+#endif
+
     GL_ActivateRenderer(renderer);
 
-    renderdata->drawstate.texture = NULL; // we trash this state.
-    renderdata->drawstate.texturing_dirty = true; // we trash this state.
+    renderdata->drawstate.texture = NULL;
+    renderdata->drawstate.texturing_dirty = true;
 
     if (texture->access == SDL_TEXTUREACCESS_TARGET &&
         !renderdata->GL_EXT_framebuffer_object_supported) {
         return SDL_SetError("Render targets not supported by OpenGL");
     }
+
 #ifdef SDL_PLATFORM_DREAMCAST
     SDL_Log("before texture->format = %s", SDL_GetPixelFormatName(texture->format));
-    if (texture->access != SDL_TEXTUREACCESS_STREAMING){
-        if (texture->format == SDL_PIXELFORMAT_RGB565) {
-            SDL_Log("Converting RGB565 to ARGB1555");
-            uint16_t *pixels = (uint16_t *)texture->pixels;
-            int count = texture->w * texture->h;
 
-            for (int i = 0; i < count; ++i) {
-                uint16_t rgb = pixels[i];
-                uint8_t r = (rgb >> 11) & 0x1F;
-                uint8_t g = (rgb >> 5) & 0x3F;
-                uint8_t b = rgb & 0x1F;
-                g >>= 1;
-
-                pixels[i] = (1 << 15) | (r << 10) | (g << 5) | b;
-            }
-
-            texture->format = SDL_PIXELFORMAT_ARGB1555;
-
-        } else if (texture->format == SDL_PIXELFORMAT_XRGB8888 ||
-                texture->format == SDL_PIXELFORMAT_ARGB8888 ||
-                texture->format == SDL_PIXELFORMAT_ARGB4444) {
-            const char *fromFmt = SDL_GetPixelFormatName(texture->format);
-            SDL_Log("Converting %s to ARGB1555", fromFmt);
-
-            uint32_t *src = (uint32_t *)texture->pixels;
-            uint16_t *dst = SDL_malloc(sizeof(uint16_t) * texture->w * texture->h);
-            int count = texture->w * texture->h;
-
-            for (int i = 0; i < count; ++i) {
-                uint32_t pixel = src[i];
-
-                uint8_t a = (pixel >> 24) & 0xFF;
-                uint8_t r = (pixel >> 16) & 0xFF;
-                uint8_t g = (pixel >> 8) & 0xFF;
-                uint8_t b = pixel & 0xFF;
-
-                r >>= 3;
-                g >>= 3;
-                b >>= 3;
-
-                uint8_t alpha_bit = (a >= 128) ? 1 : 0;
-                dst[i] = (alpha_bit << 15) | (r << 10) | (g << 5) | b;
-            }
-
-            SDL_free(texture->pixels);  // Only if this buffer was allocated manually
-            texture->pixels = dst;
-            texture->format = SDL_PIXELFORMAT_ARGB1555;
-        }
+    if (texture->access != SDL_TEXTUREACCESS_STREAMING &&
+        texture->format != SDL_PIXELFORMAT_RGB565 &&
+        texture->format != SDL_PIXELFORMAT_ARGB1555 &&
+        texture->format != SDL_PIXELFORMAT_ARGB4444) {
+        SDL_Log("Dreamcast: using ARGB1555 texture storage for source format %s",
+                SDL_GetPixelFormatName(texture->format));
+        texture->format = SDL_PIXELFORMAT_ARGB1555;
     }
 #endif
 
@@ -658,33 +626,39 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
         return SDL_SetError("Texture format %s not supported by OpenGL",
                             SDL_GetPixelFormatName(texture->format));
     }
-#ifdef SDL_PLATFORM_DREAMCAST    
+
+#ifdef SDL_PLATFORM_DREAMCAST
     SDL_Log("texture->format = %s", SDL_GetPixelFormatName(texture->format));
     SDL_Log("internalFormat = %d", internalFormat);
     SDL_Log("format = %d", format);
     SDL_Log("type = %d", type);
     SDL_Log("texture-access = %d", texture->access);
 #endif
-    
+
     data = (GL_TextureData *)SDL_calloc(1, sizeof(*data));
     if (!data) {
         return false;
     }
 
+#ifdef SDL_PLATFORM_DREAMCAST
+    data->original_format = dreamcast_original_format;
+#endif
+
     if (texture->access == SDL_TEXTUREACCESS_STREAMING) {
         size_t size;
         data->pitch = texture->w * SDL_BYTESPERPIXEL(texture->format);
         size = (size_t)texture->h * data->pitch;
+
         if (texture->format == SDL_PIXELFORMAT_YV12 ||
             texture->format == SDL_PIXELFORMAT_IYUV) {
-            // Need to add size for the U and V planes
             size += 2 * ((texture->h + 1) / 2) * ((data->pitch + 1) / 2);
         }
+
         if (texture->format == SDL_PIXELFORMAT_NV12 ||
             texture->format == SDL_PIXELFORMAT_NV21) {
-            // Need to add size for the U/V plane
             size += 2 * ((texture->h + 1) / 2) * ((data->pitch + 1) / 2);
         }
+
         data->pixels = SDL_calloc(1, size);
         if (!data->pixels) {
             SDL_free(data);
@@ -710,6 +684,7 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
             return false;
         }
     }
+
     texture->internal = data;
 
     if (renderdata->GL_ARB_texture_non_power_of_two_supported) {
@@ -724,7 +699,7 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
         data->texh = (GLfloat)texture_h;
     } else {
 #ifdef SDL_PLATFORM_DREAMCAST
-       GLint maxSize;
+        GLint maxSize;
         int isPowerOfTwoWidth;
         int isPowerOfTwoHeight;
 
@@ -739,15 +714,14 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
             int texturebpp;
             int newStride;
 
-            // Adjust the width and height to the nearest power-of-two size
             texture_w = (texture->w <= maxSize) ? SDL_powerof2(texture->w) : maxSize;
             texture_h = (texture->h <= maxSize) ? SDL_powerof2(texture->h) : maxSize;
 
-            // Normalize texw and texh after adjustment to power-of-two
             data->texw = (GLfloat)(texture->w) / texture_w;
             data->texh = (GLfloat)(texture->h) / texture_h;
 
-            SDL_Log("Dreamcast: Adjusted texture size to power-of-two: oldw=%d, oldh=%d, w=%d, h=%d, maxSize=%d\n", oldtexture_w, oldtexture_h, texture_w, texture_h, maxSize);
+            SDL_Log("Dreamcast: Adjusted texture size to power-of-two: oldw=%d, oldh=%d, w=%d, h=%d, maxSize=%d\n",
+                    oldtexture_w, oldtexture_h, texture_w, texture_h, maxSize);
 
             texture->scaleMode = SDL_SCALEMODE_NEAREST;
 
@@ -760,16 +734,17 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
             data->texw = 1.0f;
             data->texh = 1.0f;
         }
-#else        
+#else
         texture_w = SDL_powerof2(texture->w);
         texture_h = SDL_powerof2(texture->h);
         data->texw = (GLfloat)(texture->w) / texture_w;
         data->texh = (GLfloat)texture->h / texture_h;
-#endif        
+#endif
     }
+
     SDL_PropertiesID props = SDL_GetTextureProperties(texture);
     SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_OPENGL_TEXTURE_NUMBER, data->texture);
-    SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_OPENGL_TEXTURE_TARGET_NUMBER, (Sint64) textype);
+    SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_OPENGL_TEXTURE_TARGET_NUMBER, (Sint64)textype);
     SDL_SetFloatProperty(props, SDL_PROP_TEXTURE_OPENGL_TEX_W_FLOAT, data->texw);
     SDL_SetFloatProperty(props, SDL_PROP_TEXTURE_OPENGL_TEX_H_FLOAT, data->texh);
 
@@ -778,96 +753,19 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
     data->texture_scale_mode = texture->scaleMode;
     data->texture_address_mode_u = SDL_TEXTURE_ADDRESS_CLAMP;
     data->texture_address_mode_v = SDL_TEXTURE_ADDRESS_CLAMP;
+
     renderdata->glEnable(textype);
     renderdata->glBindTexture(textype, data->texture);
-#ifdef SDL_PLATFORM_MACOS
-#ifndef GL_TEXTURE_STORAGE_HINT_APPLE
-#define GL_TEXTURE_STORAGE_HINT_APPLE 0x85BC
-#endif
-#ifndef STORAGE_CACHED_APPLE
-#define STORAGE_CACHED_APPLE 0x85BE
-#endif
-#ifndef STORAGE_SHARED_APPLE
-#define STORAGE_SHARED_APPLE 0x85BF
-#endif
-    if (texture->access == SDL_TEXTUREACCESS_STREAMING) {
-        renderdata->glTexParameteri(textype, GL_TEXTURE_STORAGE_HINT_APPLE,
-                                    GL_STORAGE_SHARED_APPLE);
-    } else {
-        renderdata->glTexParameteri(textype, GL_TEXTURE_STORAGE_HINT_APPLE,
-                                    GL_STORAGE_CACHED_APPLE);
-    }
-    if (texture->access == SDL_TEXTUREACCESS_STREAMING && texture->format == SDL_PIXELFORMAT_ARGB8888 && (texture->w % 8) == 0) {
-        renderdata->glPixelStorei(GL_UNPACK_CLIENT_STORAGE_APPLE, GL_TRUE);
-        renderdata->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH,
-                                  (data->pitch / SDL_BYTESPERPIXEL(texture->format)));
-        renderdata->glTexImage2D(textype, 0, internalFormat, texture_w,
-                                 texture_h, 0, format, type, data->pixels);
-        renderdata->glPixelStorei(GL_UNPACK_CLIENT_STORAGE_APPLE, GL_FALSE);
-    } else
-#endif
-    {
-        renderdata->glTexImage2D(textype, 0, internalFormat, texture_w,
-                                 texture_h, 0, format, type, NULL);
-    }
+
+    renderdata->glTexImage2D(textype, 0, internalFormat, texture_w,
+                             texture_h, 0, format, type, NULL);
+
     if (!GL_CheckError("glTexImage2D()", renderer)) {
         return false;
     }
+
     SetTextureScaleMode(renderdata, textype, texture->format, data->texture_scale_mode);
     SetTextureAddressMode(renderdata, textype, data->texture_address_mode_u, data->texture_address_mode_v);
-
-#ifdef SDL_HAVE_YUV
-    if (texture->format == SDL_PIXELFORMAT_YV12 ||
-        texture->format == SDL_PIXELFORMAT_IYUV) {
-        data->yuv = true;
-
-        data->utexture = (GLuint)SDL_GetNumberProperty(create_props, SDL_PROP_TEXTURE_CREATE_OPENGL_TEXTURE_U_NUMBER, 0);
-        if (data->utexture) {
-            data->utexture_external = true;
-        } else {
-            renderdata->glGenTextures(1, &data->utexture);
-        }
-        data->vtexture = (GLuint)SDL_GetNumberProperty(create_props, SDL_PROP_TEXTURE_CREATE_OPENGL_TEXTURE_V_NUMBER, 0);
-        if (data->vtexture) {
-            data->vtexture_external = true;
-        } else {
-            renderdata->glGenTextures(1, &data->vtexture);
-        }
-
-        renderdata->glBindTexture(textype, data->utexture);
-        renderdata->glTexImage2D(textype, 0, internalFormat, (texture_w + 1) / 2,
-                                 (texture_h + 1) / 2, 0, format, type, NULL);
-        SetTextureScaleMode(renderdata, textype, texture->format, data->texture_scale_mode);
-        SetTextureAddressMode(renderdata, textype, data->texture_address_mode_u, data->texture_address_mode_v);
-        SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_OPENGL_TEXTURE_U_NUMBER, data->utexture);
-
-        renderdata->glBindTexture(textype, data->vtexture);
-        renderdata->glTexImage2D(textype, 0, internalFormat, (texture_w + 1) / 2,
-                                 (texture_h + 1) / 2, 0, format, type, NULL);
-        SetTextureScaleMode(renderdata, textype, texture->format, data->texture_scale_mode);
-        SetTextureAddressMode(renderdata, textype, data->texture_address_mode_u, data->texture_address_mode_v);
-        SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_OPENGL_TEXTURE_V_NUMBER, data->vtexture);
-    }
-
-    if (texture->format == SDL_PIXELFORMAT_NV12 ||
-        texture->format == SDL_PIXELFORMAT_NV21) {
-        data->nv12 = true;
-
-        data->utexture = (GLuint)SDL_GetNumberProperty(create_props, SDL_PROP_TEXTURE_CREATE_OPENGL_TEXTURE_UV_NUMBER, 0);
-        if (data->utexture) {
-            data->utexture_external = true;
-        } else {
-            renderdata->glGenTextures(1, &data->utexture);
-        }
-        renderdata->glBindTexture(textype, data->utexture);
-        renderdata->glTexImage2D(textype, 0, GL_LUMINANCE_ALPHA, (texture_w + 1) / 2,
-                                 (texture_h + 1) / 2, 0, GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, NULL);
-        SetTextureScaleMode(renderdata, textype, texture->format, data->texture_scale_mode);
-        SetTextureAddressMode(renderdata, textype, data->texture_address_mode_u, data->texture_address_mode_v);
-        SDL_SetNumberProperty(props, SDL_PROP_TEXTURE_OPENGL_TEXTURE_UV_NUMBER, data->utexture);
-    }
-#endif
 
     if (texture->format == SDL_PIXELFORMAT_INDEX8) {
         data->shader = SHADER_PALETTE_NEAREST;
@@ -882,60 +780,80 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
     data->texel_size[2] = texture->w;
     data->texel_size[3] = texture->h;
 
-#ifdef SDL_HAVE_YUV
-    if (data->yuv || data->nv12) {
-        if (data->yuv) {
-            data->shader = SHADER_YUV;
-        } else if (texture->format == SDL_PIXELFORMAT_NV12) {
-            if (SDL_GetHintBoolean("SDL_RENDER_OPENGL_NV12_RG_SHADER", false)) {
-                data->shader = SHADER_NV12_RG;
-            } else {
-                data->shader = SHADER_NV12_RA;
-            }
-        } else {
-            if (SDL_GetHintBoolean("SDL_RENDER_OPENGL_NV12_RG_SHADER", false)) {
-                data->shader = SHADER_NV21_RG;
-            } else {
-                data->shader = SHADER_NV21_RA;
-            }
-        }
-        data->shader_params = SDL_GetYCbCRtoRGBConversionMatrix(texture->colorspace, texture->w, texture->h, 8);
-        if (!data->shader_params) {
-            return SDL_SetError("Unsupported YUV colorspace");
-        }
-    }
-#endif // SDL_HAVE_YUV
-
     renderdata->glDisable(textype);
 
     return GL_CheckError("", renderer);
 }
 
 static bool GL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
-                            const SDL_Rect *rect, const void *pixels, int pitch)
+                             const SDL_Rect *rect, const void *pixels, int pitch)
 {
     GL_RenderData *renderdata = (GL_RenderData *)renderer->internal;
     const GLenum textype = renderdata->textype;
     GL_TextureData *data = (GL_TextureData *)texture->internal;
     const int texturebpp = SDL_BYTESPERPIXEL(texture->format);
 
-    SDL_assert_release(texturebpp != 0); // otherwise, division by zero later.
+#ifdef SDL_PLATFORM_DREAMCAST
+    void *converted_pixels = NULL;
+    const void *upload_pixels = pixels;
+    int upload_pitch = pitch;
+#endif
+
+    SDL_assert_release(texturebpp != 0);
 
     GL_ActivateRenderer(renderer);
 
-    renderdata->drawstate.texture = NULL; // we trash this state.
+    renderdata->drawstate.texture = NULL;
 
+#ifdef SDL_PLATFORM_DREAMCAST
+    if (data->original_format != texture->format) {
+        upload_pitch = rect->w * SDL_BYTESPERPIXEL(texture->format);
+        converted_pixels = SDL_malloc((size_t)upload_pitch * rect->h);
+
+        if (!converted_pixels) {
+            return SDL_OutOfMemory();
+        }
+
+        SDL_Log("Dreamcast: converting upload from %s to %s",
+                SDL_GetPixelFormatName(data->original_format),
+                SDL_GetPixelFormatName(texture->format));
+
+        if (!SDL_ConvertPixels(rect->w,
+                               rect->h,
+                               data->original_format,
+                               pixels,
+                               pitch,
+                               texture->format,
+                               converted_pixels,
+                               upload_pitch)) {
+            SDL_free(converted_pixels);
+            return false;
+        }
+
+        upload_pixels = converted_pixels;
+    }
+
+    renderdata->glBindTexture(textype, data->texture);
+    renderdata->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, (upload_pitch / texturebpp));
+    renderdata->glTexSubImage2D(textype, 0, rect->x, rect->y, rect->w,
+                                rect->h, data->format, data->formattype,
+                                upload_pixels);
+
+    SDL_free(converted_pixels);
+#else
     renderdata->glBindTexture(textype, data->texture);
     renderdata->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, (pitch / texturebpp));
     renderdata->glTexSubImage2D(textype, 0, rect->x, rect->y, rect->w,
                                 rect->h, data->format, data->formattype,
                                 pixels);
+#endif
+
 #ifdef SDL_HAVE_YUV
     if (data->yuv) {
         renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, ((pitch + 1) / 2));
 
-        // Skip to the correct offset into the next texture
         pixels = (const void *)((const Uint8 *)pixels + rect->h * pitch);
         if (texture->format == SDL_PIXELFORMAT_YV12) {
             renderdata->glBindTexture(textype, data->vtexture);
@@ -946,7 +864,6 @@ static bool GL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
                                     (rect->w + 1) / 2, (rect->h + 1) / 2,
                                     data->format, data->formattype, pixels);
 
-        // Skip to the correct offset into the next texture
         pixels = (const void *)((const Uint8 *)pixels + ((rect->h + 1) / 2) * ((pitch + 1) / 2));
         if (texture->format == SDL_PIXELFORMAT_YV12) {
             renderdata->glBindTexture(textype, data->utexture);
@@ -961,7 +878,6 @@ static bool GL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
     if (data->nv12) {
         renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, ((pitch + 1) / 2));
 
-        // Skip to the correct offset into the next texture
         pixels = (const void *)((const Uint8 *)pixels + rect->h * pitch);
         renderdata->glBindTexture(textype, data->utexture);
         renderdata->glTexSubImage2D(textype, 0, rect->x / 2, rect->y / 2,
@@ -969,6 +885,7 @@ static bool GL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
                                     GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, pixels);
     }
 #endif
+
     return GL_CheckError("glTexSubImage2D()", renderer);
 }
 

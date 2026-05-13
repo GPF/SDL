@@ -163,10 +163,14 @@ function(add_sdl_test_executable TARGET)
     SDL_AddCommonCompilerFlags(${TARGET})
     target_include_directories(${TARGET} PRIVATE "${SDL3_SOURCE_DIR}/src/video/khronos")
     target_link_libraries(${TARGET} PRIVATE SDL3::SDL3_test SDL3::${sdl_name_component})
-    if(NOT AST_NO_C90 AND NOT SDL_CMAKE_PLATFORM MATCHES "^(n3ds|ps2|psp|dreamcast)$")
+
+    if(NOT AST_NO_C90 AND
+    NOT SDL_CMAKE_PLATFORM MATCHES "^(n3ds|ps2|psp)$" AND
+    NOT PLATFORM_DREAMCAST)
         set_property(TARGET ${TARGET} PROPERTY C_STANDARD 90)
         set_property(TARGET ${TARGET} PROPERTY C_EXTENSIONS FALSE)
     endif()
+
     if(AST_DEPENDS)
         add_dependencies(${TARGET} ${AST_DEPENDS})
     endif()
@@ -609,7 +613,6 @@ if(PLATFORM_DREAMCAST)
         testaudio
         testmultiaudio
         testaudiostreamdynamicresample
-        teststreaming
         testoverlay
         testiconv
         testyuv
@@ -624,21 +627,21 @@ if(PLATFORM_DREAMCAST)
         set(APP_RESOURCE_FILES "")
 
         if(${APP} STREQUAL "testspriteminimal" OR ${APP} STREQUAL "testsprite" OR ${APP} STREQUAL "testviewport" OR ${APP} STREQUAL "testshader")
-            set(APP_RESOURCE_FILES "icon.bmp")
+            set(APP_RESOURCE_FILES "icon.png")
         elseif(${APP} STREQUAL "testrendercopyex" OR ${APP} STREQUAL "testrendertarget" OR ${APP} STREQUAL "testscale")
-            set(APP_RESOURCE_FILES "sample.bmp" "icon.bmp")
+            set(APP_RESOURCE_FILES "sample.png" "icon.png")
         elseif(${APP} STREQUAL "loopwave" OR ${APP} STREQUAL "testmultiaudio" OR ${APP} STREQUAL "testaudiostreamdynamicresample")
             set(APP_RESOURCE_FILES "sample.wav" )        
-        elseif(${APP} STREQUAL "teststreaming" OR ${APP} STREQUAL "testoverlay")
+        elseif(${APP} STREQUAL "testoverlay")
             set(APP_RESOURCE_FILES "moose.dat")
         elseif(${APP} STREQUAL "testiconv")
             set(APP_RESOURCE_FILES "utf8.txt")
         elseif(${APP} STREQUAL "testyuv")
-            set(APP_RESOURCE_FILES "testyuv.bmp" "icon.bmp")
+            set(APP_RESOURCE_FILES "testyuv.png" "icon.png")
         elseif(${APP} STREQUAL "testaudio")
-            set(APP_RESOURCE_FILES "physaudiodev.bmp" "logaudiodev.bmp" "audiofile.bmp" "trashcan.bmp" "soundboard.bmp" "soundboard_levels.bmp" "sample.wav")
+            set(APP_RESOURCE_FILES "physaudiodev.png" "logaudiodev.png" "audiofile.png" "trashcan.png" "soundboard.png" "soundboard_levels.png" "sample.wav")
         elseif(${APP} STREQUAL "testime")
-            set(APP_RESOURCE_FILES "unifont-15.1.05.hex" "icon.bmp")
+            set(APP_RESOURCE_FILES "unifont-15.1.05.hex" "icon.png")
         endif()
 
         if(APP_RESOURCE_FILES)
