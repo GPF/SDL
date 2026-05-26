@@ -132,36 +132,35 @@ static SDL_VideoDevice *DREAMCAST_CreateDevice(void)
         return 0;
     }
 
-    /* Initialize all variables that we clean on shutdown */
     device = (SDL_VideoDevice *)SDL_calloc(1, sizeof(SDL_VideoDevice));
     if (!device) {
         SDL_OutOfMemory();
         return 0;
     }
 
-
-    /* Set the function pointers */
+    // Set SDL function pointers
     device->VideoInit = DREAMCAST_VideoInit;
     device->VideoQuit = DREAMCAST_VideoQuit;
     device->PumpEvents = DREAMCAST_PumpEvents;
     device->GetDisplayModes = DREAMCAST_GetDisplayModes;
     device->SetDisplayMode = DREAMCAST_SetDisplayMode;
-    // device->HasScreenKeyboardSupport = DREAMCAST_HasScreenKeyboardSupport;
     device->StartTextInput = DREAMCAST_StartTextInput;
-    device->StopTextInput = DREAMCAST_StopTextInput;    
-
-    // device->CreateSDLWindow = DREAMCAST_CreateWindow;
-    // device->SetWindowTitle = DREAMCAST_SetWindowTitle;
-    // device->DestroyWindow = DREAMCAST_DestroyWindow;
+    device->StopTextInput = DREAMCAST_StopTextInput;
+    device->CreateSDLWindow = DREAMCAST_CreateWindow;
+    device->SetWindowTitle = DREAMCAST_SetWindowTitle;
+    device->DestroyWindow = DREAMCAST_DestroyWindow;
 
 #ifdef SDL_INPUT_LINUXEV
     if (evdev) {
         device->PumpEvents = DREAMCAST_EVDEV_Poll;
     }
 #endif
+
+#ifndef SDL_VIDEO_OPENGL
     device->CreateWindowFramebuffer = SDL_DREAMCAST_CreateWindowFramebuffer;
     device->UpdateWindowFramebuffer = SDL_DREAMCAST_UpdateWindowFramebuffer;
     device->DestroyWindowFramebuffer = SDL_DREAMCAST_DestroyWindowFramebuffer;
+#endif
 
 #ifdef SDL_VIDEO_OPENGL
     device->GL_LoadLibrary = DREAMCAST_GL_LoadLibrary;
@@ -172,10 +171,23 @@ static SDL_VideoDevice *DREAMCAST_CreateDevice(void)
     device->GL_DeleteContext = DREAMCAST_GL_DeleteContext;
 #endif
 
+    // ✅ FIX: Allocate driverdata
+    SDL_VideoData *video_data = SDL_calloc(1, sizeof(SDL_VideoData));
+    if (!video_data) {
+        SDL_free(device);
+        SDL_OutOfMemory();
+        return NULL;
+    }
+
+    video_data->w = 640;
+    video_data->h = 480;
+    device->driverdata = video_data;
+
     device->free = DREAMCAST_DeleteDevice;
     device->quirk_flags = VIDEO_DEVICE_QUIRK_FULLSCREEN_ONLY;
     return device;
 }
+
 
 VideoBootStrap DREAMCAST_bootstrap = {
     "DREAMCASTVID_DRIVER_NAME", "SDL dreamcast video driver",
@@ -293,6 +305,7 @@ int DREAMCAST_SetDisplayMode(_THIS, SDL_VideoDisplay *display, SDL_DisplayMode *
     // if (SDL_GetCurrentVideoDriver() && strcmp(SDL_GetCurrentVideoDriver(), "opengl") == 0) {
         mode->w = 640;
         mode->h = 480;
+        mode->format = SDL_PIXELFORMAT_ARGB1555;
     // }
 #endif
   

@@ -230,7 +230,7 @@ int SDL_DREAMCAST_CreateWindowFramebuffer(_THIS, SDL_Window *window, Uint32 *for
     if (video_mode_hint != NULL && strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0) {
         // Use 16-bit for textured mode, keep the format but change bit depth
         target_bpp = 16;  // Adjust bit depth to 16-bit for textured mode
-        surface_format = SDL_PIXELFORMAT_RGB565;
+        surface_format = SDL_PIXELFORMAT_ARGB1555;
         sdl_dc_width = w;
         sdl_dc_height = h;
         w = SDL_powerof2(w);  
@@ -265,7 +265,7 @@ int SDL_DREAMCAST_CreateWindowFramebuffer(_THIS, SDL_Window *window, Uint32 *for
         surface->pixels = (void *)sdl_dc_dblmem;
     }
 
-    if (sdl_dc_textured != 1 && (video_mode_hint != NULL && strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0)) {
+    if (sdl_dc_pvr_inited != 1 &&sdl_dc_textured != 1 && (video_mode_hint != NULL && strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0)) {
         pvr_init_defaults();
         pvr_dma_init();
         sdl_dc_pvr_inited = 1;

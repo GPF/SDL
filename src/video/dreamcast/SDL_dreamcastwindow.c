@@ -33,28 +33,36 @@ int DREAMCAST_CreateWindow(_THIS, SDL_Window * window)
 {
     SDL_VideoData *driverdata = (SDL_VideoData *) _this->driverdata;
 
+    if (!driverdata) {
+        return SDL_SetError("DREAMCAST_CreateWindow: driverdata is NULL");
+    }
+
     if (driverdata->window) {
         return SDL_SetError("Dreamcast only supports one window");
     }
+
     driverdata->window = window;
 
-    /* Adjust the window data to match the screen */
+    // Set window size based on driverdata resolution
     window->x = 0;
     window->y = 0;
     window->w = driverdata->w;
     window->h = driverdata->h;
 
-    window->flags &= ~SDL_WINDOW_RESIZABLE;     /* window is NEVER resizeable */
-    window->flags &= ~SDL_WINDOW_HIDDEN;
-    window->flags |= SDL_WINDOW_SHOWN;          /* only one window on Dreamcast */
-    window->flags |= SDL_WINDOW_INPUT_FOCUS;    /* always has input focus */
-    window->flags |= SDL_WINDOW_OPENGL;
+    // Modify window flags for Dreamcast
+    window->flags &= ~SDL_WINDOW_RESIZABLE;     // Not resizable
+    window->flags &= ~SDL_WINDOW_HIDDEN;        // Ensure visible
+    window->flags |= SDL_WINDOW_SHOWN;          // One always-visible window
+    window->flags |= SDL_WINDOW_INPUT_FOCUS;    // Always has input focus
+    window->flags |= SDL_WINDOW_OPENGL;         // OpenGL context is required
 
     SDL_SetMouseFocus(window);
     SDL_SetKeyboardFocus(window);
 
+    SDL_Log("DREAMCAST_CreateWindow: window %dx%d created with OpenGL flag", window->w, window->h);
     return 0;
 }
+
 
 void DREAMCAST_SetWindowTitle(_THIS, SDL_Window * window)
 {
