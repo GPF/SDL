@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -26,6 +26,9 @@
 
 /* Return the smallest power of 2 greater than or equal to 'x' */
 extern int SDL_powerof2(int x);
+
+extern SDL_bool SDL_startswith(const char *string, const char *prefix);
+extern SDL_bool SDL_endswith(const char *string, const char *suffix);
 
 #endif /* SDL_utils_h_ */
 

@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -32,6 +32,7 @@
 #include "../usb_ids.h"
 
 /* This is the full set of HIDAPI drivers available */
+#define SDL_JOYSTICK_HIDAPI_8BITDO
 #define SDL_JOYSTICK_HIDAPI_GAMECUBE
 #define SDL_JOYSTICK_HIDAPI_LUNA
 #define SDL_JOYSTICK_HIDAPI_PS3
@@ -131,6 +132,7 @@ typedef struct _SDL_HIDAPI_DeviceDriver
 } SDL_HIDAPI_DeviceDriver;
 
 /* HIDAPI device support */
+extern SDL_HIDAPI_DeviceDriver SDL_HIDAPI_Driver8BitDo;
 extern SDL_HIDAPI_DeviceDriver SDL_HIDAPI_DriverCombined;
 extern SDL_HIDAPI_DeviceDriver SDL_HIDAPI_DriverGameCube;
 extern SDL_HIDAPI_DeviceDriver SDL_HIDAPI_DriverJoyCons;

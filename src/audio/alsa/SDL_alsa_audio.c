@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -62,6 +62,7 @@ static int (*ALSA_snd_pcm_hw_params_set_access)(snd_pcm_t *, snd_pcm_hw_params_t
 static int (*ALSA_snd_pcm_hw_params_set_format)(snd_pcm_t *, snd_pcm_hw_params_t *, snd_pcm_format_t);
 static int (*ALSA_snd_pcm_hw_params_set_channels)(snd_pcm_t *, snd_pcm_hw_params_t *, unsigned int);
 static int (*ALSA_snd_pcm_hw_params_get_channels)(const snd_pcm_hw_params_t *, unsigned int *);
+static int (*ALSA_snd_pcm_hw_params_get_rate)(const snd_pcm_hw_params_t *, unsigned int*, int*);
 static int (*ALSA_snd_pcm_hw_params_set_rate_near)(snd_pcm_t *, snd_pcm_hw_params_t *, unsigned int *, int *);
 static int (*ALSA_snd_pcm_hw_params_set_period_size_near)(snd_pcm_t *, snd_pcm_hw_params_t *, snd_pcm_uframes_t *, int *);
 static int (*ALSA_snd_pcm_hw_params_get_period_size)(const snd_pcm_hw_params_t *, snd_pcm_uframes_t *, int *);
@@ -83,6 +84,12 @@ static int (*ALSA_snd_device_name_hint)(int, const char *, void ***);
 static char *(*ALSA_snd_device_name_get_hint)(const void *, const char *);
 static int (*ALSA_snd_device_name_free_hint)(void **);
 static snd_pcm_sframes_t (*ALSA_snd_pcm_avail)(snd_pcm_t *);
+static int (*ALSA_snd_pcm_info)(snd_pcm_t *, snd_pcm_info_t *);
+static const char *(*ALSA_snd_pcm_info_get_name)(const snd_pcm_info_t *);
+static int (*ALSA_snd_pcm_info_get_card)(const snd_pcm_info_t *);
+static int (*ALSA_snd_card_get_name)(int, char **);
+static int (*ALSA_snd_pcm_info_malloc)(snd_pcm_info_t **);
+static void (*ALSA_snd_pcm_info_free)(snd_pcm_info_t *);
 #ifdef SND_CHMAP_API_VERSION
 static snd_pcm_chmap_t *(*ALSA_snd_pcm_get_chmap)(snd_pcm_t *);
 static int (*ALSA_snd_pcm_chmap_print)(const snd_pcm_chmap_t *map, size_t maxlen, char *buf);
@@ -132,6 +139,7 @@ static int load_alsa_syms(void)
     SDL_ALSA_SYM(snd_pcm_hw_params_set_format);
     SDL_ALSA_SYM(snd_pcm_hw_params_set_channels);
     SDL_ALSA_SYM(snd_pcm_hw_params_get_channels);
+    SDL_ALSA_SYM(snd_pcm_hw_params_get_rate);
     SDL_ALSA_SYM(snd_pcm_hw_params_set_rate_near);
     SDL_ALSA_SYM(snd_pcm_hw_params_set_period_size_near);
     SDL_ALSA_SYM(snd_pcm_hw_params_get_period_size);
@@ -152,6 +160,12 @@ static int load_alsa_syms(void)
     SDL_ALSA_SYM(snd_device_name_get_hint);
     SDL_ALSA_SYM(snd_device_name_free_hint);
     SDL_ALSA_SYM(snd_pcm_avail);
+    SDL_ALSA_SYM(snd_pcm_info);
+    SDL_ALSA_SYM(snd_pcm_info_get_card);
+    SDL_ALSA_SYM(snd_pcm_info_get_name);
+    SDL_ALSA_SYM(snd_card_get_name);
+    SDL_ALSA_SYM(snd_pcm_info_malloc);
+    SDL_ALSA_SYM(snd_pcm_info_free);
 #ifdef SND_CHMAP_API_VERSION
     SDL_ALSA_SYM(snd_pcm_get_chmap);
     SDL_ALSA_SYM(snd_pcm_chmap_print);
@@ -458,12 +472,67 @@ static void ALSA_CloseDevice(_THIS)
            ALSA_snd_pcm_drop() can hang, so don't use that.
          */
         Uint32 delay = ((this->spec.samples * 1000) / this->spec.freq) * 2;
+        if (delay > 100) {
+            delay = 100;
+        }
         SDL_Delay(delay);
 
         ALSA_snd_pcm_close(this->hidden->pcm_handle);
     }
     SDL_free(this->hidden->mixbuf);
     SDL_free(this->hidden);
+}
+
+static int ALSA_GetDefaultAudioInfo(char **name, SDL_AudioSpec *spec, int iscapture)
+{
+    const char *device = "default";
+    snd_pcm_t *pcm_handle;
+    snd_pcm_info_t *pcm_info;
+    snd_pcm_stream_t stream;
+    int card_index;
+    const char *dev_name;
+    char *card_name = NULL;
+    char final_name[256];
+
+    SDL_zero(final_name);
+    stream = iscapture ? SND_PCM_STREAM_CAPTURE : SND_PCM_STREAM_PLAYBACK;
+
+    if (ALSA_snd_pcm_open(&pcm_handle, device, stream, SND_PCM_NONBLOCK) < 0) {
+        return SDL_SetError("ALSA: Couldn't open default device");
+    }
+
+    if (ALSA_snd_pcm_info_malloc(&pcm_info) < 0) {
+        ALSA_snd_pcm_close(pcm_handle);
+        return SDL_SetError("ALSA: Couldn't allocate pcm_info");
+    }
+
+    if (ALSA_snd_pcm_info(pcm_handle, pcm_info) < 0) {
+        ALSA_snd_pcm_info_free(pcm_info);
+        ALSA_snd_pcm_close(pcm_handle);
+        return SDL_SetError("ALSA: Couldn't get PCM info");
+    }
+
+    card_index = ALSA_snd_pcm_info_get_card(pcm_info);
+    dev_name = ALSA_snd_pcm_info_get_name(pcm_info);
+
+    if (card_index >= 0 && ALSA_snd_card_get_name(card_index, &card_name) >= 0) {
+        SDL_snprintf(final_name, sizeof(final_name), "%s, %s", card_name, dev_name);
+        *name = SDL_strdup(final_name);
+    } else {
+        *name = SDL_strdup(dev_name ? dev_name : "Unknown ALSA Device");
+    }
+
+    if (spec) {
+        SDL_zero(*spec);
+        spec->freq = 48000;
+        spec->format = AUDIO_S16SYS;
+        spec->channels = 2;
+        spec->samples = 512;
+    }
+
+    ALSA_snd_pcm_info_free(pcm_info);
+    ALSA_snd_pcm_close(pcm_handle);
+    return 0;
 }
 
 static int ALSA_set_buffer_size(_THIS, snd_pcm_hw_params_t *params)
@@ -716,6 +785,16 @@ static void add_device(const int iscapture, const char *name, void *hint, ALSA_D
     char *desc;
     char *handle = NULL;
     char *ptr;
+    snd_pcm_t *pcm_handle;
+    snd_pcm_stream_t stream;
+    snd_pcm_hw_params_t *hwparams;
+
+    unsigned int freq = 0;
+    int dir;
+    unsigned int channels = 0;
+    snd_pcm_uframes_t samples = 0;
+
+    SDL_AudioSpec spec;
 
     if (!dev) {
         return;
@@ -755,12 +834,36 @@ static void add_device(const int iscapture, const char *name, void *hint, ALSA_D
         SDL_free(dev);
         return;
     }
+    stream = iscapture ? SND_PCM_STREAM_CAPTURE : SND_PCM_STREAM_PLAYBACK;
+    
+    if (ALSA_snd_pcm_open(&pcm_handle, handle, stream, SND_PCM_NONBLOCK) < 0) {
+	SDL_free(dev);
+	return;
+    }
 
-    /* Note that spec is NULL, because we are required to open the device before
-     * acquiring the mix format, making this information inaccessible at
-     * enumeration time
-     */
-    SDL_AddAudioDevice(iscapture, desc, NULL, handle);
+    snd_pcm_hw_params_alloca(&hwparams);
+    ALSA_snd_pcm_hw_params_any(pcm_handle, hwparams);
+
+    ALSA_snd_pcm_hw_params_get_rate(hwparams, &freq, &dir);
+    ALSA_snd_pcm_hw_params_get_channels(hwparams, &channels);
+    ALSA_snd_pcm_hw_params_get_period_size(hwparams, &samples, &dir);
+
+    ALSA_snd_pcm_close(pcm_handle);
+
+    /* Let's fill the spec */
+
+    spec.freq = freq;
+    spec.channels = channels;
+    spec.samples = samples;
+    spec.silence = 0;
+    spec.padding = 0;
+    /* Can't calculate size yet because this is an exploratory device opening
+     * so we don't know the sample format.
+     * Probably AUDIO_S16SYS/SND_PCM_FORMAT_S16_LE would be a good default
+     * if required.*/
+    spec.size = 0;
+
+    SDL_AddAudioDevice(iscapture, desc, &spec, handle);
     if (hint) {
         free(desc);
     }
@@ -975,6 +1078,7 @@ static SDL_bool ALSA_Init(SDL_AudioDriverImpl *impl)
     impl->Deinitialize = ALSA_Deinitialize;
     impl->CaptureFromDevice = ALSA_CaptureFromDevice;
     impl->FlushCapture = ALSA_FlushCapture;
+    impl->GetDefaultAudioInfo = ALSA_GetDefaultAudioInfo;
 
     impl->HasCaptureSupport = SDL_TRUE;
     impl->SupportsNonPow2Samples = SDL_TRUE;

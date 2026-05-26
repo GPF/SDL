@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -250,7 +250,10 @@ static void WIN_FreeCursor(SDL_Cursor *cursor)
 static int WIN_ShowCursor(SDL_Cursor *cursor)
 {
     if (!cursor) {
-        cursor = SDL_blank_cursor;
+        if (GetSystemMetrics(SM_REMOTESESSION)) {
+            // Use a blank cursor so we continue to get relative motion over RDP
+            cursor = SDL_blank_cursor;
+        }
     }
     if (cursor) {
         SDL_cursor = (HCURSOR)cursor->driverdata;

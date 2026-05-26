@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -537,6 +537,9 @@ static int Wayland_SetRelativeMouseMode(SDL_bool enabled)
     SDL_VideoData *data = (SDL_VideoData *)vd->driverdata;
 
     if (enabled) {
+        /* Clients use relative warp mode to get accelerated motion deltas, which Wayland delivers internally. */
+        data->relative_mode_accelerated = SDL_GetHintBoolean(SDL_HINT_MOUSE_RELATIVE_MODE_WARP, SDL_FALSE);
+
         /* Disable mouse warp emulation if it's enabled. */
         if (data->input->relative_mode_override) {
             data->input->relative_mode_override = SDL_FALSE;

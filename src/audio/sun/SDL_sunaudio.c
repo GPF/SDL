@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -24,18 +24,12 @@
 
 /* Allow access to a raw mixing buffer */
 
+#include <sys/types.h>
 #include <fcntl.h>
 #include <errno.h>
-#ifdef __NETBSD__
 #include <sys/ioctl.h>
 #include <sys/audioio.h>
-#endif
-#ifdef __SVR4
-#include <sys/audioio.h>
-#else
 #include <sys/time.h>
-#include <sys/types.h>
-#endif
 #include <unistd.h>
 
 #include "SDL_timer.h"

@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -163,8 +163,7 @@ extern DECLSPEC void SDLCALL SDL_LogResetPriorities(void);
 /**
  * Log a message with SDL_LOG_CATEGORY_APPLICATION and SDL_LOG_PRIORITY_INFO.
  *
- * = * \param fmt a printf() style message format string
- *
+ * \param fmt a printf() style message format string.
  * \param ... additional parameters matching % tokens in the `fmt` string, if
  *            any.
  *

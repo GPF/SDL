@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -187,8 +187,8 @@ extern DECLSPEC void SDLCALL SDL_SetMainReady(void);
  * \param name the window class name, in UTF-8 encoding. If NULL, SDL
  *             currently uses "SDL_app" but this isn't guaranteed.
  * \param style the value to use in WNDCLASSEX::style. If `name` is NULL, SDL
- *              currently uses `(CS_BYTEALIGNCLIENT | CS_OWNDC)` regardless of
- *              what is specified here.
+ *              currently uses `(CS_BYTEALIGNCLIENT \| CS_OWNDC)` regardless
+ *              of what is specified here.
  * \param hInst the HINSTANCE to use in WNDCLASSEX::hInstance. If zero, SDL
  *              will use `GetModuleHandle(NULL)` instead.
  * \returns 0 on success, -1 on error. SDL_GetError() may have details.

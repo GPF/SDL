@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -26,6 +26,7 @@ ref class SDL_WinRTApp sealed : public Windows::ApplicationModel::Core::IFramewo
 {
   public:
     SDL_WinRTApp();
+    virtual ~SDL_WinRTApp();
 
     // IFrameworkView Methods.
     virtual void Initialize(Windows::ApplicationModel::Core::CoreApplicationView ^ applicationView);

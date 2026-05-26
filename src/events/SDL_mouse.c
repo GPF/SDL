@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -1121,6 +1121,15 @@ int SDL_WarpMouseGlobal(int x, int y)
 
 static SDL_bool ShouldUseRelativeModeWarp(SDL_Mouse *mouse)
 {
+#ifdef SDL_VIDEO_DRIVER_WAYLAND
+    SDL_VideoDevice *vid = SDL_GetVideoDevice();
+
+    /* Wayland can't warp the mouse, but uses this hint internally to deliver accelerated motion */
+    if (SDL_strcmp(vid->name, "wayland") == 0) {
+        return SDL_FALSE;
+    }
+#endif
+
     if (!mouse->WarpMouse) {
         /* Need this functionality for relative mode warp implementation */
         return SDL_FALSE;

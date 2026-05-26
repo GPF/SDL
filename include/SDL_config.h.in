@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -126,7 +126,6 @@
 #undef HAVE_STRTOK_R
 #undef HAVE_ITOA
 #undef HAVE__LTOA
-#undef HAVE__UITOA
 #undef HAVE__ULTOA
 #undef HAVE_STRTOL
 #undef HAVE_STRTOUL
@@ -195,6 +194,7 @@
 #undef HAVE_FSEEKO
 #undef HAVE_FSEEKO64
 #undef HAVE_SIGACTION
+#undef HAVE_SIGTIMEDWAIT
 #undef HAVE_SA_SIGACTION
 #undef HAVE_SETJMP
 #undef HAVE_NANOSLEEP
@@ -216,6 +216,7 @@
 #undef HAVE__EXIT
 
 #else
+
 #define HAVE_STDARG_H 1
 #define HAVE_STDDEF_H 1
 #define HAVE_STDINT_H 1

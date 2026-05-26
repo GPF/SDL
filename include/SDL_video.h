@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -1008,6 +1008,8 @@ extern DECLSPEC void SDLCALL SDL_GetWindowPosition(SDL_Window * window,
  * \param h the height of the window in pixels, in screen coordinates, must be
  *          > 0.
  *
+ * \threadsafety This function should only be called on the main thread.
+ *
  * \since This function is available since SDL 2.0.0.
  *
  * \sa SDL_GetWindowSize
@@ -1315,6 +1317,7 @@ extern DECLSPEC int SDLCALL SDL_SetWindowFullscreen(SDL_Window * window,
 /**
  * Return whether the window has a surface associated with it.
  *
+ * \param window the window to query.
  * \returns SDL_TRUE if there is a surface associated with the window, or
  *          SDL_FALSE otherwise.
  *

@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -20,6 +20,8 @@
 */
 #include "../../SDL_internal.h"
 
+/* Standard C++11 includes: */
+#include <string>
 /* Windows includes */
 #include "ppltasks.h"
 using namespace concurrency;
@@ -43,6 +45,7 @@ extern "C" {
 #include "SDL_hints.h"
 #include "SDL_main.h"
 #include "SDL_stdinc.h"
+#include "SDL_system.h"
 #include "SDL_render.h"
 #include "../../video/SDL_sysvideo.h"
 #include "../../events/SDL_events_c.h"
@@ -80,6 +83,60 @@ extern "C" void D3D11_Trim(SDL_Renderer *);
 // SDL_CreateWindow().
 SDL_WinRTApp ^ SDL_WinRTGlobalApp = nullptr;
 
+// Protocol activation URI storage
+static Platform::String^ WINRT_ProtocolActivationURI = nullptr;
+
+// Store launchOnExit URI separately since WINRT_ProtocolActivationURI gets cleared
+static std::wstring WINRT_LaunchOnExitURI;
+
+// Helper function to extract and store launchOnExit from protocol URI
+static void WINRT_ExtractLaunchOnExitURI(Platform::String^ fullUri)
+{
+    if (fullUri == nullptr)
+        return;
+        
+    std::wstring uri(fullUri->Data());
+    
+    // Look for launchOnExit parameter in the URI
+    size_t launchPos = uri.find(L"launchOnExit=");
+    if (launchPos == std::wstring::npos)
+        return;
+        
+    // Extract the launchOnExit URI value
+    launchPos += 13; // Skip past "launchOnExit="
+    size_t endPos = uri.find(L'&', launchPos);
+    if (endPos == std::wstring::npos)
+        endPos = uri.length();
+        
+    std::wstring launchUri = uri.substr(launchPos, endPos - launchPos);
+    
+    // URL decode the URI (convert %3A to :, etc.)
+    WINRT_LaunchOnExitURI.clear();
+    for (size_t i = 0; i < launchUri.length(); i++) {
+        if (launchUri[i] == L'%' && i + 2 < launchUri.length()) {
+            wchar_t hex[3] = { launchUri[i + 1], launchUri[i + 2], 0 };
+            WINRT_LaunchOnExitURI += (wchar_t)wcstol(hex, nullptr, 16);
+            i += 2;
+        } else {
+            WINRT_LaunchOnExitURI += launchUri[i];
+        }
+    }
+}
+
+// Helper function to launch URI on exit if protocol activation included launchOnExit parameter
+static void WINRT_LaunchExitUriIfSet()
+{
+    if (!WINRT_LaunchOnExitURI.empty()) {
+        try {
+            // Launch the URI
+            auto uri = ref new Windows::Foundation::Uri(ref new Platform::String(WINRT_LaunchOnExitURI.c_str()));
+            Windows::System::Launcher::LaunchUriAsync(uri);
+        } catch (...) {
+            // Silently ignore errors during termination
+        }
+    }
+}
+
 ref class SDLApplicationSource sealed : Windows::ApplicationModel::Core::IFrameworkViewSource
 {
   public:
@@ -105,6 +162,22 @@ int SDL_WinRTInitNonXAMLApp(int (*mainFunction)(int, char **))
     auto direct3DApplicationSource = ref new SDLApplicationSource();
     CoreApplication::Run(direct3DApplicationSource);
     return 0;
+}
+
+extern "C" char* SDL_WinRTGetProtocolActivationURI(void)
+{
+    if (WINRT_ProtocolActivationURI == nullptr)
+        return nullptr;
+    Platform::String^ uriStr = WINRT_ProtocolActivationURI;
+    const wchar_t* uriWide = uriStr->Data();
+    int uriLen = WideCharToMultiByte(CP_UTF8, 0, uriWide, -1, nullptr, 0, nullptr, nullptr);
+    char* uriUtf8 = (char*)SDL_malloc(uriLen);
+    if (uriUtf8)
+        WideCharToMultiByte(CP_UTF8, 0, uriWide, -1, uriUtf8, uriLen, nullptr, nullptr);
+
+    // Clear after first successful read (only return it once)
+    WINRT_ProtocolActivationURI = nullptr;
+    return uriUtf8;
 }
 
 static void WINRT_ProcessWindowSizeChange() // TODO: Pass an SDL_Window-identifying thing into WINRT_ProcessWindowSizeChange()
@@ -162,6 +235,12 @@ static void WINRT_ProcessWindowSizeChange() // TODO: Pass an SDL_Window-identify
 SDL_WinRTApp::SDL_WinRTApp() : m_windowClosed(false),
                                m_windowVisible(true)
 {
+}
+
+SDL_WinRTApp::~SDL_WinRTApp()
+{
+    // Launch exit URI if set (handles protocol activation returning to caller)
+    WINRT_LaunchExitUriIfSet();
 }
 
 void SDL_WinRTApp::Initialize(CoreApplicationView ^ applicationView)
@@ -585,15 +664,29 @@ void SDL_WinRTApp::OnWindowClosed(CoreWindow ^ sender, CoreWindowEventArgs ^ arg
     SDL_Log("%s\n", __FUNCTION__);
 #endif
     m_windowClosed = true;
+    WINRT_LaunchExitUriIfSet();
 }
 
 void SDL_WinRTApp::OnAppActivated(CoreApplicationView ^ applicationView, IActivatedEventArgs ^ args)
 {
+    if (args->Kind == Windows::ApplicationModel::Activation::ActivationKind::Protocol)
+    {
+        auto protocolArgs = dynamic_cast<Windows::ApplicationModel::Activation::ProtocolActivatedEventArgs^>(args);
+        if (protocolArgs && protocolArgs->Uri)
+        {
+            WINRT_ProtocolActivationURI = protocolArgs->Uri->AbsoluteUri;
+            // Extract and store launchOnExit URI before main URI gets cleared
+            WINRT_ExtractLaunchOnExitURI(WINRT_ProtocolActivationURI);
+        }
+    }
     CoreWindow::GetForCurrentThread()->Activate();
 }
 
 void SDL_WinRTApp::OnSuspending(Platform::Object ^ sender, SuspendingEventArgs ^ args)
 {
+    // Launch exit URI if set before suspending
+    WINRT_LaunchExitUriIfSet();
+
     // Save app state asynchronously after requesting a deferral. Holding a deferral
     // indicates that the application is busy performing suspending operations. Be
     // aware that a deferral may not be held indefinitely. After about five seconds,
@@ -647,6 +740,7 @@ void SDL_WinRTApp::OnResuming(Platform::Object ^ sender, Platform::Object ^ args
 void SDL_WinRTApp::OnExiting(Platform::Object ^ sender, Platform::Object ^ args)
 {
     SDL_SendAppEvent(SDL_APP_TERMINATING);
+    WINRT_LaunchExitUriIfSet();
 }
 
 static void WINRT_LogPointerEvent(const char *header, Windows::UI::Core::PointerEventArgs ^ args, Windows::Foundation::Point transformedPoint)

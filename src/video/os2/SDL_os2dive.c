@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -22,11 +22,13 @@
 #include "../SDL_sysvideo.h"
 #define INCL_WIN
 #define INCL_GPI
+#define INCL_DOSERRORS
+#define INCL_OS2MM
+#define INCL_MM_OS2
 #include <os2.h>
 #define  _MEERROR_H_
 #include <mmioos2.h>
 #include <os2me.h>
-#define INCL_MM_OS2
 #include <dive.h>
 #include <fourcc.h>
 #include "SDL_os2output.h"

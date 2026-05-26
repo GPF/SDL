@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -2221,8 +2221,8 @@ SDL_RenderDriver GLES2_RenderDriver = {
     { "opengles2",
       (SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE),
       4,
-      { SDL_PIXELFORMAT_BGRA32,
-        SDL_PIXELFORMAT_ABGR32,
+      { SDL_PIXELFORMAT_RGBA32,
+        SDL_PIXELFORMAT_BGRA32,
         SDL_PIXELFORMAT_BGRX32,
         SDL_PIXELFORMAT_RGBX32 },
       0,

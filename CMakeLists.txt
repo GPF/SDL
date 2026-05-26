@@ -5,7 +5,7 @@ endif()
 # MSVC runtime library flags are selected by an abstraction.
 set(CMAKE_POLICY_DEFAULT_CMP0091 NEW)
 
-cmake_minimum_required(VERSION 3.0.0...3.10)
+cmake_minimum_required(VERSION 3.0.0...4.0)
 project(SDL2 C)
 
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
@@ -59,6 +59,7 @@ endif()
 include(CheckLibraryExists)
 include(CheckIncludeFiles)
 include(CheckIncludeFile)
+include(CheckIncludeFiles)
 include(CheckLanguage)
 include(CheckSymbolExists)
 include(CheckCSourceCompiles)
@@ -239,7 +240,7 @@ if(USE_GCC OR USE_CLANG OR USE_INTELCC OR USE_QCC)
 endif()
 
 # Default option knobs
-if(UNIX OR MINGW OR MSYS OR (USE_CLANG AND NOT WINDOWS) OR VITA OR PSP OR PS2 OR N3DS OR PLATFORM_DREAMCAST)
+if(UNIX OR MINGW OR MSYS OR OS2 OR (USE_CLANG AND NOT WINDOWS) OR VITA OR PSP OR PS2 OR N3DS OR PLATFORM_DREAMCAST)
   set(OPT_DEF_LIBC ON)
 endif()
 if(WINDOWS OR DARWIN OR MACOSX OR IOS OR TVOS)
@@ -753,6 +754,11 @@ if(MSVC)
   if(MSVC_VERSION GREATER 1926 AND CMAKE_GENERATOR_PLATFORM MATCHES "Win32|x64")
     list(APPEND EXTRA_LDFLAGS_BUILD "-CETCOMPAT")
   endif()
+
+  # for VS >= 17.14 targeting ARM64: inline the Interlocked funcs
+  if(MSVC_VERSION GREATER 1943 AND SDL_CPU_ARM64 AND NOT SDL_LIBC)
+    list(APPEND EXTRA_CFLAGS /forceInterlockedFunctions-)
+  endif()
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
@@ -929,7 +935,17 @@ if(SDL_ASSEMBLY)
       cmake_pop_check_state()
 
       if(CPU_SUPPORTS_LSX AND HAVE_LSXINTRIN_H)
-        list(APPEND EXTRA_CFLAGS "-mlsx")
+        set_property(SOURCE
+            "${SDL2_SOURCE_DIR}/src/video/yuv2rgb/yuv_rgb_lsx.c"
+            "${SDL2_SOURCE_DIR}/src/video/SDL_blit_A.c"
+            "${SDL2_SOURCE_DIR}/src/video/SDL_fillrect.c"
+            APPEND PROPERTY COMPILE_OPTIONS "-mlsx")
+
+        set_property(SOURCE
+            "${SDL2_SOURCE_DIR}/src/video/yuv2rgb/yuv_rgb_lsx.c"
+            "${SDL2_SOURCE_DIR}/src/video/SDL_blit_A.c"
+            "${SDL2_SOURCE_DIR}/src/video/SDL_fillrect.c"
+            PROPERTY SKIP_PRECOMPILE_HEADERS 1)
         set(HAVE_LSX TRUE)
       endif()
     endif()
@@ -1080,7 +1096,7 @@ if(SDL_LIBC)
             strtod malloc calloc realloc free getenv setenv putenv unsetenv
             bsearch qsort abs bcopy memset memcpy memmove memcmp strlen strlcpy strlcat
             _strrev _strupr _strlwr index rindex strchr strrchr strstr strtok_r
-            itoa _ltoa _uitoa _ultoa strtol strtoul _i64toa _ui64toa strtoll strtoull
+            itoa _ltoa _ultoa strtol strtoul _i64toa _ui64toa strtoll strtoull
             atoi atof strcmp strncmp _stricmp strcasecmp _strnicmp strncasecmp strcasestr
             wcscmp _wcsdup wcsdup wcslcat wcslcpy wcslen wcsncmp wcsstr
             wcscasecmp _wcsicmp wcsncasecmp _wcsnicmp
@@ -1092,6 +1108,7 @@ if(SDL_LIBC)
     endforeach()
 
     check_symbol_exists(sigaction "signal.h" HAVE_SIGACTION)
+    check_symbol_exists(sigtimedwait "signal.h" HAVE_SIGTIMEDWAIT)
     check_symbol_exists(setjmp "setjmp.h" HAVE_SETJMP)
     check_symbol_exists(nanosleep "time.h" HAVE_NANOSLEEP)
     check_symbol_exists(sysconf "unistd.h" HAVE_SYSCONF)
@@ -1463,10 +1480,14 @@ elseif(EMSCRIPTEN)
 elseif(UNIX AND NOT APPLE AND NOT RISCOS AND NOT HAIKU)
   if(SDL_AUDIO)
     if(SYSV5 OR SOLARIS OR HPUX)
-        set(SDL_AUDIO_DRIVER_SUNAUDIO 1)
-        file(GLOB SUN_AUDIO_SOURCES ${SDL2_SOURCE_DIR}/src/audio/sun/*.c)
-        list(APPEND SOURCE_FILES ${SUN_AUDIO_SOURCES})
-        set(HAVE_SDL_AUDIO TRUE)
+        # Newer Solaris-based systems, like OpenIndiana, don't have this interface anymore. Check for the header first.
+        check_include_file(sys/audioio.h HAVE_SYS_AUDIOIO_H)
+        if(HAVE_SYS_AUDIOIO_H)
+            set(SDL_AUDIO_DRIVER_SUNAUDIO 1)
+            file(GLOB SUN_AUDIO_SOURCES ${SDL2_SOURCE_DIR}/src/audio/sun/*.c)
+            list(APPEND SOURCE_FILES ${SUN_AUDIO_SOURCES})
+            set(HAVE_SDL_AUDIO TRUE)
+        endif()
     elseif(NETBSD)
         set(SDL_AUDIO_DRIVER_NETBSD 1)
         file(GLOB NETBSD_AUDIO_SOURCES ${SDL2_SOURCE_DIR}/src/audio/netbsd/*.c)
@@ -2906,6 +2927,7 @@ elseif(PS2)
     gskit
     dmakit
     ps2_drivers
+    atomic
   )
 
 elseif(OS2)

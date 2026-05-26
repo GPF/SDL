@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -35,6 +35,10 @@
 
 #ifndef SDL_EVENTS_DISABLED
 #include "../events/SDL_events_c.h"
+#endif
+
+#if defined(__WIN32__)
+#include "../core/windows/SDL_windows.h"
 #endif
 
 #if defined(__ANDROID__)
@@ -588,6 +592,21 @@ static ControllerMapping_t *SDL_CreateMappingForHIDAPIController(SDL_JoystickGUI
                 }
             }
             break;
+        }
+    } else if (vendor == USB_VENDOR_8BITDO &&
+            (product == USB_PRODUCT_8BITDO_SF30_PRO ||
+            product == USB_PRODUCT_8BITDO_SF30_PRO_BT ||
+            product == USB_PRODUCT_8BITDO_SN30_PRO ||
+            product == USB_PRODUCT_8BITDO_SN30_PRO_BT ||
+            product == USB_PRODUCT_8BITDO_PRO_2 ||
+            product == USB_PRODUCT_8BITDO_PRO_2_BT ||
+            product == USB_PRODUCT_8BITDO_PRO_3)) {
+        SDL_strlcat(mapping_string, "a:b1,b:b0,back:b4,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b5,leftshoulder:b9,leftstick:b7,lefttrigger:a4,leftx:a0,lefty:a1,rightshoulder:b10,rightstick:b8,righttrigger:a5,rightx:a2,righty:a3,start:b6,x:b3,y:b2,", sizeof(mapping_string));
+
+        if (product == USB_PRODUCT_8BITDO_PRO_2 || product == USB_PRODUCT_8BITDO_PRO_2_BT) {
+            SDL_strlcat(mapping_string, "paddle1:b14,paddle2:b13,", sizeof(mapping_string));
+        } else if (product == USB_PRODUCT_8BITDO_PRO_3) {
+            SDL_strlcat(mapping_string, "paddle1:b12,paddle2:b11,paddle3:b14,paddle4:b13,", sizeof(mapping_string));
         }
     } else {
         /* All other controllers have the standard set of 19 buttons and 6 axes */
@@ -1984,7 +2003,7 @@ const char *SDL_GameControllerPathForIndex(int joystick_index)
 SDL_GameControllerType SDL_GameControllerTypeForIndex(int joystick_index)
 {
     SDL_JoystickGUID joystick_guid = SDL_JoystickGetDeviceGUID(joystick_index);
-    const char *mapping = SDL_GameControllerMappingForGUID(joystick_guid);
+    char *mapping = SDL_GameControllerMappingForGUID(joystick_guid);
     char *type_string, *comma;
     SDL_GameControllerType type;
     if (mapping) {
@@ -1999,8 +2018,10 @@ SDL_GameControllerType SDL_GameControllerTypeForIndex(int joystick_index)
             } else {
                 type = SDL_GetGameControllerTypeFromString(type_string);
             }
+            SDL_free(mapping);
             return type;
         }
+        SDL_free(mapping);
     }
     return SDL_GetJoystickGameControllerTypeFromGUID(joystick_guid, SDL_JoystickNameForIndex(joystick_index));
 }
@@ -2128,7 +2149,7 @@ SDL_bool SDL_ShouldIgnoreGameController(const char *name, SDL_JoystickGUID guid)
 
 #ifdef __WIN32__
     if (SDL_GetHintBoolean("SDL_GAMECONTROLLER_ALLOW_STEAM_VIRTUAL_GAMEPAD", SDL_FALSE) &&
-        SDL_GetHintBoolean("STEAM_COMPAT_PROTON", SDL_FALSE)) {
+        WIN_IsWine()) {
         /* We are launched by Steam and running under Proton
          * We can't tell whether this controller is a Steam Virtual Gamepad,
          * so assume that Proton is doing the appropriate filtering of controllers

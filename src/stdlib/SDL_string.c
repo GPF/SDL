@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -773,6 +773,11 @@ static const char ntoa_table[] = {
 };
 #endif /* ntoa() conversion table */
 
+char *SDL_uitoa(unsigned int value, char *string, int radix)
+{
+    return SDL_ultoa((unsigned long)value, string, radix);
+}
+
 char *SDL_itoa(int value, char *string, int radix)
 {
 #ifdef HAVE_ITOA
@@ -780,15 +785,6 @@ char *SDL_itoa(int value, char *string, int radix)
 #else
     return SDL_ltoa((long)value, string, radix);
 #endif /* HAVE_ITOA */
-}
-
-char *SDL_uitoa(unsigned int value, char *string, int radix)
-{
-#ifdef HAVE__UITOA
-    return _uitoa(value, string, radix);
-#else
-    return SDL_ultoa((unsigned long)value, string, radix);
-#endif /* HAVE__UITOA */
 }
 
 char *SDL_ltoa(long value, char *string, int radix)

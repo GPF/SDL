@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -39,8 +39,8 @@ static SDL_INLINE SDL_BWin *_ToBeWin(SDL_Window *window) {
     return (SDL_BWin *)(window->driverdata);
 }
 
-static SDL_INLINE SDL_BLooper *_GetBeLooper() {
-    return SDL_Looper;
+static SDL_INLINE SDL_BHandler *_GetBeLooper() {
+    return SDL_Handler;
 }
 
 /* Passing a NULL path means load pointers from the application */

@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -828,6 +828,19 @@ extern "C" {
 #define SDL_HINT_JOYSTICK_HIDAPI "SDL_JOYSTICK_HIDAPI"
 
 /**
+ * A variable controlling whether the HIDAPI driver for 8BitDo controllers
+ * should be used.
+ *
+ * The variable can be set to the following values:
+ *
+ * - "0": HIDAPI driver is not used.
+ * - "1": HIDAPI driver is used.
+ *
+ * The default is the value of SDL_HINT_JOYSTICK_HIDAPI.
+ */
+#define SDL_HINT_JOYSTICK_HIDAPI_8BITDO "SDL_JOYSTICK_HIDAPI_8BITDO"
+
+/**
  * A variable controlling whether the HIDAPI driver for Nintendo GameCube
  * controllers should be used.
  *
@@ -1262,8 +1275,8 @@ extern "C" {
  *
  * This variable can be set to the following values:
  *
- * - "0": RAWINPUT drivers are not used
- * - "1": RAWINPUT drivers are used (the default)
+ * - "0": RAWINPUT drivers are not used (the default)
+ * - "1": RAWINPUT drivers are used
  */
 #define SDL_HINT_JOYSTICK_RAWINPUT "SDL_JOYSTICK_RAWINPUT"
 
@@ -2023,6 +2036,37 @@ extern "C" {
  * will be loaded and interpreted as the value of the variable.
  */
 #define SDL_HINT_ROG_GAMEPAD_MICE_EXCLUDED "SDL_ROG_GAMEPAD_MICE_EXCLUDED"
+
+/**
+ * Variable controlling the width of the PS2's framebuffer in pixels
+ *
+ * By default, this variable is "640"
+ */
+#define SDL_HINT_PS2_GS_WIDTH    "SDL_PS2_GS_WIDTH"
+
+/**
+ * Variable controlling the height of the PS2's framebuffer in pixels
+ *
+ * By default, this variable is "448"
+ */
+#define SDL_HINT_PS2_GS_HEIGHT    "SDL_PS2_GS_HEIGHT"
+
+/**
+ * Variable controlling whether the signal is interlaced or progressive
+ *
+ * - "0": Image is interlaced. (default)
+ * - "1": Image is progressive
+ */
+#define SDL_HINT_PS2_GS_PROGRESSIVE    "SDL_PS2_GS_PROGRESSIVE"
+
+/**
+ * Variable controlling the video mode of the console
+ *
+ * - "": Console-native. (default)
+ * - "NTSC": 60hz region
+ * - "PAL": 50hz region
+ */
+#define SDL_HINT_PS2_GS_MODE    "SDL_PS2_GS_MODE"
 
 /**
  * A variable controlling if VSYNC is automatically disable if doesn't reach

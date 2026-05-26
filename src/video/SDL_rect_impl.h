@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -31,8 +31,6 @@ SDL_bool SDL_HASINTERSECTION(const RECTTYPE *A, const RECTTYPE *B)
     } else if (!B) {
         SDL_InvalidParamError("B");
         return SDL_FALSE;
-    } else if (SDL_RECTEMPTY(A) || SDL_RECTEMPTY(B)) {
-        return SDL_FALSE; /* Special cases for empty rects */
     }
 
     /* Horizontal intersection */
@@ -78,10 +76,6 @@ SDL_bool SDL_INTERSECTRECT(const RECTTYPE *A, const RECTTYPE *B, RECTTYPE *resul
         return SDL_FALSE;
     } else if (!result) {
         SDL_InvalidParamError("result");
-        return SDL_FALSE;
-    } else if (SDL_RECTEMPTY(A) || SDL_RECTEMPTY(B)) { /* Special cases for empty rects */
-        result->w = 0;
-        result->h = 0;
         return SDL_FALSE;
     }
 
