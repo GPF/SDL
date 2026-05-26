@@ -107,7 +107,6 @@
 #cmakedefine HAVE_STRTOK_R 1
 #cmakedefine HAVE_ITOA 1
 #cmakedefine HAVE__LTOA 1
-#cmakedefine HAVE__UITOA 1
 #cmakedefine HAVE__ULTOA 1
 #cmakedefine HAVE_STRTOL 1
 #cmakedefine HAVE_STRTOUL 1
@@ -466,6 +465,7 @@
 #cmakedefine SDL_VIDEO_RENDER_METAL 1
 #cmakedefine SDL_VIDEO_RENDER_VULKAN 1
 #cmakedefine SDL_VIDEO_RENDER_OGL 1
+#cmakedefine SDL_VIDEO_RENDER_OGL_ES 1
 #cmakedefine SDL_VIDEO_RENDER_OGL_ES2 1
 #cmakedefine SDL_VIDEO_RENDER_NGAGE 1
 #cmakedefine SDL_VIDEO_RENDER_PS2 1
@@ -630,6 +630,7 @@ typedef unsigned int uintptr_t;
 #cmakedefine SDL_DISABLE_LSX 1
 #cmakedefine SDL_DISABLE_LASX 1
 #cmakedefine SDL_DISABLE_NEON 1
+#cmakedefine SDL_DISABLE_SVE2 1
 
 #ifdef SDL_PLATFORM_PRIVATE
 #include "SDL_end_config_private.h"

@@ -211,8 +211,8 @@ static DBusHandlerResult TrayHandleGetAllProps(SDL_Tray *tray, SDL_TrayDBus *tra
         driver->dbus->message_iter_append_basic(&struct_iter, DBUS_TYPE_STRING, &empty);
         driver->dbus->message_iter_open_container(&struct_iter, DBUS_TYPE_ARRAY, "(iiay)", &array_iter);
         driver->dbus->message_iter_close_container(&struct_iter, &array_iter);
-        driver->dbus->message_iter_append_basic(&struct_iter, DBUS_TYPE_STRING, &empty);
         driver->dbus->message_iter_append_basic(&struct_iter, DBUS_TYPE_STRING, &tray_dbus->tooltip);
+        driver->dbus->message_iter_append_basic(&struct_iter, DBUS_TYPE_STRING, &empty);
         driver->dbus->message_iter_close_container(&variant_iter, &struct_iter);
         driver->dbus->message_iter_close_container(&entry_iter, &variant_iter);
         driver->dbus->message_iter_close_container(&dict_iter, &entry_iter);
@@ -311,8 +311,8 @@ static DBusHandlerResult TrayHandleGetProp(SDL_Tray *tray, SDL_TrayDBus *tray_db
         driver->dbus->message_iter_append_basic(&struct_iter, DBUS_TYPE_STRING, &empty);
         driver->dbus->message_iter_open_container(&struct_iter, DBUS_TYPE_ARRAY, "(iiay)", &array_iter);
         driver->dbus->message_iter_close_container(&struct_iter, &array_iter);
-        driver->dbus->message_iter_append_basic(&struct_iter, DBUS_TYPE_STRING, &empty);
         driver->dbus->message_iter_append_basic(&struct_iter, DBUS_TYPE_STRING, &tray_dbus->tooltip);
+        driver->dbus->message_iter_append_basic(&struct_iter, DBUS_TYPE_STRING, &empty);
         driver->dbus->message_iter_close_container(&variant_iter, &struct_iter);
         driver->dbus->message_iter_close_container(&iter, &variant_iter);
     } else if (!SDL_strcmp(property, "WindowId")) {
@@ -561,9 +561,7 @@ void DestroyMenu(SDL_TrayMenu *menu)
         SDL_ListClear(&menu_dbus->menu);
     }
 
-    if (menu_dbus->array_representation) {
-        SDL_free(menu_dbus->array_representation);
-    }
+    SDL_free(menu_dbus->array_representation);
 
     SDL_free(menu_dbus);
     SDL_free(menu);
@@ -656,9 +654,7 @@ void SetTrayTooltip(SDL_Tray *tray, const char *text)
     driver = (SDL_TrayDriverDBus *)tray->driver->internal;
     tray_dbus = (SDL_TrayDBus *)tray->internal;
 
-    if (tray_dbus->tooltip) {
-        SDL_free(tray_dbus->tooltip);
-    }
+    SDL_free(tray_dbus->tooltip);
 
     if (text) {
         tray_dbus->tooltip = SDL_strdup(text);
@@ -907,9 +903,7 @@ SDL_TrayEntry **GetTrayEntries(SDL_TrayMenu *menu, int *count)
 
     menu_dbus = (SDL_TrayMenuDBus *)menu->internal;
 
-    if (menu_dbus->array_representation) {
-        SDL_free(menu_dbus->array_representation);
-    }
+    SDL_free(menu_dbus->array_representation);
 
     sz = SDL_ListCountEntries(&menu_dbus->menu);
     array_representation = SDL_calloc(sz + 1, sizeof(SDL_TrayEntry *));

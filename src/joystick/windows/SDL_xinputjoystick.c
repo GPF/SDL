@@ -27,6 +27,7 @@
 #include "SDL_windowsjoystick_c.h"
 #include "SDL_xinputjoystick_c.h"
 #include "SDL_rawinputjoystick_c.h"
+#include "../../core/windows/SDL_gameinput.h"
 #include "../hidapi/SDL_hidapijoystick_c.h"
 
 // Set up for C function definitions, even when using C++
@@ -34,9 +35,8 @@
 extern "C" {
 #endif
 
-/*
- * Internal stuff.
- */
+// Internal stuff
+
 static bool s_bXInputEnabled = false;
 
 bool SDL_XINPUT_Enabled(void)
@@ -46,7 +46,12 @@ bool SDL_XINPUT_Enabled(void)
 
 bool SDL_XINPUT_JoystickInit(void)
 {
-    bool enabled = SDL_GetHintBoolean(SDL_HINT_XINPUT_ENABLED, true);
+    bool enabled = true;
+
+    if (!SDL_GetHintBoolean(SDL_HINT_XINPUT_ENABLED, true) ||
+        SDL_UsingGameInputForXInputControllers()) {
+        enabled = false;
+    }
 
     if (enabled && !WIN_LoadXInputDLL()) {
         enabled = false; // oh well.

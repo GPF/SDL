@@ -135,6 +135,8 @@
 
 #ifdef _WIN32
 #define HRESULT_FMT "(0x%08lX)"
+#elif defined(__CYGWIN__) && !defined(_LP64)
+#define HRESULT_FMT "(0x%08lX)"
 #else
 #define HRESULT_FMT "(0x%08X)"
 #endif
@@ -9036,7 +9038,7 @@ static bool D3D12_INTERNAL_GetAdapterByLuid(LUID luid, IDXGIFactory1 *factory, I
         IDXGIAdapter1 *adapter;
         res = IDXGIFactory1_EnumAdapters1(factory, adapterIndex, &adapter);
         if (FAILED(res)) {
-            SDL_LogError(SDL_LOG_CATEGORY_GPU, "Failed to get an adapter when iterating, i: %d, res: %ld", adapterIndex, res);
+            SDL_LogError(SDL_LOG_CATEGORY_GPU, "Failed to get an adapter when iterating, i: %d, res: %" SDL_PRIdSLONG, adapterIndex, res);
             return false;
         }
 
@@ -9044,7 +9046,7 @@ static bool D3D12_INTERNAL_GetAdapterByLuid(LUID luid, IDXGIFactory1 *factory, I
         res = IDXGIAdapter1_GetDesc1(adapter, &adapterDesc);
         if (FAILED(res)) {
             IDXGIAdapter1_Release(adapter);
-            SDL_LogError(SDL_LOG_CATEGORY_GPU, "Failed to get description of adapter, i: %d, res %ld", adapterIndex, res);
+            SDL_LogError(SDL_LOG_CATEGORY_GPU, "Failed to get description of adapter, i: %d, res %" SDL_PRIdSLONG, adapterIndex, res);
             return false;
         }
         if (SDL_memcmp(&adapterDesc.AdapterLuid, &luid, sizeof(luid)) == 0) {

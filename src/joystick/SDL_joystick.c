@@ -452,6 +452,7 @@ static Uint32 initial_blacklist_devices[] = {
     MAKE_VIDPID(0x1532, 0x0282), // Razer Huntsman Mini Analog, non-functional DInput device
     MAKE_VIDPID(0x20d6, 0x0002), // PowerA Enhanced Wireless Controller for Nintendo Switch (charging port only)
     MAKE_VIDPID(0x256c, 0x006d), // Huion Tablet_GS1331, Huion Tablet_GS1331 Touch Strip
+    MAKE_VIDPID(0x256c, 0x006e), // Huion Tablet Kamvas Pro 22, Huion Tablet Kamvas Pro 22 Touch Strip
     MAKE_VIDPID(0x26ce, 0x01a2), // ASRock LED Controller
     MAKE_VIDPID(0x3297, 0x1969), // Moonlander MK1 Keyboard
     MAKE_VIDPID(0x3434, 0x0121), // Keychron Q3 System Control
@@ -2444,6 +2445,26 @@ void SDL_PrivateJoystickSensorRate(SDL_Joystick *joystick, SDL_SensorType type, 
     }
 }
 
+void SDL_PrivateJoystickAddCapSense(SDL_Joystick *joystick, SDL_GamepadCapSenseType type)
+{
+    int ncapsenses;
+    SDL_JoystickCapSenseInfo *capsenses;
+
+    SDL_AssertJoysticksLocked();
+
+    ncapsenses = joystick->ncapsenses + 1;
+    capsenses = (SDL_JoystickCapSenseInfo *)SDL_realloc(joystick->capsenses, (ncapsenses * sizeof(SDL_JoystickCapSenseInfo)));
+    if (capsenses) {
+        SDL_JoystickCapSenseInfo *capsense = &capsenses[ncapsenses - 1];
+
+        capsense->type = type;
+        capsense->down = false;
+
+        joystick->ncapsenses = ncapsenses;
+        joystick->capsenses = capsenses;
+    }
+}
+
 void SDL_PrivateJoystickAdded(SDL_JoystickID instance_id)
 {
     SDL_JoystickDriver *driver;
@@ -3125,6 +3146,7 @@ SDL_GamepadType SDL_GetGamepadTypeFromVIDPID(Uint16 vendor, Uint16 product, cons
             type = SDL_GAMEPAD_TYPE_XBOX360;
             break;
         case k_eControllerType_XBoxOneController:
+        case k_eControllerType_XBoxEliteController:
             type = SDL_GAMEPAD_TYPE_XBOXONE;
             break;
         case k_eControllerType_PS3Controller:
@@ -3134,6 +3156,7 @@ SDL_GamepadType SDL_GetGamepadTypeFromVIDPID(Uint16 vendor, Uint16 product, cons
             type = SDL_GAMEPAD_TYPE_PS4;
             break;
         case k_eControllerType_PS5Controller:
+        case k_eControllerType_PS5EdgeController:
             type = SDL_GAMEPAD_TYPE_PS5;
             break;
         case k_eControllerType_XInputPS4Controller:
@@ -3144,6 +3167,7 @@ SDL_GamepadType SDL_GetGamepadTypeFromVIDPID(Uint16 vendor, Uint16 product, cons
             }
             break;
         case k_eControllerType_SwitchProController:
+        case k_eControllerType_Switch2ProController:
         case k_eControllerType_SwitchInputOnlyController:
             type = SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO;
             break;
@@ -3153,6 +3177,14 @@ SDL_GamepadType SDL_GetGamepadTypeFromVIDPID(Uint16 vendor, Uint16 product, cons
             } else {
                 type = SDL_GAMEPAD_TYPE_STANDARD;
             }
+            break;
+        case k_eControllerType_SteamController:
+        case k_eControllerType_SteamControllerV2:
+        case k_eControllerType_SteamControllerNeptune:
+        case k_eControllerType_SteamControllerTriton:
+        case k_eControllerType_HoriSteamController:
+        case k_eControllerType_UnknownSteamController:
+            type = SDL_GAMEPAD_TYPE_STEAM;
             break;
         default:
             break;
@@ -3201,20 +3233,14 @@ bool SDL_JoystickGUIDUsesVersion(SDL_GUID guid)
 bool SDL_IsJoystickXboxOne(Uint16 vendor_id, Uint16 product_id)
 {
     EControllerType eType = GuessControllerType(vendor_id, product_id);
-    return eType == k_eControllerType_XBoxOneController;
+    return eType == k_eControllerType_XBoxOneController ||
+           eType == k_eControllerType_XBoxEliteController;
 }
 
 bool SDL_IsJoystickXboxOneElite(Uint16 vendor_id, Uint16 product_id)
 {
-    if (vendor_id == USB_VENDOR_MICROSOFT) {
-        if (product_id == USB_PRODUCT_XBOX_ONE_ELITE_SERIES_1 ||
-            product_id == USB_PRODUCT_XBOX_ONE_ELITE_SERIES_2 ||
-            product_id == USB_PRODUCT_XBOX_ONE_ELITE_SERIES_2_BLUETOOTH ||
-            product_id == USB_PRODUCT_XBOX_ONE_ELITE_SERIES_2_BLE) {
-            return true;
-        }
-    }
-    return false;
+    EControllerType eType = GuessControllerType(vendor_id, product_id);
+    return eType == k_eControllerType_XBoxEliteController;
 }
 
 bool SDL_IsJoystickXboxSeriesX(Uint16 vendor_id, Uint16 product_id)
@@ -3253,23 +3279,22 @@ bool SDL_IsJoystickPS4(Uint16 vendor_id, Uint16 product_id)
 bool SDL_IsJoystickPS5(Uint16 vendor_id, Uint16 product_id)
 {
     EControllerType eType = GuessControllerType(vendor_id, product_id);
-    return eType == k_eControllerType_PS5Controller;
+    return eType == k_eControllerType_PS5Controller ||
+           eType == k_eControllerType_PS5EdgeController;
 }
 
 bool SDL_IsJoystickDualSenseEdge(Uint16 vendor_id, Uint16 product_id)
 {
-    if (vendor_id == USB_VENDOR_SONY) {
-        if (product_id == USB_PRODUCT_SONY_DS5_EDGE) {
-            return true;
-        }
-    }
-    return false;
+    EControllerType eType = GuessControllerType(vendor_id, product_id);
+    return eType == k_eControllerType_PS5EdgeController;
 }
 
 bool SDL_IsJoystickNintendoSwitchPro(Uint16 vendor_id, Uint16 product_id)
 {
     EControllerType eType = GuessControllerType(vendor_id, product_id);
-    return eType == k_eControllerType_SwitchProController || eType == k_eControllerType_SwitchInputOnlyController;
+    return eType == k_eControllerType_SwitchProController ||
+           eType == k_eControllerType_Switch2ProController ||
+           eType == k_eControllerType_SwitchInputOnlyController;
 }
 
 bool SDL_IsJoystickNintendoSwitchProInputOnly(Uint16 vendor_id, Uint16 product_id)
@@ -3348,7 +3373,8 @@ bool SDL_IsJoystickSteamController(Uint16 vendor_id, Uint16 product_id)
 
 bool SDL_IsJoystickHoriSteamController(Uint16 vendor_id, Uint16 product_id)
 {
-    return vendor_id == USB_VENDOR_HORI && (product_id == USB_PRODUCT_HORI_STEAM_CONTROLLER || product_id == USB_PRODUCT_HORI_STEAM_CONTROLLER_BT);
+    EControllerType eType = GuessControllerType(vendor_id, product_id);
+    return eType == k_eControllerType_HoriSteamController;
 }
 
 bool SDL_IsJoystickSInputController(Uint16 vendor_id, Uint16 product_id)
@@ -3956,6 +3982,53 @@ void SDL_SendJoystickSensor(Uint64 timestamp, SDL_Joystick *joystick, SDL_Sensor
                     SDL_PushEvent(&event);
                 }
             }
+            break;
+        }
+    }
+}
+
+void SDL_SendJoystickCapSense(Uint64 timestamp, SDL_Joystick *joystick, SDL_GamepadCapSenseType type, bool down)
+{
+    SDL_AssertJoysticksLocked();
+
+    // We ignore events if we don't have keyboard focus, except for button
+    // (capsense) release
+    if (SDL_PrivateJoystickShouldIgnoreEvent()) {
+        if (down) {
+            return;
+        }
+    }
+
+    for (int i = 0; i < joystick->ncapsenses; ++i) {
+        SDL_JoystickCapSenseInfo *capsense = &joystick->capsenses[i];
+
+        if (capsense->type == type) {
+            SDL_Event event;
+
+            // Ignore duplicate events
+            if (down == capsense->down) {
+                return;
+            }
+
+            // Update internal joystick state
+            capsense->down = down;
+            joystick->update_complete = timestamp;
+
+            if (down) {
+                event.type = SDL_EVENT_GAMEPAD_CAPSENSE_TOUCH;
+            } else {
+                event.type = SDL_EVENT_GAMEPAD_CAPSENSE_RELEASE;
+            }
+
+            // Post the event, if desired
+            if (SDL_EventEnabled(event.type)) {
+                event.common.timestamp = timestamp;
+                event.gcapsense.which = joystick->instance_id;
+                event.gcapsense.capsense = type;
+                event.gcapsense.down = down;
+                SDL_PushEvent(&event);
+            }
+
             break;
         }
     }

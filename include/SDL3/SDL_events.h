@@ -163,9 +163,9 @@ typedef enum SDL_EventType
                                              associated with the window. Otherwise, the handle has already been destroyed and all resources
                                              associated with it are invalid */
     SDL_EVENT_WINDOW_HDR_STATE_CHANGED, /**< Window HDR properties have changed */
-    SDL_EVENT_WINDOW_CURVATURE_CHANGED, /**< Window curvature has changed to data1 (on visionOS) */
+    SDL_EVENT_WINDOW_SETTINGS_CHANGED,  /**< Window settings have changed (on visionOS) */
     SDL_EVENT_WINDOW_FIRST = SDL_EVENT_WINDOW_SHOWN,
-    SDL_EVENT_WINDOW_LAST = SDL_EVENT_WINDOW_CURVATURE_CHANGED,
+    SDL_EVENT_WINDOW_LAST = SDL_EVENT_WINDOW_SETTINGS_CHANGED,
 
     /* Keyboard events */
     SDL_EVENT_KEY_DOWN        = 0x300, /**< Key pressed */
@@ -212,6 +212,8 @@ typedef enum SDL_EventType
     SDL_EVENT_GAMEPAD_SENSOR_UPDATE,        /**< Gamepad sensor was updated */
     SDL_EVENT_GAMEPAD_UPDATE_COMPLETE,      /**< Gamepad update is complete */
     SDL_EVENT_GAMEPAD_STEAM_HANDLE_UPDATED,  /**< Gamepad Steam handle has changed */
+    SDL_EVENT_GAMEPAD_CAPSENSE_TOUCH,       /**< Gamepad capsense was touched */
+    SDL_EVENT_GAMEPAD_CAPSENSE_RELEASE,     /**< Gamepad capsense was released */
 
     /* Touch events */
     SDL_EVENT_FINGER_DOWN      = 0x700,
@@ -457,7 +459,7 @@ typedef struct SDL_MouseMotionEvent
     Uint32 reserved;
     Uint64 timestamp;   /**< In nanoseconds, populated using SDL_GetTicksNS() */
     SDL_WindowID windowID; /**< The window with mouse focus, if any */
-    SDL_MouseID which;  /**< The mouse instance id in relative mode, SDL_TOUCH_MOUSEID for touch events, or 0 */
+    SDL_MouseID which;  /**< The mouse instance id in relative mode, SDL_TOUCH_MOUSEID for touch events, SDL_PEN_MOUSEID for pen events, or 0 */
     SDL_MouseButtonFlags state;       /**< The current button state */
     float x;            /**< X coordinate, relative to window */
     float y;            /**< Y coordinate, relative to window */
@@ -710,6 +712,23 @@ typedef struct SDL_GamepadSensorEvent
     float data[3];      /**< Up to 3 values from the sensor, as defined in SDL_sensor.h */
     Uint64 sensor_timestamp; /**< The timestamp of the sensor reading in nanoseconds, not necessarily synchronized with the system clock */
 } SDL_GamepadSensorEvent;
+
+/**
+ * Gamepad capsense event structure (event.gcapsense.*)
+ *
+ * \since This struct is available since SDL 3.6.0.
+ */
+typedef struct SDL_GamepadCapSenseEvent
+{
+    SDL_EventType type;     /**< SDL_EVENT_GAMEPAD_CAPSENSE_TOUCH or SDL_EVENT_GAMEPAD_CAPSENSE_RELEASE */
+    Uint32 reserved;
+    Uint64 timestamp;       /**< In nanoseconds, populated using SDL_GetTicksNS() */
+    SDL_JoystickID which;   /**< The joystick instance id */
+    Uint8 capsense;         /**< The capsense type (SDL_GamepadCapSenseType) */
+    bool down;              /**< true if the capsense is touched */
+    Uint8 padding1;
+    Uint8 padding2;
+} SDL_GamepadCapSenseEvent;
 
 /**
  * Audio device event structure (event.adevice.*)
@@ -1040,6 +1059,7 @@ typedef union SDL_Event
     SDL_GamepadButtonEvent gbutton;         /**< Gamepad button event data */
     SDL_GamepadTouchpadEvent gtouchpad;     /**< Gamepad touchpad event data */
     SDL_GamepadSensorEvent gsensor;         /**< Gamepad sensor event data */
+    SDL_GamepadCapSenseEvent gcapsense;     /**< Gamepad capsense event data */
     SDL_AudioDeviceEvent adevice;           /**< Audio device event data */
     SDL_CameraDeviceEvent cdevice;          /**< Camera device event data */
     SDL_SensorEvent sensor;                 /**< Sensor event data */

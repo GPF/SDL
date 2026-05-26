@@ -206,7 +206,7 @@ static const struct SDL_GamepadBlacklistWords SDL_gamepad_blacklist_words[] = {
     {"Synaptics ",      GAMEPAD_BLACKLIST_ANYWHERE}, // "Synaptics TM2768-001", "SynPS/2 Synaptics TouchPad"
     {"Trackpad",        GAMEPAD_BLACKLIST_ANYWHERE},
     {"Clickpad",        GAMEPAD_BLACKLIST_ANYWHERE},
-    // "PG-90215 Keyboard", "Usb Keyboard Usb Keyboard Consumer Control", "Framework Laptop 16 Keyboard Module - ISO System Control"
+    // "Usb Keyboard Usb Keyboard Consumer Control", "Framework Laptop 16 Keyboard Module - ISO System Control"
     {" Keyboard",       GAMEPAD_BLACKLIST_ANYWHERE},
     {" Laptop ",        GAMEPAD_BLACKLIST_ANYWHERE}, // "Framework Laptop 16 Numpad Module System Control"
     {"Mouse ",          GAMEPAD_BLACKLIST_BEGIN}, // "Mouse passthrough"
@@ -1272,9 +1272,12 @@ static GamepadMapping_t *SDL_CreateMappingForHIDAPIGamepad(SDL_GUID guid)
         if (SDL_IsJoystickSteamController(vendor, product)) {
             // Steam controllers have 2 back paddle buttons
             SDL_strlcat(mapping_string, "paddle1:b11,paddle2:b12,", sizeof(mapping_string));
+        } else if (SDL_IsJoystickSteamDeck(vendor, product)) {
+            // The Steam Deck's built-in controller has QAM, 4 back buttons, L/R trackpads, and L/R capacitive touch sticks
+            SDL_strlcat(mapping_string, "misc1:b11,paddle1:b12,paddle2:b13,paddle3:b14,paddle4:b15,touchpad:b17,misc2:b16", sizeof(mapping_string));
         } else if (SDL_IsJoystickSteamTriton(vendor, product)) {
             // Second generation Steam controllers have 4 back paddle buttons
-            SDL_strlcat(mapping_string, "misc1:b11,paddle1:b12,paddle2:b13,paddle3:b14,paddle4:b15", sizeof(mapping_string));
+            SDL_strlcat(mapping_string, "misc1:b11,paddle1:b12,paddle2:b13,paddle3:b14,paddle4:b15,touchpad:b17,misc2:b16", sizeof(mapping_string));
         } else if (SDL_IsJoystickNintendoSwitchPro(vendor, product) ||
                    SDL_IsJoystickNintendoSwitchProInputOnly(vendor, product)) {
             // Nintendo Switch Pro controllers have a screenshot button
@@ -1298,7 +1301,7 @@ static GamepadMapping_t *SDL_CreateMappingForHIDAPIGamepad(SDL_GUID guid)
             }
         } else if (SDL_IsJoystickHoriSteamController(vendor, product)) {
             /* The Wireless HORIPad for Steam has QAM, Steam, Capsense L/R Sticks, 2 rear buttons, and 2 misc buttons */
-            SDL_strlcat(mapping_string, "paddle1:b13,paddle2:b12,paddle3:b15,paddle4:b14,misc2:b11,misc3:b16,misc4:b17", sizeof(mapping_string));
+            SDL_strlcat(mapping_string, "paddle1:b13,paddle2:b12,paddle3:b15,paddle4:b14,misc1:b11", sizeof(mapping_string));
         } else if (SDL_IsJoystickFlydigiController(vendor, product)) {
             SDL_strlcat(mapping_string, "paddle1:b11,paddle2:b12,paddle3:b13,paddle4:b14,", sizeof(mapping_string));
             if (guid.data[15] >= SDL_FLYDIGI_VADER2) {
@@ -1515,7 +1518,8 @@ static const char *map_StringForGamepadType[] = {
     "joyconleft",
     "joyconright",
     "joyconpair",
-    "gamecube"
+    "gamecube",
+    "steam"
 };
 SDL_COMPILE_TIME_ASSERT(map_StringForGamepadType, SDL_arraysize(map_StringForGamepadType) == SDL_GAMEPAD_TYPE_COUNT);
 
@@ -3301,6 +3305,10 @@ bool SDL_ShouldIgnoreGamepad(Uint16 vendor_id, Uint16 product_id, Uint16 version
 
                 case GAMEPAD_BLACKLIST_ANYWHERE:
                     if (SDL_strstr(name, blacklist_word->str) != NULL) {
+                        if (SDL_startswith(name, "PG-")) {
+                            // Ipega gamepads have modes with keyboard keys in addition to gamepad controls
+                            break;
+                        }
                         return true;
                     }
                     break;
@@ -3973,6 +3981,48 @@ bool SDL_GetGamepadSensorData(SDL_Gamepad *gamepad, SDL_SensorType type, float *
     return SDL_Unsupported();
 }
 
+bool SDL_GamepadHasCapSense(SDL_Gamepad *gamepad, SDL_GamepadCapSenseType type)
+{
+    bool result = false;
+
+    SDL_LockJoysticks();
+    {
+        SDL_Joystick *joystick = SDL_GetGamepadJoystick(gamepad);
+        if (joystick) {
+            for (int i = 0; i < joystick->ncapsenses; ++i) {
+                if (joystick->capsenses[i].type == type) {
+                    result = true;
+                    break;
+                }
+            }
+        }
+    }
+    SDL_UnlockJoysticks();
+
+    return result;
+}
+
+bool SDL_GetGamepadCapSense(SDL_Gamepad *gamepad, SDL_GamepadCapSenseType type)
+{
+    bool result = false;
+
+    SDL_LockJoysticks();
+    {
+        SDL_Joystick *joystick = SDL_GetGamepadJoystick(gamepad);
+        if (joystick) {
+            for (int i = 0; i < joystick->ncapsenses; ++i) {
+                if (joystick->capsenses[i].type == type) {
+                    result = joystick->capsenses[i].down;
+                    break;
+                }
+            }
+        }
+    }
+    SDL_UnlockJoysticks();
+
+    return result;
+}
+
 SDL_JoystickID SDL_GetGamepadID(SDL_Gamepad *gamepad)
 {
     SDL_Joystick *joystick = SDL_GetGamepadJoystick(gamepad);
@@ -4491,6 +4541,8 @@ static const Uint32 SDL_gamepad_event_list[] = {
     SDL_EVENT_GAMEPAD_TOUCHPAD_MOTION,
     SDL_EVENT_GAMEPAD_TOUCHPAD_UP,
     SDL_EVENT_GAMEPAD_SENSOR_UPDATE,
+    SDL_EVENT_GAMEPAD_CAPSENSE_TOUCH,
+    SDL_EVENT_GAMEPAD_CAPSENSE_RELEASE,
 };
 
 void SDL_SetGamepadEventsEnabled(bool enabled)
