@@ -2713,9 +2713,10 @@ elseif(PLATFORM_DREAMCAST)
 
   # Use pthreads if SDL_PTHREADS is ON
   if(SDL_PTHREADS)
-      set(SDL_THREAD_PTHREAD 1)
       CheckPTHREAD()
-      set(SDL_THREAD_DREAMCAST 0)
+      if(SDL_THREAD_PTHREAD)
+        set(SDL_THREAD_DREAMCAST 0)
+      endif()
   endif()
 
   if(SDL_THREAD_DREAMCAST)

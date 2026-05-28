@@ -985,7 +985,7 @@ macro(CheckPTHREAD)
       set(PTHREAD_LDFLAGS "-pthread")
     elseif(PLATFORM_DREAMCAST)
       set(PTHREAD_CFLAGS "")
-      set(PTHREAD_LDFLAGS "-lkallisti")      
+      set(PTHREAD_LDFLAGS "-lpthread")      
     elseif(QNX)
       # pthread support is baked in
     else()
@@ -995,7 +995,13 @@ macro(CheckPTHREAD)
 
     # Run some tests
     set(ORIG_CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
-    set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} ${PTHREAD_CFLAGS} ${PTHREAD_LDFLAGS}")
+    if(PLATFORM_DREAMCAST)
+      set(ORIG_CMAKE_REQUIRED_LIBRARIES "${CMAKE_REQUIRED_LIBRARIES}")
+      set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} ${PTHREAD_CFLAGS}")
+      list(APPEND CMAKE_REQUIRED_LIBRARIES ${PTHREAD_LDFLAGS})
+    else()
+      set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} ${PTHREAD_CFLAGS} ${PTHREAD_LDFLAGS}")
+    endif()
     check_c_source_compiles("
       #include <pthread.h>
       int main(int argc, char** argv) {
@@ -1080,6 +1086,9 @@ macro(CheckPTHREAD)
       set(HAVE_SDL_THREADS TRUE)
     endif()
     set(CMAKE_REQUIRED_FLAGS "${ORIG_CMAKE_REQUIRED_FLAGS}")
+    if(PLATFORM_DREAMCAST)
+      set(CMAKE_REQUIRED_LIBRARIES "${ORIG_CMAKE_REQUIRED_LIBRARIES}")
+    endif()
   endif()
 endmacro()
 

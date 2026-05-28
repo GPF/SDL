@@ -7,8 +7,8 @@ BUILD_DIR="${PWD}/dcbuild"
 # Default options
 ENABLE_OPENGL=ON
 ENABLE_SDL_TESTS=ON
-ENABLE_PTHREADS=OFF
-ENABLE_UNIX_TIMERS=OFF
+ENABLE_PTHREADS=ON
+ENABLE_UNIX_TIMERS=ON
 BUILD_JOBS=$(nproc) # Use all available CPU cores by default
 # Parse command-line arguments
 while [[ "$#" -gt 0 ]]; do
