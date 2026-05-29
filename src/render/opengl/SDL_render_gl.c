@@ -151,6 +151,9 @@ typedef struct
 #endif
 
     GL_FBOList *fbo;
+#ifdef __DREAMCAST__
+    Uint32 original_format;
+#endif
 } GL_TextureData;
 
 SDL_FORCE_INLINE const char *
@@ -489,6 +492,9 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     GLenum format, type;
     int texture_w, texture_h;
     GLenum scaleMode;
+#ifdef __DREAMCAST__
+    Uint32 dreamcast_original_format = texture->format;
+#endif
 
     GL_ActivateRenderer(renderer);
 
@@ -502,54 +508,14 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 
 #ifdef __DREAMCAST__
     SDL_Log("before texture->format = %s", SDL_GetPixelFormatName(texture->format));
-    if (texture->access != SDL_TEXTUREACCESS_STREAMING){
-        if (texture->format == SDL_PIXELFORMAT_RGB565) {
-            SDL_Log("Converting RGB565 to ARGB1555");
-            uint16_t *pixels = (uint16_t *)texture->pixels;
-            int count = texture->w * texture->h;
 
-            for (int i = 0; i < count; ++i) {
-                uint16_t rgb = pixels[i];
-                uint8_t r = (rgb >> 11) & 0x1F;
-                uint8_t g = (rgb >> 5) & 0x3F;
-                uint8_t b = rgb & 0x1F;
-                g >>= 1;
-
-                pixels[i] = (1 << 15) | (r << 10) | (g << 5) | b;
-            }
-
-            texture->format = SDL_PIXELFORMAT_ARGB1555;
-
-        } else if (texture->format == SDL_PIXELFORMAT_XRGB8888 ||
-                texture->format == SDL_PIXELFORMAT_ARGB8888 ||
-                texture->format == SDL_PIXELFORMAT_ARGB4444) {
-            const char *fromFmt = SDL_GetPixelFormatName(texture->format);
-            SDL_Log("Converting %s to ARGB1555", fromFmt);
-
-            uint32_t *src = (uint32_t *)texture->pixels;
-            uint16_t *dst = SDL_malloc(sizeof(uint16_t) * texture->w * texture->h);
-            int count = texture->w * texture->h;
-
-            for (int i = 0; i < count; ++i) {
-                uint32_t pixel = src[i];
-
-                uint8_t a = (pixel >> 24) & 0xFF;
-                uint8_t r = (pixel >> 16) & 0xFF;
-                uint8_t g = (pixel >> 8) & 0xFF;
-                uint8_t b = pixel & 0xFF;
-
-                r >>= 3;
-                g >>= 3;
-                b >>= 3;
-
-                uint8_t alpha_bit = (a >= 128) ? 1 : 0;
-                dst[i] = (alpha_bit << 15) | (r << 10) | (g << 5) | b;
-            }
-
-            SDL_free(texture->pixels);  // Only if this buffer was allocated manually
-            texture->pixels = dst;
-            texture->format = SDL_PIXELFORMAT_ARGB1555;
-        }
+    if (texture->access != SDL_TEXTUREACCESS_STREAMING &&
+        texture->format != SDL_PIXELFORMAT_RGB565 &&
+        texture->format != SDL_PIXELFORMAT_ARGB1555 &&
+        texture->format != SDL_PIXELFORMAT_ARGB4444) {
+        SDL_Log("Dreamcast: using ARGB1555 texture storage for source format %s",
+                SDL_GetPixelFormatName(texture->format));
+        texture->format = SDL_PIXELFORMAT_ARGB1555;
     }
 #endif 
     if (!convert_format(renderdata, texture->format, &internalFormat,
@@ -562,6 +528,10 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     if (!data) {
         return SDL_OutOfMemory();
     }
+
+#ifdef __DREAMCAST__
+    data->original_format = dreamcast_original_format;
+#endif
 
     if (texture->access == SDL_TEXTUREACCESS_STREAMING) {
         size_t size;
@@ -828,6 +798,11 @@ static int GL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
     const GLenum textype = renderdata->textype;
     GL_TextureData *data = (GL_TextureData *)texture->driverdata;
     const int texturebpp = SDL_BYTESPERPIXEL(texture->format);
+#ifdef __DREAMCAST__
+    void *converted_pixels = NULL;
+    const void *upload_pixels = pixels;
+    int upload_pitch = pitch;
+#endif
 
     SDL_assert_release(texturebpp != 0); /* otherwise, division by zero later. */
 
@@ -835,34 +810,52 @@ static int GL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
 
     renderdata->drawstate.texture = NULL; /* we trash this state. */
 
-    // Log texture and rectangle details
-    // SDL_Log("GL_UpdateTexture: Binding texture ID: %u, updating region x=%d, y=%d, w=%d, h=%d", 
-    //         data->texture, rect->x, rect->y, rect->w, rect->h);
-    
+#ifdef __DREAMCAST__
+    if (data->original_format != texture->format) {
+        upload_pitch = rect->w * SDL_BYTESPERPIXEL(texture->format);
+        converted_pixels = SDL_malloc((size_t)upload_pitch * rect->h);
+        if (!converted_pixels) {
+            return SDL_OutOfMemory();
+        }
+
+        SDL_Log("Dreamcast: converting upload from %s to %s",
+                SDL_GetPixelFormatName(data->original_format),
+                SDL_GetPixelFormatName(texture->format));
+
+        if (SDL_ConvertPixels(rect->w,
+                              rect->h,
+                              data->original_format,
+                              pixels,
+                              pitch,
+                              texture->format,
+                              converted_pixels,
+                              upload_pitch) < 0) {
+            SDL_free(converted_pixels);
+            return -1;
+        }
+
+        upload_pixels = converted_pixels;
+    }
+#endif
+
     renderdata->glBindTexture(textype, data->texture);
     
     renderdata->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+#ifdef __DREAMCAST__
+    renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, (upload_pitch / texturebpp));
+#else
     renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, (pitch / texturebpp));
+#endif
 
-    // Log the first few pixels in the region being updated (for debugging)
-    // const Uint8 *pixel_data = (const Uint8 *)pixels;
-    // SDL_Log("First few pixels in update (in bytes): ");
-    // for (int i = 0; i < 16 && i < rect->w * rect->h * texturebpp; i++) {
-    //     SDL_Log("Pixel[%d]: 0x%02X", i, pixel_data[i]);
-    // }
-
-    // Update the texture with the new pixel data
     renderdata->glTexSubImage2D(textype, 0, rect->x, rect->y, rect->w,
                                 rect->h, data->format, data->formattype,
+#ifdef __DREAMCAST__
+                                upload_pixels);
+    SDL_free(converted_pixels);
+#else
                                 pixels);
+#endif
 
-    // GLenum err = glGetError();
-    // if (err != GL_NO_ERROR) {
-    //     SDL_Log("OpenGL error during glTexSubImage2D: 0x%X", err);
-    //     return -1; // Return failure if an error occurred
-    // }
-
-    // SDL_Log("Texture update complete.");
 #if SDL_HAVE_YUV
     if (data->yuv) {
         renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, ((pitch + 1) / 2));

@@ -1,12 +1,12 @@
-#include "SDL_config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include "SDL2/SDL.h"
 
 #ifdef DREAMCAST
 #include "kos.h"
-#include "SDL_hints.h"
-#define WAV_PATH "/rd/sample.wav"
+// #include "SDL_hints.h"
+#define WAV_PATH "/rd/gs-16b-2c-44100hz.wav"
 extern uint8 romdisk[];
 KOS_INIT_ROMDISK(romdisk);
 #else
@@ -41,8 +41,8 @@ static void open_audio(void) {
     SDL_Log("  Format: %d", wave.spec.format);
     SDL_Log("  Channels: %d", wave.spec.channels);
     SDL_Log("  Samples: %d", wave.spec.samples);
-    SDL_Log("  soundlen: %d", wave.soundlen);
-    SDL_Log("  soundpos: %d", wave.soundpos);
+    SDL_Log("  soundlen: %" SDL_PRIu32, wave.soundlen);
+    SDL_Log("  soundpos: %" SDL_PRIu32, wave.soundpos);
 
     device = SDL_OpenAudioDevice(NULL, SDL_FALSE, &wave.spec, NULL, 0);
     if (!device) {
@@ -65,33 +65,25 @@ static void reopen_audio(void) {
 }
 
 void SDLCALL fillerup(void *userdata, Uint8 *stream, int len) {
-    // Fill the stream directly with ADPCM data
-    SDL_Log("  soundpos: %d", wave.soundpos);
-    Uint8 *waveptr = wave.sound + wave.soundpos;
-    int waveleft = wave.soundlen - wave.soundpos;
+    (void)userdata;
 
-    while (waveleft > 0 && len > 0) {
-        // Determine the size of the chunk to copy (min of remaining data and stream space)
-        int chunk = (waveleft < len) ? waveleft : len;
-
-        // Copy the chunk of data into the stream
-        SDL_memcpy(stream, waveptr, chunk);
-
-        // Update pointers and remaining data
-        stream += chunk;
-        len -= chunk;
-        waveptr += chunk;
-        waveleft -= chunk;
+    if (!wave.sound || wave.soundlen == 0) {
+        SDL_memset(stream, wave.spec.silence, len);
+        return;
     }
 
-    // Update the position in the buffer for the next callback
-    wave.soundpos = waveptr - wave.sound;
+    while (len > 0) {
+        const Uint32 waveleft = wave.soundlen - wave.soundpos;
+        const int chunk = (waveleft < (Uint32)len) ? (int)waveleft : len;
 
-    // If we reach the end of the sound data, stop playback and reopen the audio device
-    if (wave.soundpos >= wave.soundlen) {
-        SDL_Log("Sound finished playing, reopening audio device...");
-        wave.soundpos = 0; // Reset the sound position
-        reopen_audio();    // Reopen the audio device
+        SDL_memcpy(stream, wave.sound + wave.soundpos, chunk);
+        stream += chunk;
+        len -= chunk;
+        wave.soundpos += (Uint32)chunk;
+
+        if (wave.soundpos >= wave.soundlen) {
+            wave.soundpos = 0;
+        }
     }
 }
 
@@ -108,8 +100,6 @@ void loop(void) {
 int main(int argc, char *argv[]) {
     char *filename = WAV_PATH;
     SDL_Window *window;
-    SDL_Surface *image_surface;
-    SDL_Texture *texture;
     SDL_Renderer *renderer;
 
     /* Enable standard application logging */
@@ -145,6 +135,7 @@ int main(int argc, char *argv[]) {
         quit(1);
     }
 
+    wave.soundpos = 0;
     wave.spec.samples = 4096;
     wave.spec.callback = fillerup;
 

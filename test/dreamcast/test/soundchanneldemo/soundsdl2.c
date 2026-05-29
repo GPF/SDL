@@ -3,8 +3,6 @@
    sdl/sound/sdl_sound.c
    Copyright (C) 2016 Lawrence Sebald
 */
-
-#include "SDL_config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include "SDL2/SDL.h"

@@ -3,14 +3,14 @@ OBJS = soundsdl2.o #romdisk.o
 KOS_ROMDISK_DIR = romdisk
  
 # Update include paths for SDL2
-KOS_CFLAGS+= -I../../../../build-scripts/build/include -I../../../../build-scripts/build/include-config-/SDL2 -I../../../../build-scripts/build/include/SDL2 -I. -DDREAMCAST
+KOS_CFLAGS+=-DDREAMCAST
 
 #KOS_CFLAGS+= -O3 -ffast-math -fno-common -fno-builtin -fno-exceptions -fstrict-aliasing 
 
 #KOS_CPPFLAGS=-fno-operator-names -fno-exceptions $(KOS_CFLAGS) 
 
 # Update library paths and libraries for SDL2
-KOS_LIBS+= -L../../../../build-scripts/build -lSDL2 -lSDL2main
+#KOS_LIBS+= -L../../../../build-scripts/build -lSDL2 -lSDL2main
 
 all: $(TARGET).bin
 
@@ -20,7 +20,7 @@ clean:
 	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin romdisk.img
 
 $(TARGET).elf: $(OBJS)
-	kos-cc -o $(TARGET).elf $(OBJS) -lSDL2 -lSDL2main -lGL -lm -lkosutils
+	kos-cc -o $(TARGET).elf $(OBJS) -lSDL2 -lSDL2main -lGL -lm -lkosutils -lpthread
 
 $(TARGET).bin: $(TARGET).elf
 	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin

@@ -1079,6 +1079,9 @@ macro(CheckPTHREAD)
       if(HAVE_PTHREADS_SEM)
         set(SOURCE_FILES ${SOURCE_FILES}
             ${SDL2_SOURCE_DIR}/src/thread/pthread/SDL_syssem.c)
+      elseif(PLATFORM_DREAMCAST)
+        set(SOURCE_FILES ${SOURCE_FILES}
+            ${SDL2_SOURCE_DIR}/src/thread/dreamcast/SDL_syssem.c)
       else()
         set(SOURCE_FILES ${SOURCE_FILES}
             ${SDL2_SOURCE_DIR}/src/thread/generic/SDL_syssem.c)
