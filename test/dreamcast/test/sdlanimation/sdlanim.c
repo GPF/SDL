@@ -1,6 +1,7 @@
-#include <SDL2/SDL.h>
 #include <stdio.h>
 #include <kos.h>
+#include <SDL2/SDL.h>
+
 
 /* Size of the window */
 #define SCREEN_WIDTH  640
@@ -218,7 +219,7 @@ if (!grassTexture) {
             } else if (event.type == SDL_CONTROLLERBUTTONDOWN) {
                 if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B && event.cbutton.which == 0) {
                     SDL_Quit();
-                    exit(0);
+                    // exit(0);
                 }
                 if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A && event.cbutton.which == 0) {
                     gameover = 1;
