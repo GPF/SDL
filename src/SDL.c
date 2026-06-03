@@ -60,6 +60,9 @@
 #ifdef SDL_PLATFORM_ANDROID
 #include "core/android/SDL_android.h"
 #endif
+#ifdef SDL_PLATFORM_DREAMCAST
+#include <kos.h>
+#endif
 
 #define SDL_ALL_SUBSYSTEM_FLAGS ~0U
 
@@ -281,6 +284,13 @@ bool SDL_IsVideoThread(void)
     return (SDL_GetCurrentThreadID() == SDL_VideoThreadID);
 }
 
+#ifdef SDL_PLATFORM_DREAMCAST
+static void DREAMCAST_resetCallback(uint8_t addr, uint32_t btns) {
+    printf("Software reset button sequence detected!\n");
+    exit(0);
+}
+#endif
+
 // Initialize all the subsystems that require initialization before threads start
 void SDL_InitMainThread(void)
 {
@@ -290,6 +300,10 @@ void SDL_InitMainThread(void)
     if (SDL_MainThreadID == 0) {
         SDL_MainThreadID = SDL_GetCurrentThreadID();
     }
+
+#ifdef SDL_PLATFORM_DREAMCAST
+    cont_btn_callback(0, CONT_RESET_BUTTONS, DREAMCAST_resetCallback);
+#endif
 
     SDL_InitTLSData();
     SDL_InitEnvironment();

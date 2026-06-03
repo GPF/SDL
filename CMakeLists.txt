@@ -318,6 +318,7 @@ dep_option(SDL_ARMNEON             "Use NEON assembly routines" ON "SDL_ASSEMBLY
 dep_option(SDL_ARMSVE2             "Use SVE2 assembly routines" ON "SDL_ASSEMBLY;SDL_CPU_ARM64" OFF)
 dep_option(SDL_LSX                 "Use LSX assembly routines" ON "SDL_ASSEMBLY;SDL_CPU_LOONGARCH64" OFF)
 dep_option(SDL_LASX                "Use LASX assembly routines" ON "SDL_ASSEMBLY;SDL_CPU_LOONGARCH64" OFF)
+set_option(SDL_SH4ZAM              "Use SH4ZAM acceleration" OFF)
 
 dep_option(SDL_DLOPEN_NOTES        "Record dlopen dependencies in .note.dlopen section" TRUE UNIX_SYS OFF)
 set_option(SDL_LIBC                "Use the system C library" ${SDL_LIBC_DEFAULT})
@@ -1032,6 +1033,11 @@ if(SDL_ASSEMBLY)
       endif()
     endif()
   endif()
+endif()
+
+if(SDL_SH4ZAM)
+    target_link_libraries(SDL3-static PRIVATE sh4zam)
+    target_compile_definitions(SDL3-static PRIVATE SDL_SH4ZAM=1)
 endif()
 
 if(NOT HAVE_MMX)
