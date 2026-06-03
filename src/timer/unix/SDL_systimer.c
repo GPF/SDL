@@ -50,6 +50,9 @@
 #ifdef SDL_PLATFORM_APPLE
 #include <mach/mach_time.h>
 #endif
+#ifdef SDL_PLATFORM_DREAMCAST
+#include <dc/perfctr.h>
+#endif
 
 // Use CLOCK_MONOTONIC_RAW, if available, which is not subject to adjustment by NTP
 #ifdef HAVE_CLOCK_GETTIME
@@ -88,6 +91,10 @@ Uint64 SDL_GetPerformanceCounter(void)
 {
     Uint64 ticks;
 
+#ifdef SDL_PLATFORM_DREAMCAST
+    ticks = perf_cntr_timer_ns();
+#else
+
     if (!checked_monotonic_time) {
         CheckMonotonicTime();
     }
@@ -114,11 +121,15 @@ Uint64 SDL_GetPerformanceCounter(void)
         ticks *= SDL_US_PER_SECOND;
         ticks += now.tv_usec;
     }
+#endif
     return ticks;
 }
 
 Uint64 SDL_GetPerformanceFrequency(void)
 {
+#ifdef SDL_PLATFORM_DREAMCAST
+    return 5 * 1000000000;
+#else
     if (!checked_monotonic_time) {
         CheckMonotonicTime();
     }
@@ -135,6 +146,7 @@ Uint64 SDL_GetPerformanceFrequency(void)
     }
 
     return SDL_US_PER_SECOND;
+#endif
 }
 
 void SDL_SYS_DelayNS(Uint64 ns)

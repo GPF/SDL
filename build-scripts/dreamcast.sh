@@ -16,6 +16,7 @@ ENABLE_TRAY=OFF
 ENABLE_HIDAPI=OFF
 ENABLE_SENSOR=OFF
 ENABLE_PTHREADS=ON
+ENABLE_SH4ZAM=OFF
 
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -45,6 +46,8 @@ while [[ "$#" -gt 0 ]]; do
         --disable-sensor) ENABLE_SENSOR=OFF ;;
         --enable-pthreads) ENABLE_PTHREADS=ON ;;
         --disable-pthreads) ENABLE_PTHREADS=OFF ;;
+        --enable-sh4zam) ENABLE_SH4ZAM=ON ;;
+        --disable-sh4zam) ENABLE_SH4ZAM=OFF ;;
 
         clean)
             if [ -d "$BUILD_DIR" ]; then
@@ -106,6 +109,7 @@ kos-cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
     -DSDL_HIDAPI:BOOL="$ENABLE_HIDAPI" \
     -DSDL_SENSOR:BOOL="$ENABLE_SENSOR" \
     -DSDL_PTHREADS:BOOL="$ENABLE_PTHREADS" \
+    -DSDL_SH4ZAM:BOOL="$ENABLE_SH4ZAM" \
     -DSDL_RENDER_VULKAN:BOOL=OFF \
     -DSDL_VULKAN:BOOL=OFF \
     -DSDL_OPENVR:BOOL=OFF \

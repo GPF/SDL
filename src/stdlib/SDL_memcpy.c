@@ -29,7 +29,9 @@
 #endif
 void *SDL_memcpy(SDL_OUT_BYTECAP(len) void *dst, SDL_IN_BYTECAP(len) const void *src, size_t len)
 {
-#if defined(__GNUC__) && (defined(HAVE_LIBC) && HAVE_LIBC)
+#ifdef SDL_SH4ZAM
+    return shz_memcpy(dst, src, len);
+#elif defined(__GNUC__) && (defined(HAVE_LIBC) && HAVE_LIBC)
     /* Presumably this is well tuned for speed.
        On my machine this is twice as fast as the C code below.
      */

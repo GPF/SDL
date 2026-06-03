@@ -24,6 +24,10 @@
 
 #include "../libm/math_libm.h"
 
+#ifdef SDL_SH4ZAM
+#include <sh4zam/shz_sh4zam.h>
+#endif
+
 double SDL_atan(double x)
 {
 #ifdef HAVE_ATAN
@@ -35,10 +39,14 @@ double SDL_atan(double x)
 
 float SDL_atanf(float x)
 {
+#ifdef SDL_SH4ZAM
+    return shz_atanf(x);
+#else
 #ifdef HAVE_ATANF
     return atanf(x);
 #else
     return (float)SDL_atan((double)x);
+#endif
 #endif
 }
 
@@ -53,10 +61,14 @@ double SDL_atan2(double y, double x)
 
 float SDL_atan2f(float y, float x)
 {
+#ifdef SDL_SH4ZAM
+    return shz_atan2f(y, x);
+#else
 #ifdef HAVE_ATAN2F
     return atan2f(y, x);
 #else
     return (float)SDL_atan2((double)y, (double)x);
+#endif
 #endif
 }
 
@@ -80,10 +92,14 @@ double SDL_acos(double val)
 
 float SDL_acosf(float val)
 {
+#ifdef SDL_SH4ZAM
+    return shz_acosf(val);
+#else
 #ifdef HAVE_ACOSF
     return acosf(val);
 #else
     return (float)SDL_acos((double)val);
+#endif
 #endif
 }
 
@@ -104,10 +120,14 @@ double SDL_asin(double val)
 
 float SDL_asinf(float val)
 {
+#ifdef SDL_SH4ZAM
+    return shz_asinf(val);
+#else
 #ifdef HAVE_ASINF
     return asinf(val);
 #else
     return (float)SDL_asin((double)val);
+#endif
 #endif
 }
 
@@ -127,10 +147,14 @@ double SDL_ceil(double x)
 
 float SDL_ceilf(float x)
 {
+#ifdef SDL_SH4ZAM
+    return shz_ceilf(x);
+#else
 #ifdef HAVE_CEILF
     return ceilf(x);
 #else
     return (float)SDL_ceil((double)x);
+#endif
 #endif
 }
 
@@ -147,10 +171,14 @@ double SDL_copysign(double x, double y)
 
 float SDL_copysignf(float x, float y)
 {
+#ifdef SDL_SH4ZAM
+    return shz_copysignf(x, y);
+#else
 #ifdef HAVE_COPYSIGNF
     return copysignf(x, y);
 #else
     return (float)SDL_copysign((double)x, (double)y);
+#endif
 #endif
 }
 
@@ -165,10 +193,14 @@ double SDL_cos(double x)
 
 float SDL_cosf(float x)
 {
+#ifdef SDL_SH4ZAM
+    return shz_cosf(x);
+#else
 #ifdef HAVE_COSF
     return cosf(x);
 #else
     return (float)SDL_cos((double)x);
+#endif
 #endif
 }
 
@@ -183,10 +215,14 @@ double SDL_exp(double x)
 
 float SDL_expf(float x)
 {
+#ifdef SDL_SH4ZAM
+    return shz_expf(x);
+#else
 #ifdef HAVE_EXPF
     return expf(x);
 #else
     return (float)SDL_exp((double)x);
+#endif
 #endif
 }
 
@@ -201,10 +237,14 @@ double SDL_fabs(double x)
 
 float SDL_fabsf(float x)
 {
+#ifdef SDL_SH4ZAM
+    return shz_fabsf(x);
+#else
 #ifdef HAVE_FABSF
     return fabsf(x);
 #else
     return (float)SDL_fabs((double)x);
+#endif
 #endif
 }
 
@@ -219,10 +259,14 @@ double SDL_floor(double x)
 
 float SDL_floorf(float x)
 {
+#ifdef SDL_SH4ZAM
+    return shz_floorf(x);
+#else
 #ifdef HAVE_FLOORF
     return floorf(x);
 #else
     return (float)SDL_floor((double)x);
+#endif
 #endif
 }
 
@@ -241,10 +285,14 @@ double SDL_trunc(double x)
 
 float SDL_truncf(float x)
 {
+#ifdef SDL_SH4ZAM
+    return shz_truncf(x);
+#else
 #ifdef HAVE_TRUNCF
     return truncf(x);
 #else
     return (float)SDL_trunc((double)x);
+#endif
 #endif
 }
 
@@ -259,10 +307,14 @@ double SDL_fmod(double x, double y)
 
 float SDL_fmodf(float x, float y)
 {
+#ifdef SDL_SH4ZAM
+    return shz_fmodf(x, y);
+#else
 #ifdef HAVE_FMODF
     return fmodf(x, y);
 #else
     return (float)SDL_fmod((double)x, (double)y);
+#endif
 #endif
 }
 
@@ -317,10 +369,14 @@ double SDL_log(double x)
 
 float SDL_logf(float x)
 {
+#ifdef SDL_SH4ZAM
+    return shz_logf(x);
+#else
 #ifdef HAVE_LOGF
     return logf(x);
 #else
     return (float)SDL_log((double)x);
+#endif
 #endif
 }
 
@@ -335,10 +391,14 @@ double SDL_log10(double x)
 
 float SDL_log10f(float x)
 {
+#ifdef SDL_SH4ZAM
+    return shz_log10f(x);
+#else
 #ifdef HAVE_LOG10F
     return log10f(x);
 #else
     return (float)SDL_log10((double)x);
+#endif
 #endif
 }
 
@@ -374,10 +434,14 @@ double SDL_pow(double x, double y)
 
 float SDL_powf(float x, float y)
 {
+#ifdef SDL_SH4ZAM
+    return shz_powf(x, y);
+#else
 #ifdef HAVE_POWF
     return powf(x, y);
 #else
     return (float)SDL_pow((double)x, (double)y);
+#endif
 #endif
 }
 
@@ -396,10 +460,14 @@ double SDL_round(double arg)
 
 float SDL_roundf(float arg)
 {
+#ifdef SDL_SH4ZAM
+    return shz_roundf(arg);
+#else
 #if defined HAVE_ROUNDF
     return roundf(arg);
 #else
     return (float)SDL_round((double)arg);
+#endif
 #endif
 }
 
@@ -456,10 +524,14 @@ double SDL_sin(double x)
 
 float SDL_sinf(float x)
 {
+#ifdef SDL_SH4ZAM
+    return shz_sinf(x);
+#else
 #ifdef HAVE_SINF
     return sinf(x);
 #else
     return (float)SDL_sin((double)x);
+#endif
 #endif
 }
 
@@ -474,10 +546,14 @@ double SDL_sqrt(double x)
 
 float SDL_sqrtf(float x)
 {
+#ifdef SDL_SH4ZAM
+    return shz_sqrtf(x);
+#else
 #ifdef HAVE_SQRTF
     return sqrtf(x);
 #else
     return (float)SDL_sqrt((double)x);
+#endif
 #endif
 }
 
@@ -492,10 +568,14 @@ double SDL_tan(double x)
 
 float SDL_tanf(float x)
 {
+#ifdef SDL_SH4ZAM
+    return shz_tanf(x);
+#else
 #ifdef HAVE_TANF
     return tanf(x);
 #else
     return (float)SDL_tan((double)x);
+#endif
 #endif
 }
 
