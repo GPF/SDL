@@ -172,7 +172,10 @@ const char *SDL_GetAppMetadataProperty(const char *name)
     }
     if (!value || !*value) {
         if (SDL_strcmp(name, SDL_PROP_APP_METADATA_NAME_STRING) == 0) {
-            value = "SDL Application";
+            value = SDL_GetExeName();
+            if (!value) {
+                value = "SDL Application";
+            }
         } else if (SDL_strcmp(name, SDL_PROP_APP_METADATA_TYPE_STRING) == 0) {
             value = "application";
         }
@@ -309,6 +312,7 @@ void SDL_InitMainThread(void)
     SDL_InitEnvironment();
     SDL_InitTicks();
     SDL_InitFilesystem();
+    SDL_CreateEventLock();
 
     if (!done_info) {
         const char *value;
@@ -327,6 +331,7 @@ void SDL_InitMainThread(void)
 
 static void SDL_QuitMainThread(void)
 {
+    SDL_DestroyEventLock();
     SDL_QuitFilesystem();
     SDL_QuitTicks();
     SDL_QuitEnvironment();

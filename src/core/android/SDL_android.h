@@ -64,7 +64,6 @@ extern void Android_JNI_SetOrientation(int w, int h, int resizable, const char *
 extern void Android_JNI_MinimizeWindow(void);
 extern bool Android_JNI_ShouldMinimizeOnFocusLoss(void);
 
-extern bool Android_JNI_GetAccelerometerValues(float values[3]);
 extern void Android_JNI_ShowScreenKeyboard(int input_type, SDL_Rect *inputRect);
 extern void Android_JNI_HideScreenKeyboard(void);
 extern ANativeWindow *Android_JNI_GetNativeWindow(void);
@@ -152,6 +151,8 @@ int SDL_GetAndroidSDKVersion(void);
 
 bool SDL_IsAndroidTablet(void);
 bool SDL_IsAndroidTV(void);
+
+char *SDL_GetAndroidPackageName(void);  // this is a SDL_malloc'd string the caller will own.
 
 // File Dialogs
 bool Android_JNI_ShowFileDialog(SDL_DialogFileCallback callback, void *userdata,
