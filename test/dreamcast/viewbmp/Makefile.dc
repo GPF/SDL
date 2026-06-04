@@ -13,7 +13,7 @@ clean:
 	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin romdisk.img
 
 $(TARGET).elf: $(OBJS)
-	kos-cc -DDREAMCAST -o $(TARGET).elf $(OBJS) -lSDL3 -lGL -lm -lkosutils -lpthread
+	kos-cc -DDREAMCAST -o $(TARGET).elf $(OBJS) -lSDL3 -lGL -lm -lkosutils -lpthread -lsh4zam
 
 $(TARGET).bin: $(TARGET).elf
 	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin

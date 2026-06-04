@@ -31,6 +31,12 @@ char *SDL_SYS_GetBasePath(void)
     return SDL_strdup("/rd/");
 }
 
+char *SDL_SYS_GetExeName(void)
+{
+    SDL_Unsupported();
+    return NULL;
+}
+
 char *SDL_SYS_GetPrefPath(const char *org, const char *app)
 {
     // Dreamcast has no writable persistent storage
