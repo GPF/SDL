@@ -24,7 +24,7 @@
 
 #include "../libm/math_libm.h"
 
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
 #include <sh4zam/shz_sh4zam.h>
 #endif
 
@@ -39,7 +39,7 @@ double SDL_atan(double x)
 
 float SDL_atanf(float x)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_atanf(x);
 #else
 #ifdef HAVE_ATANF
@@ -61,7 +61,7 @@ double SDL_atan2(double y, double x)
 
 float SDL_atan2f(float y, float x)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_atan2f(y, x);
 #else
 #ifdef HAVE_ATAN2F
@@ -92,7 +92,7 @@ double SDL_acos(double val)
 
 float SDL_acosf(float val)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_acosf(val);
 #else
 #ifdef HAVE_ACOSF
@@ -120,7 +120,7 @@ double SDL_asin(double val)
 
 float SDL_asinf(float val)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_asinf(val);
 #else
 #ifdef HAVE_ASINF
@@ -147,7 +147,7 @@ double SDL_ceil(double x)
 
 float SDL_ceilf(float x)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_ceilf(x);
 #else
 #ifdef HAVE_CEILF
@@ -171,7 +171,7 @@ double SDL_copysign(double x, double y)
 
 float SDL_copysignf(float x, float y)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_copysignf(x, y);
 #else
 #ifdef HAVE_COPYSIGNF
@@ -193,7 +193,7 @@ double SDL_cos(double x)
 
 float SDL_cosf(float x)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_cosf(x);
 #else
 #ifdef HAVE_COSF
@@ -215,7 +215,7 @@ double SDL_exp(double x)
 
 float SDL_expf(float x)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_expf(x);
 #else
 #ifdef HAVE_EXPF
@@ -237,7 +237,7 @@ double SDL_fabs(double x)
 
 float SDL_fabsf(float x)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_fabsf(x);
 #else
 #ifdef HAVE_FABSF
@@ -259,7 +259,7 @@ double SDL_floor(double x)
 
 float SDL_floorf(float x)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_floorf(x);
 #else
 #ifdef HAVE_FLOORF
@@ -285,7 +285,7 @@ double SDL_trunc(double x)
 
 float SDL_truncf(float x)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_truncf(x);
 #else
 #ifdef HAVE_TRUNCF
@@ -307,7 +307,7 @@ double SDL_fmod(double x, double y)
 
 float SDL_fmodf(float x, float y)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_fmodf(x, y);
 #else
 #ifdef HAVE_FMODF
@@ -369,7 +369,7 @@ double SDL_log(double x)
 
 float SDL_logf(float x)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_logf(x);
 #else
 #ifdef HAVE_LOGF
@@ -391,7 +391,7 @@ double SDL_log10(double x)
 
 float SDL_log10f(float x)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_log10f(x);
 #else
 #ifdef HAVE_LOG10F
@@ -434,7 +434,7 @@ double SDL_pow(double x, double y)
 
 float SDL_powf(float x, float y)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_powf(x, y);
 #else
 #ifdef HAVE_POWF
@@ -460,7 +460,7 @@ double SDL_round(double arg)
 
 float SDL_roundf(float arg)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_roundf(arg);
 #else
 #if defined HAVE_ROUNDF
@@ -524,7 +524,7 @@ double SDL_sin(double x)
 
 float SDL_sinf(float x)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_sinf(x);
 #else
 #ifdef HAVE_SINF
@@ -546,7 +546,7 @@ double SDL_sqrt(double x)
 
 float SDL_sqrtf(float x)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_sqrtf(x);
 #else
 #ifdef HAVE_SQRTF
@@ -568,7 +568,7 @@ double SDL_tan(double x)
 
 float SDL_tanf(float x)
 {
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     return shz_tanf(x);
 #else
 #ifdef HAVE_TANF

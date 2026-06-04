@@ -136,7 +136,7 @@ void *alloca(size_t);
 # endif
 #endif
 
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
 #  include <sh4zam/shz_sh4zam.h>
 #endif
 
@@ -2523,7 +2523,7 @@ extern SDL_DECLSPEC void * SDLCALL SDL_memcpy(SDL_OUT_BYTECAP(len) void *dst, SD
 #ifdef SDL_memcpy
 #undef SDL_memcpy
 #endif
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
 #define SDL_memcpy shz_memcpy
 #else
 #define SDL_memcpy  memcpy
@@ -2583,7 +2583,7 @@ extern SDL_DECLSPEC void * SDLCALL SDL_memmove(SDL_OUT_BYTECAP(len) void *dst, S
 #ifdef SDL_memmove
 #undef SDL_memmove
 #endif
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
 #define SDL_memmove shz_memmove
 #else
 #define SDL_memmove memmove

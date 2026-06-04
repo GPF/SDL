@@ -48,7 +48,7 @@ float SDL_randf(void)
     if (!SDL_rand_initialized) {
         SDL_srand(0);
     }
-#ifdef SDL_SH4ZAM
+#if defined(SDL_PLATFORM_DREAMCAST) && defined(SDL_SH4ZAM)
     int integerSeed = (int)SDL_rand_state;
     float result = shz_randf(&integerSeed);
     SDL_rand_state = integerSeed;
