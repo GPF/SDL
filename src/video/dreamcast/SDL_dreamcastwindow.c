@@ -31,14 +31,23 @@
 #include "SDL_dreamcastvideo.h"
 #include "SDL_dreamcastwindow.h"
 
+#include <kos/dbglog.h>
+#define DCWIN_PROBE(...) dbglog(DBG_INFO, "[dcwin_probe] " __VA_ARGS__)
+
 extern int __sdl_dc_is_60hz;
 
 bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_PropertiesID props) {
     const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
     SDL_VideoDisplay *display = _this->displays[0];
 
-    SDL_Log("DREAMCAST_CreateWindow: Client requested window %s at %d,%d with size %dx%d",
-            window->title ? window->title : "(null)", window->x, window->y, window->w, window->h);
+    DCWIN_PROBE("CreateWindow enter window=0x%08lx internal=0x%08lx flags=0x%08lx size=%dx%d pending=%dx%d\n",
+                (unsigned long)window,
+                (unsigned long)window->internal,
+                (unsigned long)window->flags,
+                window->w, window->h,
+                window->pending.w, window->pending.h);
+    SDL_Log("DREAMCAST_CreateWindow: Client requested window at %d,%d with size %dx%d",
+            window->x, window->y, window->w, window->h);
 
     // Default to desktop size if window size invalid
     int target_w = (window->w > 0) ? window->w : display->desktop_mode.w;
@@ -55,10 +64,13 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
     window->w = target_w;
     window->h = target_h;
 
+    DCWIN_PROBE("CreateWindow before SDL_SetWindowSize target=%dx%d\n", target_w, target_h);
     if (SDL_SetWindowSize(window, target_w, target_h) < 0) {
         SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Failed to set window size: %s", SDL_GetError());
         return false;
     }
+    DCWIN_PROBE("CreateWindow after SDL_SetWindowSize flags=0x%08lx size=%dx%d pending=%dx%d\n",
+                (unsigned long)window->flags, window->w, window->h, window->pending.w, window->pending.h);
 
     // Determine display + pixel mode
     int disp_mode = -1;
@@ -88,6 +100,7 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
     disp_mode = __sdl_dc_is_60hz ? DM_640x480 : DM_640x480_PAL_IL;
     pixel_mode = PM_RGB555; // OpenGL converts to ARGB1555
     SDL_Log("OpenGL mode: Setting hardware resolution to 640x480");
+    DCWIN_PROBE("CreateWindow vid_set_mode pre-opengl disp=%d pixel=%d\n", disp_mode, pixel_mode);
     vid_set_mode(disp_mode, pixel_mode);
 #endif
     if (disp_mode < 0) {
@@ -96,6 +109,7 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
     }
 
     vid_set_mode(disp_mode, pixel_mode);
+    DCWIN_PROBE("CreateWindow vid_set_mode final disp=%d pixel=%d\n", disp_mode, pixel_mode);
 
     // Add valid fullscreen display modes
     SDL_ResetFullscreenDisplayModes(display);
@@ -188,12 +202,22 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
     SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESIZED, window->w, window->h);
     SDL_SetKeyboardFocus(window);
     SDL_SetMouseFocus(window);
+    DCWIN_PROBE("CreateWindow return true window=0x%08lx internal=0x%08lx flags=0x%08lx size=%dx%d\n",
+                (unsigned long)window,
+                (unsigned long)window->internal,
+                (unsigned long)window->flags,
+                window->w, window->h);
     return true;
 }
 
 
 void DREAMCAST_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
 {
+    DCWIN_PROBE("SetWindowSize window=0x%08lx flags=0x%08lx size=%dx%d pending=%dx%d\n",
+                (unsigned long)window,
+                (unsigned long)window->flags,
+                window->w, window->h,
+                window->pending.w, window->pending.h);
     SDL_Log("DREAMCAST_SetWindowSize: applying resize to %dx%d", window->pending.w, window->pending.h);
 
     // Send a resize event so SDL3 updates internal pixel size state

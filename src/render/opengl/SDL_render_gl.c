@@ -27,6 +27,13 @@
 #include "SDL_shaders_gl.h"
 #include "../../video/SDL_pixels_c.h"
 
+#ifdef SDL_PLATFORM_DREAMCAST
+#include <kos/dbglog.h>
+#define GLRENDER_PROBE(...) dbglog(DBG_INFO, "[glrender_probe] " __VA_ARGS__)
+#else
+#define GLRENDER_PROBE(...)
+#endif
+
 #ifdef SDL_PLATFORM_MACOS
 #include <OpenGL/OpenGL.h>
 #endif
@@ -1213,7 +1220,11 @@ static bool SetDrawState(GL_RenderData *data, const SDL_RenderCommand *cmd, cons
     }
 
     vertex_array = cmd->command == SDL_RENDERCMD_DRAW_POINTS || cmd->command == SDL_RENDERCMD_DRAW_LINES || cmd->command == SDL_RENDERCMD_GEOMETRY;
+#ifdef SDL_PLATFORM_DREAMCAST
+    color_array = (cmd->command == SDL_RENDERCMD_GEOMETRY) && (cmd->data.draw.texture != NULL);
+#else
     color_array = cmd->command == SDL_RENDERCMD_GEOMETRY;
+#endif
     texture_array = cmd->data.draw.texture != NULL;
 
     if (vertex_array != data->drawstate.vertex_array) {
@@ -1407,8 +1418,26 @@ static bool GL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, v
 {
     // !!! FIXME: it'd be nice to use a vertex buffer instead of immediate mode...
     GL_RenderData *data = (GL_RenderData *)renderer->internal;
+#ifdef SDL_PLATFORM_DREAMCAST
+    static int queue_probe_count;
+    const bool queue_probe = queue_probe_count < 8;
+    int command_counts[SDL_RENDERCMD_GEOMETRY + 1] = { 0 };
+    if (queue_probe) {
+        GLRENDER_PROBE("RunCommandQueue enter renderer=0x%08lx cmd=0x%08lx vertices=0x%08lx vertsize=%lu\n",
+                       (unsigned long)renderer,
+                       (unsigned long)cmd,
+                       (unsigned long)vertices,
+                       (unsigned long)vertsize);
+    }
+#endif
 
     if (!GL_ActivateRenderer(renderer)) {
+#ifdef SDL_PLATFORM_DREAMCAST
+        if (queue_probe) {
+            GLRENDER_PROBE("RunCommandQueue GL_ActivateRenderer failed error=%s\n", SDL_GetError());
+            ++queue_probe_count;
+        }
+#endif
         return false;
     }
 
@@ -1432,6 +1461,11 @@ static bool GL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, v
 #endif
 
     while (cmd) {
+#ifdef SDL_PLATFORM_DREAMCAST
+        if (queue_probe && cmd->command >= 0 && cmd->command < SDL_arraysize(command_counts)) {
+            ++command_counts[cmd->command];
+        }
+#endif
         switch (cmd->command) {
         case SDL_RENDERCMD_SETDRAWCOLOR:
         {
@@ -1572,6 +1606,20 @@ static bool GL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, v
             SDL_RenderCommand *nextcmd = cmd->next;
             size_t count = cmd->data.draw.count;
             int ret;
+#ifdef SDL_PLATFORM_DREAMCAST
+            if (queue_probe) {
+                GLRENDER_PROBE("Geometry case command=%d texture=0x%08lx first=%u count=%lu color=%g,%g,%g,%g scale=%g\n",
+                               (int)thiscmdtype,
+                               (unsigned long)thistexture,
+                               (unsigned int)cmd->data.draw.first,
+                               (unsigned long)count,
+                               cmd->data.draw.color.r,
+                               cmd->data.draw.color.g,
+                               cmd->data.draw.color.b,
+                               cmd->data.draw.color.a,
+                               cmd->data.draw.color_scale);
+            }
+#endif
             while (nextcmd) {
                 const SDL_RenderCommandType nextcmdtype = nextcmd->command;
                 if (nextcmdtype != thiscmdtype) {
@@ -1582,6 +1630,11 @@ static bool GL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, v
                            nextcmd->data.draw.texture_address_mode_v != thisaddressmode_v ||
                            nextcmd->data.draw.blend != thisblend) {
                     break; // can't go any further on this draw call, different texture/blendmode copy up next.
+#ifdef SDL_PLATFORM_DREAMCAST
+                } else if (!thistexture &&
+                           SDL_memcmp(&nextcmd->data.draw.color, &cmd->data.draw.color, sizeof(cmd->data.draw.color)) != 0) {
+                    break; // GLdc has trouble with float color arrays, so keep solid-color geometry separate.
+#endif
                 } else {
                     finalcmd = nextcmd; // we can combine copy operations here. Mark this one as the furthest okay command.
                     count += nextcmd->data.draw.count;
@@ -1612,8 +1665,15 @@ static bool GL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, v
                         data->glColorPointer(4, GL_FLOAT, sizeof(float) * 8, verts + 2);
                         data->glTexCoordPointer(2, GL_FLOAT, sizeof(float) * 8, verts + 6);
                     } else {
+#ifdef SDL_PLATFORM_DREAMCAST
+                        const SDL_FColor *color = &cmd->data.draw.color;
+                        const float color_scale = cmd->data.draw.color_scale;
+                        data->glColor4f(color->r * color_scale, color->g * color_scale, color->b * color_scale, color->a);
+#endif
                         data->glVertexPointer(2, GL_FLOAT, sizeof(float) * 6, verts + 0);
+#ifndef SDL_PLATFORM_DREAMCAST
                         data->glColorPointer(4, GL_FLOAT, sizeof(float) * 6, verts + 2);
+#endif
                     }
                 }
 
@@ -1655,7 +1715,28 @@ static bool GL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, v
         data->drawstate.texture_array = false;
     }
 
-    return GL_CheckError("", renderer);
+    {
+        const bool result = GL_CheckError("", renderer);
+#ifdef SDL_PLATFORM_DREAMCAST
+        if (queue_probe) {
+            GLRENDER_PROBE("RunCommandQueue exit result=%d counts noop=%d viewport=%d clip=%d color=%d clear=%d points=%d lines=%d fillrects=%d copy=%d copyex=%d geom=%d\n",
+                           result ? 1 : 0,
+                           command_counts[SDL_RENDERCMD_NO_OP],
+                           command_counts[SDL_RENDERCMD_SETVIEWPORT],
+                           command_counts[SDL_RENDERCMD_SETCLIPRECT],
+                           command_counts[SDL_RENDERCMD_SETDRAWCOLOR],
+                           command_counts[SDL_RENDERCMD_CLEAR],
+                           command_counts[SDL_RENDERCMD_DRAW_POINTS],
+                           command_counts[SDL_RENDERCMD_DRAW_LINES],
+                           command_counts[SDL_RENDERCMD_FILL_RECTS],
+                           command_counts[SDL_RENDERCMD_COPY],
+                           command_counts[SDL_RENDERCMD_COPY_EX],
+                           command_counts[SDL_RENDERCMD_GEOMETRY]);
+            ++queue_probe_count;
+        }
+#endif
+        return result;
+    }
 }
 
 static SDL_Surface *GL_RenderReadPixels(SDL_Renderer *renderer, const SDL_Rect *rect)
@@ -1703,9 +1784,38 @@ static SDL_Surface *GL_RenderReadPixels(SDL_Renderer *renderer, const SDL_Rect *
 
 static bool GL_RenderPresent(SDL_Renderer *renderer)
 {
-    GL_ActivateRenderer(renderer);
+#ifdef SDL_PLATFORM_DREAMCAST
+    static int present_probe_count;
+    const bool present_probe = present_probe_count < 8;
+    if (present_probe) {
+        GLRENDER_PROBE("RenderPresent enter renderer=0x%08lx window=0x%08lx\n",
+                       (unsigned long)renderer,
+                       (unsigned long)renderer->window);
+    }
+#endif
 
-    return SDL_GL_SwapWindow(renderer->window);
+    if (!GL_ActivateRenderer(renderer)) {
+#ifdef SDL_PLATFORM_DREAMCAST
+        if (present_probe) {
+            GLRENDER_PROBE("RenderPresent GL_ActivateRenderer failed error=%s\n", SDL_GetError());
+            ++present_probe_count;
+        }
+#endif
+        return false;
+    }
+
+    {
+        const bool result = SDL_GL_SwapWindow(renderer->window);
+#ifdef SDL_PLATFORM_DREAMCAST
+        if (present_probe) {
+            GLRENDER_PROBE("RenderPresent exit result=%d error=%s\n",
+                           result ? 1 : 0,
+                           result ? "" : SDL_GetError());
+            ++present_probe_count;
+        }
+#endif
+        return result;
+    }
 }
 
 static void GL_DestroyTexture(SDL_Renderer *renderer, SDL_Texture *texture)
@@ -1833,6 +1943,10 @@ static bool GL_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_Pr
     }
 #ifdef SDL_PLATFORM_DREAMCAST
         SDL_Log("Dreamcast GL renderer initialization started.");
+        GLRENDER_PROBE("CreateRenderer enter window=0x%08lx flags=0x%08lx profile=%d major=%d minor=%d\n",
+                       (unsigned long)window,
+                       (unsigned long)SDL_GetWindowFlags(window),
+                       profile_mask, major, minor);
 #endif
 #ifndef SDL_VIDEO_VITA_PVR_OGL
     SDL_SyncWindow(window);
@@ -1845,9 +1959,21 @@ static bool GL_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_Pr
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, RENDERER_CONTEXT_MAJOR);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, RENDERER_CONTEXT_MINOR);
 
+#ifdef SDL_PLATFORM_DREAMCAST
+        GLRENDER_PROBE("before SDL_ReconfigureWindow old_flags=0x%08lx new_flags=0x%08lx\n",
+                       (unsigned long)window_flags,
+                       (unsigned long)((window_flags & ~(SDL_WINDOW_VULKAN | SDL_WINDOW_METAL)) | SDL_WINDOW_OPENGL));
+#endif
         if (!SDL_ReconfigureWindow(window, (window_flags & ~(SDL_WINDOW_VULKAN | SDL_WINDOW_METAL)) | SDL_WINDOW_OPENGL)) {
+#ifdef SDL_PLATFORM_DREAMCAST
+            GLRENDER_PROBE("SDL_ReconfigureWindow failed error=%s\n", SDL_GetError());
+#endif
             goto error;
         }
+#ifdef SDL_PLATFORM_DREAMCAST
+        GLRENDER_PROBE("after SDL_ReconfigureWindow flags=0x%08lx\n",
+                       (unsigned long)SDL_GetWindowFlags(window));
+#endif
     }
 #endif
 
@@ -1898,20 +2024,26 @@ static bool GL_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_Pr
 
 
     SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 0);
+    GLRENDER_PROBE("before SDL_GL_CreateContext\n");
     data->context = SDL_GL_CreateContext(window);
     if (!data->context) {
         SDL_Log("Couldn't create OpenGL context: %s", SDL_GetError());
         goto error;
     }
+    GLRENDER_PROBE("after SDL_GL_CreateContext context=0x%08lx\n", (unsigned long)data->context);
+    GLRENDER_PROBE("before SDL_GL_MakeCurrent\n");
     if (!SDL_GL_MakeCurrent(window, data->context)) {
         SDL_Log("Couldn't make OpenGL context current: %s", SDL_GetError());
         goto error;
     }
+    GLRENDER_PROBE("after SDL_GL_MakeCurrent\n");
 
+    GLRENDER_PROBE("before GL_LoadFunctions\n");
     if (!GL_LoadFunctions(data)) {
         SDL_Log("Couldn't load OpenGL functions: %s", SDL_GetError());
         goto error;
     }
+    GLRENDER_PROBE("after GL_LoadFunctions\n");
 
 #ifdef SDL_PLATFORM_MACOS
     // Enable multi-threaded rendering

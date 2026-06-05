@@ -23,6 +23,13 @@
 #include <SDL3/SDL_test.h>
 #include "SDL_test_internal.h"
 
+#ifdef SDL_PLATFORM_DREAMCAST
+#include <kos/dbglog.h>
+#define SDLTEST_COMMON_PROBE(...) dbglog(DBG_INFO, "[common_probe] " __VA_ARGS__)
+#else
+#define SDLTEST_COMMON_PROBE(...)
+#endif
+
 #define SDL_MAIN_NOIMPL
 #define SDL_MAIN_USE_CALLBACKS
 #include <SDL3/SDL_main.h>
@@ -1378,6 +1385,8 @@ bool SDLTest_CommonInit(SDLTest_CommonState *state)
             SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, r.w);
             SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, r.h);
             SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, state->window_flags);
+            SDLTEST_COMMON_PROBE("create window begin i=%d flags=0x%08lx rect=%d,%d %dx%d\n",
+                                 i, (unsigned long)state->window_flags, r.x, r.y, r.w, r.h);
             state->windows[i] = SDL_CreateWindowWithProperties(props);
             SDL_DestroyProperties(props);
             if (!state->windows[i]) {
@@ -1385,6 +1394,8 @@ bool SDLTest_CommonInit(SDLTest_CommonState *state)
                         SDL_GetError());
                 return false;
             }
+            SDLTEST_COMMON_PROBE("create window ok i=%d window=0x%08lx\n",
+                                 i, (unsigned long)state->windows[i]);
             if (state->window_minW || state->window_minH) {
                 SDL_SetWindowMinimumSize(state->windows[i], state->window_minW, state->window_minH);
             }
@@ -1426,12 +1437,17 @@ bool SDLTest_CommonInit(SDLTest_CommonState *state)
             }
 
             if (!state->skip_renderer && (state->renderdriver || !(state->window_flags & (SDL_WINDOW_OPENGL | SDL_WINDOW_VULKAN | SDL_WINDOW_METAL)))) {
+                SDLTEST_COMMON_PROBE("create renderer begin i=%d window=0x%08lx driver=%s\n",
+                                     i, (unsigned long)state->windows[i],
+                                     state->renderdriver ? state->renderdriver : "(null)");
                 state->renderers[i] = SDL_CreateRenderer(state->windows[i], state->renderdriver);
                 if (!state->renderers[i]) {
                     SDL_Log("Couldn't create renderer: %s",
                             SDL_GetError());
                     return false;
                 }
+                SDLTEST_COMMON_PROBE("create renderer ok i=%d renderer=0x%08lx\n",
+                                     i, (unsigned long)state->renderers[i]);
                 if (state->logical_w == 0 || state->logical_h == 0) {
                     state->logical_w = state->window_w;
                     state->logical_h = state->window_h;

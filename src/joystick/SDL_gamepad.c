@@ -1698,6 +1698,7 @@ static bool SDL_PrivateParseGamepadElement(SDL_Gamepad *gamepad, const char *szG
     SDL_GamepadBinding bind;
     SDL_GamepadButton button;
     SDL_GamepadAxis axis;
+    bool dpad2_axis = false;
     bool invert_input = false;
     char half_axis_input = 0;
     char half_axis_output = 0;
@@ -1724,12 +1725,34 @@ static bool SDL_PrivateParseGamepadElement(SDL_Gamepad *gamepad, const char *szG
     // FIXME: We fix these up when loading the mapping, does this ever get hit?
     //SDL_assert(!axby_mapping && !baxy_mapping);
 
-    axis = SDL_GetGamepadAxisFromString(szGameButton);
-    button = SDL_PrivateGetGamepadButtonFromString(szGameButton, axby_mapping, baxy_mapping);
+    if (SDL_strcasecmp(szGameButton, "dpup2") == 0) {
+        axis = SDL_GAMEPAD_AXIS_RIGHTY;
+        button = SDL_GAMEPAD_BUTTON_INVALID;
+        half_axis_output = '-';
+        dpad2_axis = true;
+    } else if (SDL_strcasecmp(szGameButton, "dpdown2") == 0) {
+        axis = SDL_GAMEPAD_AXIS_RIGHTY;
+        button = SDL_GAMEPAD_BUTTON_INVALID;
+        half_axis_output = '+';
+        dpad2_axis = true;
+    } else if (SDL_strcasecmp(szGameButton, "dpleft2") == 0) {
+        axis = SDL_GAMEPAD_AXIS_RIGHTX;
+        button = SDL_GAMEPAD_BUTTON_INVALID;
+        half_axis_output = '-';
+        dpad2_axis = true;
+    } else if (SDL_strcasecmp(szGameButton, "dpright2") == 0) {
+        axis = SDL_GAMEPAD_AXIS_RIGHTX;
+        button = SDL_GAMEPAD_BUTTON_INVALID;
+        half_axis_output = '+';
+        dpad2_axis = true;
+    } else {
+        axis = SDL_GetGamepadAxisFromString(szGameButton);
+        button = SDL_PrivateGetGamepadButtonFromString(szGameButton, axby_mapping, baxy_mapping);
+    }
     if (axis != SDL_GAMEPAD_AXIS_INVALID) {
         bind.output_type = SDL_GAMEPAD_BINDTYPE_AXIS;
         bind.output.axis.axis = axis;
-        if (axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) {
+        if (!dpad2_axis && (axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)) {
             bind.output.axis.axis_min = 0;
             bind.output.axis.axis_max = SDL_JOYSTICK_AXIS_MAX;
         } else {

@@ -29,6 +29,9 @@
 #include "GL/glu.h"
 #include "GL/glkos.h"
 
+#include <kos/dbglog.h>
+#define DCGL_PROBE(...) dbglog(DBG_INFO, "[dcgl_probe] " __VA_ARGS__)
+
 void glRasterPos2i(GLint x, GLint y)
 {
     // TODO: Implement glRasterPos2i for Dreamcast
@@ -177,6 +180,12 @@ bool DREAMCAST_GL_LoadLibrary(SDL_VideoDevice *_this, const char *path) {
 }
 
 bool DREAMCAST_GL_SwapBuffers(SDL_VideoDevice *_this, SDL_Window * window){
+    static int swap_probe_count;
+    if (swap_probe_count < 8) {
+        DCGL_PROBE("SwapBuffers window=0x%08lx count=%d\n",
+                   (unsigned long)window, swap_probe_count);
+        ++swap_probe_count;
+    }
     glKosSwapBuffers();
     return true;
 }
@@ -233,6 +242,7 @@ void DREAMCAST_GL_Shutdown(SDL_VideoDevice *_this) {
 SDL_GLContext DREAMCAST_GL_CreateContext(SDL_VideoDevice *_this, SDL_Window *window) {
     DreamcastGLContext *context;
 
+    DCGL_PROBE("CreateContext enter window=0x%08lx\n", (unsigned long)window);
     printf("Creating Dreamcast SDL3 OpenGL context...\n");
     // glKosInit();
 
@@ -252,10 +262,13 @@ SDL_GLContext DREAMCAST_GL_CreateContext(SDL_VideoDevice *_this, SDL_Window *win
     config.texture_twiddle = GL_FALSE;            // Enable texture twiddling for performance
 
     // Apply the configuration before initializing GLdc
+    DCGL_PROBE("CreateContext before glKosInitEx\n");
     glKosInitEx(&config);
+    DCGL_PROBE("CreateContext after glKosInitEx\n");
 
     context = (DreamcastGLContext *) SDL_calloc(1, sizeof(DreamcastGLContext));
     if (!context) {
+        DCGL_PROBE("CreateContext SDL_calloc failed\n");
         SDL_OutOfMemory();
         return NULL;
     }
@@ -268,6 +281,8 @@ SDL_GLContext DREAMCAST_GL_CreateContext(SDL_VideoDevice *_this, SDL_Window *win
 
 
 bool DREAMCAST_GL_MakeCurrent(SDL_VideoDevice *_this, SDL_Window *window, SDL_GLContext context) {
+    DCGL_PROBE("MakeCurrent window=0x%08lx context=0x%08lx\n",
+               (unsigned long)window, (unsigned long)context);
     printf("OpenGL context made current for window %p\n", window);
     return true;
 }
