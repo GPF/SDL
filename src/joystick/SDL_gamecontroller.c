@@ -955,6 +955,7 @@ static void SDL_PrivateGameControllerParseElement(SDL_GameController *gamecontro
     SDL_ExtendedGameControllerBind bind;
     SDL_GameControllerButton button;
     SDL_GameControllerAxis axis;
+    SDL_bool dpad2_axis = SDL_FALSE;
     SDL_bool invert_input = SDL_FALSE;
     char half_axis_input = 0;
     char half_axis_output = 0;
@@ -965,12 +966,34 @@ static void SDL_PrivateGameControllerParseElement(SDL_GameController *gamecontro
         half_axis_output = *szGameButton++;
     }
 
-    axis = SDL_GameControllerGetAxisFromString(szGameButton);
-    button = SDL_GameControllerGetButtonFromString(szGameButton);
+    if (SDL_strcasecmp(szGameButton, "dpup2") == 0) {
+        axis = SDL_CONTROLLER_AXIS_RIGHTY;
+        button = SDL_CONTROLLER_BUTTON_INVALID;
+        half_axis_output = '-';
+        dpad2_axis = SDL_TRUE;
+    } else if (SDL_strcasecmp(szGameButton, "dpdown2") == 0) {
+        axis = SDL_CONTROLLER_AXIS_RIGHTY;
+        button = SDL_CONTROLLER_BUTTON_INVALID;
+        half_axis_output = '+';
+        dpad2_axis = SDL_TRUE;
+    } else if (SDL_strcasecmp(szGameButton, "dpleft2") == 0) {
+        axis = SDL_CONTROLLER_AXIS_RIGHTX;
+        button = SDL_CONTROLLER_BUTTON_INVALID;
+        half_axis_output = '-';
+        dpad2_axis = SDL_TRUE;
+    } else if (SDL_strcasecmp(szGameButton, "dpright2") == 0) {
+        axis = SDL_CONTROLLER_AXIS_RIGHTX;
+        button = SDL_CONTROLLER_BUTTON_INVALID;
+        half_axis_output = '+';
+        dpad2_axis = SDL_TRUE;
+    } else {
+        axis = SDL_GameControllerGetAxisFromString(szGameButton);
+        button = SDL_GameControllerGetButtonFromString(szGameButton);
+    }
     if (axis != SDL_CONTROLLER_AXIS_INVALID) {
         bind.outputType = SDL_CONTROLLER_BINDTYPE_AXIS;
         bind.output.axis.axis = axis;
-        if (axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT || axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT) {
+        if (!dpad2_axis && (axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT || axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT)) {
             bind.output.axis.axis_min = 0;
             bind.output.axis.axis_max = SDL_JOYSTICK_AXIS_MAX;
         } else {

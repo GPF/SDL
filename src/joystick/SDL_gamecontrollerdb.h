@@ -1002,7 +1002,7 @@ static const char *s_ControllerMappings[] = {
     "000000004e696e74656e646f20334400,Nintendo 3DS,crc:3210,a:b0,b:b1,back:b2,dpdown:b7,dpleft:b5,dpright:b4,dpup:b6,leftshoulder:b9,lefttrigger:b14,leftx:a0,lefty:a1,rightshoulder:b8,righttrigger:b15,rightx:a2,righty:a3,start:b3,x:b10,y:b11,",
 #endif
 #ifdef SDL_JOYSTICK_DREAMCAST
-    "ff0013db5669727475616c2043007601,Dreamcast Controller,platform:Dreamcast,leftshoulder:b8,rightshoulder:b9,a:b2,b:b1,x:b6,y:b5,start:b3,dpup:h0.1,dpleft:h0.8,dpdown:h0.4,dpright:h0.2,dpup2:h1.1,dpleft2:h1.8,dpdown2:h1.4,dpright2:h1.2,righttrigger:a2~,lefttrigger:a3~,leftx:a0,lefty:a1,rightx:a4,righty:a5,",
+    "ff0013db5669727475616c2043007601,Dreamcast Controller,platform:Dreamcast,a:b2,b:b1,x:b6,y:b5,leftshoulder:b0,rightshoulder:b4,start:b3,dpup:h0.1,dpleft:h0.8,dpdown:h0.4,dpright:h0.2,dpup2:h1.1,dpleft2:h1.8,dpdown2:h1.4,dpright2:h1.2,righttrigger:a2~,lefttrigger:a3~,leftx:a0,lefty:a1,rightx:a4,righty:a5,",
 #endif
     "hidapi,*,a:b0,b:b1,back:b4,dpdown:b12,dpleft:b13,dpright:b14,dpup:b11,guide:b5,leftshoulder:b9,leftstick:b7,lefttrigger:a4,leftx:a0,lefty:a1,rightshoulder:b10,rightstick:b8,righttrigger:a5,rightx:a2,righty:a3,start:b6,x:b2,y:b3,",
     NULL

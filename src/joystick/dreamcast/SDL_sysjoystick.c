@@ -91,6 +91,10 @@ static int DREAMCAST_JoystickInit(void) {
         }
     }
 
+    for (i = 0; i < numdevs; ++i) {
+        SDL_PrivateJoystickAdded(i);
+    }
+
     printf("Number of joysticks initialized: %d\n", numdevs);
     return numdevs;
 }
