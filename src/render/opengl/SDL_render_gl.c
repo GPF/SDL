@@ -43,6 +43,208 @@
 #include <GL/glext.h>
 #endif
 
+#ifdef SDL_PLATFORM_DREAMCAST
+#ifndef GL_ARGB1555_KOS
+#define GL_ARGB1555_KOS 0xEF42
+#endif
+#ifndef GL_RGB565_KOS
+#define GL_RGB565_KOS 0xEF40
+#endif
+#ifndef GL_UNSIGNED_SHORT_5_6_5_TWID_KOS
+#define GL_UNSIGNED_SHORT_5_6_5_TWID_KOS 0xEEE0
+#endif
+#ifndef GL_UNSIGNED_SHORT_1_5_5_5_REV_TWID_KOS
+#define GL_UNSIGNED_SHORT_1_5_5_5_REV_TWID_KOS 0xEEE2
+#endif
+#ifndef GL_UNSIGNED_SHORT_4_4_4_4_REV_TWID_KOS
+#define GL_UNSIGNED_SHORT_4_4_4_4_REV_TWID_KOS 0xEEE3
+#endif
+#ifndef GL_ARGB4444_KOS
+#define GL_ARGB4444_KOS 0xEF41
+#endif
+#ifndef GL_RGB565_TWID_KOS
+#define GL_RGB565_TWID_KOS 0xEF43
+#endif
+#ifndef GL_ARGB4444_TWID_KOS
+#define GL_ARGB4444_TWID_KOS 0xEF44
+#endif
+#ifndef GL_ARGB1555_TWID_KOS
+#define GL_ARGB1555_TWID_KOS 0xEF45
+#endif
+#ifndef GL_COMPRESSED_RGB_565_VQ_KOS
+#define GL_COMPRESSED_RGB_565_VQ_KOS 0xEEE4
+#endif
+#ifndef GL_COMPRESSED_ARGB_1555_VQ_KOS
+#define GL_COMPRESSED_ARGB_1555_VQ_KOS 0xEEE6
+#endif
+#ifndef GL_COMPRESSED_ARGB_4444_VQ_KOS
+#define GL_COMPRESSED_ARGB_4444_VQ_KOS 0xEEE7
+#endif
+#ifndef GL_COMPRESSED_RGB_565_VQ_TWID_KOS
+#define GL_COMPRESSED_RGB_565_VQ_TWID_KOS 0xEEE8
+#endif
+#ifndef GL_COMPRESSED_ARGB_1555_VQ_TWID_KOS
+#define GL_COMPRESSED_ARGB_1555_VQ_TWID_KOS 0xEEEA
+#endif
+#ifndef GL_COMPRESSED_ARGB_4444_VQ_TWID_KOS
+#define GL_COMPRESSED_ARGB_4444_VQ_TWID_KOS 0xEEEB
+#endif
+#ifndef GL_COMPRESSED_RGB_565_VQ_MIPMAP_KOS
+#define GL_COMPRESSED_RGB_565_VQ_MIPMAP_KOS 0xEEEC
+#endif
+#ifndef GL_COMPRESSED_ARGB_1555_VQ_MIPMAP_KOS
+#define GL_COMPRESSED_ARGB_1555_VQ_MIPMAP_KOS 0xEEED
+#endif
+#ifndef GL_COMPRESSED_ARGB_4444_VQ_MIPMAP_KOS
+#define GL_COMPRESSED_ARGB_4444_VQ_MIPMAP_KOS 0xEEEE
+#endif
+#ifndef GL_COMPRESSED_RGB_565_VQ_MIPMAP_TWID_KOS
+#define GL_COMPRESSED_RGB_565_VQ_MIPMAP_TWID_KOS 0xEEEF
+#endif
+#ifndef GL_COMPRESSED_ARGB_1555_VQ_MIPMAP_TWID_KOS
+#define GL_COMPRESSED_ARGB_1555_VQ_MIPMAP_TWID_KOS 0xEEF0
+#endif
+#ifndef GL_COMPRESSED_ARGB_4444_VQ_MIPMAP_TWID_KOS
+#define GL_COMPRESSED_ARGB_4444_VQ_MIPMAP_TWID_KOS 0xEEF1
+#endif
+
+extern void APIENTRY glCompressedTexImage2DARB(GLenum target, GLint level, GLenum internalFormat,
+                                              GLsizei width, GLsizei height, GLint border,
+                                              GLsizei imageSize, const GLvoid *data);
+#endif
+
+#ifdef SDL_PLATFORM_DREAMCAST
+typedef struct SDL_DreamcastDtHeader
+{
+    char fourcc[4];
+    Uint32 chunk_size;
+    Uint8 version;
+    Uint8 header_size;
+    Uint8 codebook_size;
+    Uint8 colors_used;
+    Uint16 width_pixels;
+    Uint16 height_pixels;
+    Uint32 pvr_type;
+    Uint32 pad1;
+    Uint32 pad2;
+    /* The DcTx header is 32 bytes total; this reserved word keeps the
+       SDL header layout aligned with the GLdc loader and the on-disk file. */
+    Uint32 pad3;
+} SDL_DreamcastDtHeader;
+
+#define SDL_DC_DT_HEADER_SIZE 32
+#define SDL_DC_DT_MIPMAP_SHIFT 31
+#define SDL_DC_DT_VQ_SHIFT 30
+#define SDL_DC_DT_PIXEL_FORMAT_SHIFT 27
+#define SDL_DC_DT_PIXEL_FORMAT_MASK 0x7
+#define SDL_DC_DT_NOT_TWIDDLED_SHIFT 26
+#define SDL_DC_DT_STRIDE_SHIFT 25
+
+enum
+{
+    SDL_DC_DT_FMT_ARGB1555 = 0,
+    SDL_DC_DT_FMT_RGB565 = 1,
+    SDL_DC_DT_FMT_ARGB4444 = 2
+};
+
+static bool GL_DreamcastDtCompressed(Uint32 pvr_type)
+{
+    return (bool)((pvr_type >> SDL_DC_DT_VQ_SHIFT) & 1);
+}
+
+static bool GL_DreamcastDtMipmapped(Uint32 pvr_type)
+{
+    return (bool)((pvr_type >> SDL_DC_DT_MIPMAP_SHIFT) & 1);
+}
+
+static bool GL_DreamcastDtTwiddled(Uint32 pvr_type)
+{
+    return (bool)(((pvr_type >> SDL_DC_DT_NOT_TWIDDLED_SHIFT) & 1) == 0);
+}
+
+static bool GL_DreamcastDtStrided(Uint32 pvr_type)
+{
+    return (bool)((pvr_type >> SDL_DC_DT_STRIDE_SHIFT) & 1);
+}
+
+static int GL_DreamcastDtPixelFormat(Uint32 pvr_type)
+{
+    return (int)((pvr_type >> SDL_DC_DT_PIXEL_FORMAT_SHIFT) & SDL_DC_DT_PIXEL_FORMAT_MASK);
+}
+
+static SDL_PixelFormat GL_DreamcastDtSDLFormat(int dt_format)
+{
+    switch (dt_format) {
+    case SDL_DC_DT_FMT_RGB565:
+        return SDL_PIXELFORMAT_RGB565;
+    case SDL_DC_DT_FMT_ARGB1555:
+        return SDL_PIXELFORMAT_ARGB1555;
+    case SDL_DC_DT_FMT_ARGB4444:
+        return SDL_PIXELFORMAT_ARGB4444;
+    default:
+        return SDL_PIXELFORMAT_UNKNOWN;
+    }
+}
+
+static GLenum GL_DreamcastDtInternalFormat(int dt_format, bool compressed, bool twiddled, bool mipmapped)
+{
+    if (compressed) {
+        switch (dt_format) {
+        case SDL_DC_DT_FMT_RGB565:
+            if (mipmapped) {
+                return twiddled ? GL_COMPRESSED_RGB_565_VQ_MIPMAP_TWID_KOS : GL_COMPRESSED_RGB_565_VQ_MIPMAP_KOS;
+            }
+            return twiddled ? GL_COMPRESSED_RGB_565_VQ_TWID_KOS : GL_COMPRESSED_RGB_565_VQ_KOS;
+        case SDL_DC_DT_FMT_ARGB1555:
+            if (mipmapped) {
+                return twiddled ? GL_COMPRESSED_ARGB_1555_VQ_MIPMAP_TWID_KOS : GL_COMPRESSED_ARGB_1555_VQ_MIPMAP_KOS;
+            }
+            return twiddled ? GL_COMPRESSED_ARGB_1555_VQ_TWID_KOS : GL_COMPRESSED_ARGB_1555_VQ_KOS;
+        case SDL_DC_DT_FMT_ARGB4444:
+            if (mipmapped) {
+                return twiddled ? GL_COMPRESSED_ARGB_4444_VQ_MIPMAP_TWID_KOS : GL_COMPRESSED_ARGB_4444_VQ_MIPMAP_KOS;
+            }
+            return twiddled ? GL_COMPRESSED_ARGB_4444_VQ_TWID_KOS : GL_COMPRESSED_ARGB_4444_VQ_KOS;
+        default:
+            return 0;
+        }
+    }
+
+    switch (dt_format) {
+    case SDL_DC_DT_FMT_RGB565:
+        return twiddled ? GL_RGB565_TWID_KOS : GL_RGB565_KOS;
+    case SDL_DC_DT_FMT_ARGB1555:
+        return twiddled ? GL_ARGB1555_TWID_KOS : GL_ARGB1555_KOS;
+    case SDL_DC_DT_FMT_ARGB4444:
+        return twiddled ? GL_ARGB4444_TWID_KOS : GL_ARGB4444_KOS;
+    default:
+        return 0;
+    }
+}
+
+static void GL_DreamcastDtFormatAndType(int dt_format, bool twiddled, GLenum *format, GLenum *type)
+{
+    switch (dt_format) {
+    case SDL_DC_DT_FMT_RGB565:
+        *format = GL_RGB;
+        *type = twiddled ? GL_UNSIGNED_SHORT_5_6_5_TWID_KOS : GL_UNSIGNED_SHORT_5_6_5;
+        break;
+    case SDL_DC_DT_FMT_ARGB1555:
+        *format = GL_BGRA;
+        *type = twiddled ? GL_UNSIGNED_SHORT_1_5_5_5_REV_TWID_KOS : GL_UNSIGNED_SHORT_1_5_5_5_REV;
+        break;
+    case SDL_DC_DT_FMT_ARGB4444:
+        *format = GL_BGRA;
+        *type = twiddled ? GL_UNSIGNED_SHORT_4_4_4_4_REV_TWID_KOS : GL_UNSIGNED_SHORT_4_4_4_4_REV;
+        break;
+    default:
+        *format = 0;
+        *type = 0;
+        break;
+    }
+}
+#endif
+
 /* To prevent unnecessary window recreation,
  * these should match the defaults selected in SDL_GL_ResetAttributes
  */
@@ -437,12 +639,12 @@ static bool convert_format(Uint32 pixel_format, GLint *internalFormat, GLenum *f
         *type = GL_UNSIGNED_BYTE;  // Dreamcast-specific handling for RGB888
         break;
     case SDL_PIXELFORMAT_RGB565:
-        *internalFormat = GL_RGB;
+        *internalFormat = GL_RGB565_KOS;
         *format = GL_RGB;
         *type = GL_UNSIGNED_SHORT_5_6_5;  // Dreamcast-specific handling for RGB565
         break;
     case SDL_PIXELFORMAT_ARGB1555:
-        *internalFormat = GL_RGBA;
+        *internalFormat = GL_ARGB1555_KOS;
         *format = GL_BGRA; 
         *type = GL_UNSIGNED_SHORT_1_5_5_5_REV; // Dreamcast-specific handling for ARGB1555
         break;
@@ -617,14 +819,10 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
     }
 
 #ifdef SDL_PLATFORM_DREAMCAST
-    SDL_Log("before texture->format = %s", SDL_GetPixelFormatName(texture->format));
-
     if (texture->access != SDL_TEXTUREACCESS_STREAMING &&
         texture->format != SDL_PIXELFORMAT_RGB565 &&
         texture->format != SDL_PIXELFORMAT_ARGB1555 &&
         texture->format != SDL_PIXELFORMAT_ARGB4444) {
-        SDL_Log("Dreamcast: using ARGB1555 texture storage for source format %s",
-                SDL_GetPixelFormatName(texture->format));
         texture->format = SDL_PIXELFORMAT_ARGB1555;
     }
 #endif
@@ -791,6 +989,176 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
 
     return GL_CheckError("", renderer);
 }
+
+#ifdef SDL_PLATFORM_DREAMCAST
+SDL_Texture *SDL_LoadDreamcastTexture_IO(SDL_Renderer *renderer, SDL_IOStream *src, bool closeio)
+{
+    SDL_DreamcastDtHeader header;
+    SDL_Texture *texture = NULL;
+    GL_RenderData *renderdata;
+    GL_TextureData *data;
+    Uint8 *payload = NULL;
+    Uint32 header_size;
+    Uint32 payload_size;
+    SDL_PixelFormat sdl_format;
+    GLenum internal_format;
+    GLenum upload_format = 0;
+    GLenum upload_type = 0;
+    bool texture_enabled = false;
+    bool compressed;
+    bool mipmapped;
+    bool twiddled;
+    int dt_format;
+    int result = -1;
+
+    if (!renderer) {
+        SDL_InvalidParamError("renderer");
+        goto done;
+    }
+    if (!src) {
+        SDL_InvalidParamError("src");
+        goto done;
+    }
+    if (!renderer->internal) {
+        SDL_SetError("Dreamcast .dt textures require an active OpenGL renderer");
+        goto done;
+    }
+
+    if (SDL_ReadIO(src, &header, sizeof(header)) != sizeof(header)) {
+        SDL_SetError("Could not read Dreamcast .dt header");
+        goto done;
+    }
+
+    if (SDL_memcmp(header.fourcc, "DcTx", 4) != 0) {
+        SDL_SetError("Invalid Dreamcast .dt texture magic");
+        goto done;
+    }
+    if (header.version != 0) {
+        SDL_SetError("Unsupported Dreamcast .dt version %u", (unsigned)header.version);
+        goto done;
+    }
+
+    header_size = ((Uint32)header.header_size + 1u) * SDL_DC_DT_HEADER_SIZE;
+    if (header_size < SDL_DC_DT_HEADER_SIZE || header.chunk_size <= header_size) {
+        SDL_SetError("Invalid Dreamcast .dt texture size");
+        goto done;
+    }
+    if (header.width_pixels == 0 || header.height_pixels == 0) {
+        SDL_SetError("Invalid Dreamcast .dt texture dimensions");
+        goto done;
+    }
+    if (GL_DreamcastDtStrided(header.pvr_type)) {
+        SDL_SetError("Dreamcast strided .dt textures are not supported by the SDL OpenGL renderer yet");
+        goto done;
+    }
+
+    dt_format = GL_DreamcastDtPixelFormat(header.pvr_type);
+    sdl_format = GL_DreamcastDtSDLFormat(dt_format);
+    if (sdl_format == SDL_PIXELFORMAT_UNKNOWN) {
+        SDL_SetError("Unsupported Dreamcast .dt pixel format %d", dt_format);
+        goto done;
+    }
+
+    compressed = GL_DreamcastDtCompressed(header.pvr_type);
+    mipmapped = GL_DreamcastDtMipmapped(header.pvr_type);
+    twiddled = GL_DreamcastDtTwiddled(header.pvr_type);
+    internal_format = GL_DreamcastDtInternalFormat(dt_format, compressed, twiddled, mipmapped);
+    if (!internal_format) {
+        SDL_SetError("Unsupported Dreamcast .dt texture format");
+        goto done;
+    }
+
+    if (!compressed) {
+        GL_DreamcastDtFormatAndType(dt_format, twiddled, &upload_format, &upload_type);
+        if (!upload_format || !upload_type) {
+            SDL_SetError("Unsupported Dreamcast .dt upload type");
+            goto done;
+        }
+    }
+
+    payload_size = header.chunk_size - header_size;
+    if (payload_size > 0x7fffffffU) {
+        SDL_SetError("Dreamcast .dt texture payload is too large");
+        goto done;
+    }
+
+    if (header_size > SDL_DC_DT_HEADER_SIZE) {
+        if (SDL_SeekIO(src, (Sint64)header_size, SDL_IO_SEEK_SET) < 0) {
+            SDL_SetError("Could not seek to Dreamcast .dt texture payload");
+            goto done;
+        }
+    }
+
+    payload = (Uint8 *)SDL_malloc(payload_size);
+    if (!payload) {
+        SDL_OutOfMemory();
+        goto done;
+    }
+    if (SDL_ReadIO(src, payload, payload_size) != payload_size) {
+        SDL_SetError("Could not read Dreamcast .dt texture payload");
+        goto done;
+    }
+
+    texture = SDL_CreateTexture(renderer, sdl_format, SDL_TEXTUREACCESS_STATIC,
+                                (int)header.width_pixels, (int)header.height_pixels);
+    if (!texture) {
+        goto done;
+    }
+
+    renderdata = (GL_RenderData *)renderer->internal;
+    data = (GL_TextureData *)texture->internal;
+    if (!data) {
+        SDL_SetError("Dreamcast .dt texture requires OpenGL texture data");
+        goto done;
+    }
+
+    GL_ActivateRenderer(renderer);
+    renderdata->drawstate.texture = NULL;
+    renderdata->drawstate.texturing = false;
+    renderdata->glEnable(renderdata->textype);
+    texture_enabled = true;
+    renderdata->glBindTexture(renderdata->textype, data->texture);
+    GL_ClearErrors(renderer);
+
+    if (compressed) {
+        glCompressedTexImage2DARB(renderdata->textype, 0, internal_format,
+                                  header.width_pixels, header.height_pixels, 0,
+                                  (GLsizei)payload_size, payload);
+    } else {
+        renderdata->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        renderdata->glTexImage2D(renderdata->textype, 0, internal_format,
+                                 header.width_pixels, header.height_pixels, 0,
+                                 upload_format, upload_type, payload);
+        data->format = upload_format;
+        data->formattype = upload_type;
+    }
+
+    if (GL_CheckError("Dreamcast .dt texture upload", renderer) < 0) {
+        goto done;
+    }
+
+    SDL_Log("Dreamcast: loaded .dt texture %ux%u fmt=%d compressed=%d twiddled=%d mipmapped=%d",
+            (unsigned)header.width_pixels, (unsigned)header.height_pixels, dt_format,
+            (int)compressed, (int)twiddled, (int)mipmapped);
+    result = 0;
+
+done:
+    if (texture_enabled) {
+        renderdata->glDisable(renderdata->textype);
+    }
+    if (closeio && src) {
+        SDL_CloseIO(src);
+    }
+    SDL_free(payload);
+    if (result < 0) {
+        if (texture) {
+            SDL_DestroyTexture(texture);
+        }
+        return NULL;
+    }
+    return texture;
+}
+#endif
 
 static bool GL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
                              const SDL_Rect *rect, const void *pixels, int pitch)
@@ -2014,7 +2382,7 @@ static bool GL_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_Pr
 
     renderer->name = GL_RenderDriver.name;
 #ifdef SDL_PLATFORM_DREAMCAST
-    // SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGB565);
+    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGB565);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB1555);
     // SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB4444);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_XRGB8888);

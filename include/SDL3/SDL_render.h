@@ -60,6 +60,9 @@
 #include <SDL3/SDL_surface.h>
 #include <SDL3/SDL_video.h>
 #include <SDL3/SDL_gpu.h>
+#ifdef SDL_PLATFORM_DREAMCAST
+#include <SDL3/SDL_iostream.h>
+#endif
 
 #include <SDL3/SDL_begin_code.h>
 /* Set up for C function definitions, even when using C++ */
@@ -675,6 +678,22 @@ extern SDL_DECLSPEC SDL_Texture * SDLCALL SDL_CreateTexture(SDL_Renderer *render
  * \sa SDL_DestroyTexture
  */
 extern SDL_DECLSPEC SDL_Texture * SDLCALL SDL_CreateTextureFromSurface(SDL_Renderer *renderer, SDL_Surface *surface);
+
+#ifdef SDL_PLATFORM_DREAMCAST
+/**
+ * Load a Dreamcast .dt texture into the OpenGL renderer.
+ *
+ * This is a Dreamcast-specific native texture loader. The .dt file is expected
+ * to contain a pvrtex DcTx header followed by PVR-ready texture data.
+ *
+ * \param renderer the rendering context.
+ * \param src an SDL_IOStream stream containing the .dt file.
+ * \param closeio non-zero to close src before returning.
+ * eturns the created texture or NULL on failure; call SDL_GetError() for
+ *          more information.
+ */
+extern SDL_DECLSPEC SDL_Texture * SDLCALL SDL_LoadDreamcastTexture_IO(SDL_Renderer *renderer, SDL_IOStream *src, bool closeio);
+#endif
 
 /**
  * Create a texture for a rendering context with the specified properties.
