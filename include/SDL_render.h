@@ -54,6 +54,10 @@
 #include "SDL_rect.h"
 #include "SDL_video.h"
 
+#ifdef __DREAMCAST__
+#include "SDL_rwops.h"
+#endif
+
 #include "begin_code.h"
 /* Set up for C function definitions, even when using C++ */
 #ifdef __cplusplus
@@ -362,6 +366,22 @@ extern DECLSPEC SDL_Texture * SDLCALL SDL_CreateTexture(SDL_Renderer * renderer,
  * \sa SDL_QueryTexture
  */
 extern DECLSPEC SDL_Texture * SDLCALL SDL_CreateTextureFromSurface(SDL_Renderer * renderer, SDL_Surface * surface);
+
+#ifdef __DREAMCAST__
+/**
+ * Load a Dreamcast .dt texture into the OpenGL renderer.
+ *
+ * This is a Dreamcast-specific native texture loader. The .dt file is expected
+ * to contain a pvrtex DcTx header followed by PVR-ready texture data.
+ *
+ * \param renderer the rendering context.
+ * \param src an SDL_RWops stream containing the .dt file.
+ * \param closeio non-zero to close src before returning.
+ * \returns the created texture or NULL on failure; call SDL_GetError() for
+ *          more information.
+ */
+extern DECLSPEC SDL_Texture * SDLCALL SDL_LoadDreamcastTexture_RW(SDL_Renderer * renderer, SDL_RWops *src, int closeio);
+#endif
 
 /**
  * Query the attributes of a texture.

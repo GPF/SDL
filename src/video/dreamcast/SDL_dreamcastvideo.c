@@ -261,7 +261,7 @@ int DREAMCAST_VideoInit(_THIS) {
     }
 #endif    
     // SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");
-    SDL_Log("SDL2 Dreamcast video initialized: %dx%d, ARGB1555", width, height);
+    SDL_Log("SDL2 Dreamcast video initialized: %dx%d", width, height);
     return 0;
 }
 
