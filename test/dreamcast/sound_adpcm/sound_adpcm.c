@@ -151,9 +151,6 @@ int main(int argc, char **argv)
     SDL_Log("Streaming ADPCM: %s", WAV_PATH);
 
     const int minimum = (int)((wave.soundlen / SDL_AUDIO_FRAMESIZE(spec)) / 2);
-    SDL_Log("sample queued %" SDL_PRIu32 " bytes (queued=%d minimum=%d)",
-            wave.soundlen, SDL_GetAudioStreamQueued(stream), minimum);
-
     for (;;) {
         if (SDL_GetAudioStreamQueued(stream) < minimum) {
             if (!SDL_PutAudioStreamData(stream, wave.sound, (int)wave.soundlen)) {
@@ -162,8 +159,6 @@ int main(int argc, char **argv)
                 SDL_Quit();
                 return 1;
             }
-            SDL_Log("sample queued %" SDL_PRIu32 " bytes (queued=%d minimum=%d)",
-                    wave.soundlen, SDL_GetAudioStreamQueued(stream), minimum);
         }
 
         maple_device_t *cont = maple_enum_type(0, MAPLE_FUNC_CONTROLLER);

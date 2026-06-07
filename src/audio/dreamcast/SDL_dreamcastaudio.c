@@ -74,14 +74,9 @@ static void *stream_callback(snd_stream_hnd_t hnd, int req, int *done)
         SDL_SetAtomicInt(&hidden->active_buffer, next_buf);
         SDL_SetAtomicInt(&hidden->buffer_ready, 0);
 
-        SDL_Log("dc stream_callback req=%d done=%d returning=%d next_fill=%d ready=%d",
-                req, *done, next_buf, next_buf, SDL_GetAtomicInt(&hidden->buffer_ready));
-
         return hidden->mixbuf[next_buf];
     }
 
-    SDL_Log("dc stream_callback req=%d no buffer ready active=%d", req,
-            SDL_GetAtomicInt(&hidden->active_buffer));
     return hidden->mixbuf[SDL_GetAtomicInt(&hidden->active_buffer)];
 }
 
@@ -91,21 +86,10 @@ static void *stream_callback(snd_stream_hnd_t hnd, int req, int *done)
 static bool DREAMCASTAUD_WaitDevice(SDL_AudioDevice *device)
 {
     struct SDL_PrivateAudioData *hidden = (struct SDL_PrivateAudioData *)device->hidden;
-    int polls = 0;
-    SDL_Log("dc WaitDevice enter ready=%d active=%d",
-            SDL_GetAtomicInt(&hidden->buffer_ready),
-            SDL_GetAtomicInt(&hidden->active_buffer));
     while (SDL_GetAtomicInt(&hidden->buffer_ready)) {
-        const int poll_result = snd_stream_poll(hidden->stream_handle);
-        SDL_Log("dc WaitDevice poll[%d]=%d ready=%d active=%d",
-                polls++, poll_result,
-                SDL_GetAtomicInt(&hidden->buffer_ready),
-                SDL_GetAtomicInt(&hidden->active_buffer));
+        snd_stream_poll(hidden->stream_handle);
         thd_sleep(1);
     }
-    SDL_Log("dc WaitDevice leave ready=%d active=%d",
-            SDL_GetAtomicInt(&hidden->buffer_ready),
-            SDL_GetAtomicInt(&hidden->active_buffer));
 
     return true;
 }
@@ -126,10 +110,6 @@ static bool DREAMCASTAUD_PlayDevice(SDL_AudioDevice *device, const Uint8 *buffer
 
     DREAMCASTAUD_WaitDevice(device);
     SDL_SetAtomicInt(&hidden->buffer_ready, 1);
-    SDL_Log("dc PlayDevice size=%d ready=%d active=%d",
-            buffer_size,
-            SDL_GetAtomicInt(&hidden->buffer_ready),
-            SDL_GetAtomicInt(&hidden->active_buffer));
     return true;
 }
 
@@ -191,7 +171,6 @@ static bool DREAMCASTAUD_OpenDevice(SDL_AudioDevice *device)
 
     if (adpcm_stream) {
         device->spec.format = SDL_AUDIO_S8;
-        SDL_Log("Forcing ADPCM device format to SDL_AUDIO_S8 for raw passthrough");
     }
 
     channels = device->spec.channels;
@@ -227,10 +206,6 @@ static bool DREAMCASTAUD_OpenDevice(SDL_AudioDevice *device)
 
     device->buffer_size = hidden->buffer_size;
     device->work_buffer_size = SDL_max(device->buffer_size, device->work_buffer_size);
-    SDL_Log("Buffer size: %d sample_frames=%d channels=%d freq=%d format=%s adpcm=%d",
-            device->buffer_size, device->sample_frames, device->spec.channels, device->spec.freq,
-            SDL_GetAudioFormatName(device->spec.format), adpcm_stream ? 1 : 0);
-
     hidden->stream_handle = snd_stream_alloc(NULL, hidden->buffer_size);
     if (hidden->stream_handle == SND_STREAM_INVALID) {
         SDL_free(hidden);
@@ -255,23 +230,15 @@ static bool DREAMCASTAUD_OpenDevice(SDL_AudioDevice *device)
     snd_stream_reinit(hidden->stream_handle, stream_callback);
 
     if (adpcm_stream) {
-        SDL_Log("Starting ADPCM stream: freq=%d stereo=%d stream_handle=%d",
-                frequency, (channels == 2) ? 1 : 0, hidden->stream_handle);
         snd_stream_start_adpcm(hidden->stream_handle, frequency, (channels == 2) ? 1 : 0);
     } else if (device->spec.format == SDL_AUDIO_S16LE) {
-        SDL_Log("Starting PCM16 stream: freq=%d stereo=%d stream_handle=%d",
-                frequency, (channels == 2) ? 1 : 0, hidden->stream_handle);
         snd_stream_start(hidden->stream_handle, frequency, (channels == 2) ? 1 : 0);
     } else {
-        SDL_Log("Starting PCM8 stream: freq=%d stereo=%d stream_handle=%d",
-                frequency, (channels == 2) ? 1 : 0, hidden->stream_handle);
         snd_stream_start_pcm8(hidden->stream_handle, frequency, (channels == 2) ? 1 : 0);
     }
 
     SDL_SetAtomicInt(&hidden->active_buffer, 0);
     SDL_SetAtomicInt(&hidden->buffer_ready, 0);
-
-    SDL_Log("Dreamcast audio driver initialized successfully");
     return true;
 }
 
