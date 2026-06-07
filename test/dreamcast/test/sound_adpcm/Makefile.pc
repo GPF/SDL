@@ -1,0 +1,14 @@
+# Makefile for compiling soundsdl2
+
+TARGET = soundsdl2
+
+CFLAGS = -g -O2 -Wall -Wextra -I/usr/include/SDL2
+LIBS = -lSDL2 -lSDL2main
+
+all: $(TARGET)
+
+$(TARGET): $(TARGET).c
+	$(CC) -o $(TARGET) $(TARGET).c $(CFLAGS) $(LIBS)
+
+clean:
+	rm -f $(TARGET)

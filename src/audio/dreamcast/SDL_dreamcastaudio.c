@@ -135,6 +135,80 @@ static void DREAMCASTAUD_ThreadDeinit(_THIS)
     SDL_SetThreadPriority(SDL_THREAD_PRIORITY_LOW);
 }
 
+SDL_AudioSpec *SDL_LoadDreamcastADPCM_RW(SDL_RWops *src, int freesrc, SDL_AudioSpec *spec, Uint8 **audio_buf, Uint32 *audio_len)
+{
+    Uint8 header[44];
+    Uint32 sampleRate;
+    Uint16 channels;
+
+    if (!src) {
+        return NULL;
+    } else if (!spec) {
+        SDL_InvalidParamError("spec");
+        return NULL;
+    } else if (!audio_buf) {
+        SDL_InvalidParamError("audio_buf");
+        return NULL;
+    } else if (!audio_len) {
+        SDL_InvalidParamError("audio_len");
+        return NULL;
+    }
+
+    if (SDL_RWread(src, header, sizeof(header), 1) != 1) {
+        SDL_SetError("Failed to read ADPCM header");
+        goto fail;
+    }
+
+    sampleRate = (Uint32)header[24] | ((Uint32)header[25] << 8) | ((Uint32)header[26] << 16) | ((Uint32)header[27] << 24);
+    channels = (Uint16)header[22];
+
+    if (SDL_RWseek(src, 44, RW_SEEK_SET) < 0) {
+        SDL_SetError("Failed to seek to ADPCM data");
+        goto fail;
+    }
+
+    *audio_len = (Uint32)(SDL_RWsize(src) - 44);
+    *audio_buf = (Uint8 *)SDL_malloc(*audio_len);
+    if (!*audio_buf) {
+        SDL_OutOfMemory();
+        goto fail;
+    }
+
+    if (SDL_RWread(src, *audio_buf, *audio_len, 1) != 1) {
+        SDL_free(*audio_buf);
+        *audio_buf = NULL;
+        SDL_SetError("Failed to read ADPCM data");
+        goto fail;
+    }
+
+    SDL_zero(*spec);
+    spec->freq = (int)sampleRate;
+    spec->format = AUDIO_S16LSB;
+    spec->channels = (Uint8)channels;
+    spec->samples = 512;
+    spec->size = *audio_len;
+
+    SDL_Log("ADPCM file loaded successfully: %u bytes", *audio_len);
+
+    if (freesrc) {
+        SDL_RWclose(src);
+    }
+
+    return spec;
+
+fail:
+    if (audio_buf) {
+        *audio_buf = NULL;
+    }
+    if (audio_len) {
+        *audio_len = 0;
+    }
+    if (freesrc) {
+        SDL_RWclose(src);
+    }
+    return NULL;
+}
+
 /*
  * Open the audio device.
  * This function initializes the KOS sound stream, allocates double-buffering,
@@ -146,6 +220,7 @@ int DREAMCASTAUD_OpenDevice(_THIS, const char *devname)
     SDL_AudioFormat test_format;
     int channels, frequency;
     char *adpcm_hint;  /* ADPCM hint from SDL hints */
+    SDL_bool adpcm_stream = SDL_FALSE;
 
     SDL_Log("Opening audio device\n");
 
@@ -155,6 +230,9 @@ int DREAMCASTAUD_OpenDevice(_THIS, const char *devname)
     }
     SDL_zerop(hidden);
     _this->hidden = (struct SDL_PrivateAudioData *)hidden;
+
+    adpcm_hint = SDL_GetHint("SDL_AUDIO_ADPCM_STREAM_DC");
+    adpcm_stream = (adpcm_hint && SDL_strcmp(adpcm_hint, "1") == 0) ? SDL_TRUE : SDL_FALSE;
 
     /* Ensure that the shutdown flag is clear for the new session */
     // SDL_AtomicSet(&_this->shutdown, 0);
@@ -185,6 +263,9 @@ int DREAMCASTAUD_OpenDevice(_THIS, const char *devname)
     } else {
         hidden->buffer_size = _this->spec.samples * _this->spec.channels * sizeof(int16_t);
     }
+    if (adpcm_stream) {
+        hidden->buffer_size = (_this->spec.samples * _this->spec.channels) / 2;
+    }
     SDL_Log("Buffer size: %d", hidden->buffer_size);
 
     hidden->stream_handle = snd_stream_alloc(NULL, hidden->buffer_size);
@@ -211,8 +292,7 @@ int DREAMCASTAUD_OpenDevice(_THIS, const char *devname)
     channels = _this->spec.channels;
     frequency = _this->spec.freq;
 
-    adpcm_hint = SDL_GetHint("SDL_AUDIO_ADPCM_STREAM_DC");
-    if (adpcm_hint && SDL_strcmp(adpcm_hint, "1") == 0) {
+    if (adpcm_stream) {
         SDL_Log("4-bit ADPCM audio format enabled\n");
         fflush(stdout);
         snd_stream_start_adpcm(hidden->stream_handle, frequency, (channels == 2) ? 1 : 0);

@@ -870,6 +870,33 @@ extern DECLSPEC SDL_AudioSpec *SDLCALL SDL_LoadWAV_RW(SDL_RWops * src,
                                                       Uint8 ** audio_buf,
                                                       Uint32 * audio_len);
 
+#ifdef __DREAMCAST__
+/**
+ * Load a Dreamcast ADPCM audio stream.
+ *
+ * This helper loads the Dreamcast-specific raw 4-bit ADPCM stream format used
+ * by the Dreamcast audio backend.
+ *
+ * \param src The data source for the audio data.
+ * \param freesrc If non-zero, SDL will _always_ free the data source.
+ * \param spec An SDL_AudioSpec that will be filled in with the audio format.
+ * \param audio_buf A pointer filled with the audio data, allocated by the
+ *                  function.
+ * \param audio_len A pointer filled with the length of the audio data buffer
+ *                  in bytes.
+ * \returns This function, if successfully called, returns `spec`, which will
+ *          be filled with the audio data format.
+ *          `audio_buf` will be filled with a pointer to an allocated buffer
+ *          containing the audio data, and `audio_len` is filled with the
+ *          length of that audio buffer in bytes.
+ */
+extern DECLSPEC SDL_AudioSpec *SDLCALL SDL_LoadDreamcastADPCM_RW(SDL_RWops *src,
+                                                                 int freesrc,
+                                                                 SDL_AudioSpec *spec,
+                                                                 Uint8 **audio_buf,
+                                                                 Uint32 *audio_len);
+#endif
+
 /**
  * Loads a WAV from a file.
  *

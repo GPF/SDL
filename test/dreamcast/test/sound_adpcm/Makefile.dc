@@ -1,0 +1,33 @@
+TARGET = SDL2dcSoundADPCMTest
+OBJS =	soundsdl2.o romdisk.o
+# Update include paths for SDL2
+KOS_CFLAGS+=-I../../../../include -DDREAMCAST -D__DREAMCAST__
+
+# Update library paths and libraries for SDL2
+#KOS_LIBS+= -L../../../../build-scripts/build -lSDL2 -lSDL2main
+
+all: $(TARGET).bin
+
+include $(KOS_BASE)/Makefile.rules 
+
+
+
+clean:
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin romdisk.o romdisk.img
+
+$(TARGET).elf: $(OBJS) 
+	kos-cc -o $(TARGET).elf \
+	$(OBJS) $(OBJEXTRA) -lSDL2 -lSDL2main -lGL -lm -lkosutils -lpthread
+
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -R .stack -O binary $(TARGET).elf $(TARGET).bin
+
+romdisk.o: romdisk.img
+	$(KOS_BASE)/utils/bin2o/bin2o romdisk.img romdisk romdisk.o
+#	bin2odc romdisk.img romdisk.o
+
+romdisk.img: data
+	$(KOS_GENROMFS) -f romdisk.img -d data -v
+
+run: $(TARGET).bin 
+	$(KOS_LOADER) $(TARGET).bin

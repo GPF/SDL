@@ -2077,41 +2077,6 @@ static int WaveLoad(SDL_RWops *src, WaveFile *file, SDL_AudioSpec *spec, Uint8 *
     return 0;
 }
 
-static int ADPCMLoad(SDL_RWops *src, SDL_AudioSpec *spec, Uint8 **audio_buf, Uint32 *audio_len) {
-    Uint8 header[44]; // WAV headers are typically 44 bytes
-    if (SDL_RWread(src, header, sizeof(header), 1) != 1) {
-        return SDL_SetError("Failed to read ADPCM header");
-    }
-
-    // Assume known format (ADPCM) and read only necessary values
-    Uint32 sampleRate = (header[27] << 24) | (header[26] << 16) | (header[25] << 8) | header[24];
-    Uint16 channels = header[22];
-
-    // Seek directly to the "data" chunk (assuming correct format)
-    SDL_RWseek(src, 44, RW_SEEK_SET);
-    *audio_len = SDL_RWsize(src) - 44; // Assume the rest is ADPCM data
-
-    // Allocate buffer and read data
-    *audio_buf = (Uint8 *)SDL_malloc(*audio_len);
-    if (!*audio_buf) return SDL_SetError("Out of memory");
-    if (SDL_RWread(src, *audio_buf, *audio_len, 1) != 1) {
-        SDL_free(*audio_buf);
-        return SDL_SetError("Failed to read ADPCM data");
-    }
-
-    // Configure SDL_AudioSpec
-    SDL_zero(*spec);
-    spec->freq = sampleRate;
-    spec->format = AUDIO_S16LSB; // Using a custom format tag for ADPCM
-    spec->channels = channels;
-    spec->samples = 512; // Set a reasonable buffer size
-    spec->size = *audio_len;
-
-    SDL_Log("ADPCM file loaded successfully: %u bytes", *audio_len);
-    return 0;
-}
-
-
 SDL_AudioSpec *SDL_LoadWAV_RW(SDL_RWops *src, int freesrc, SDL_AudioSpec *spec, Uint8 **audio_buf, Uint32 *audio_len)
 {
     int result;
@@ -2134,21 +2099,14 @@ SDL_AudioSpec *SDL_LoadWAV_RW(SDL_RWops *src, int freesrc, SDL_AudioSpec *spec, 
         return NULL;
     }
 
-    /* Check if ADPCM streaming is explicitly enabled */
-    const char *adpcm_hint = SDL_GetHint("SDL_AUDIO_ADPCM_STREAM_DC");
-    if (adpcm_hint && SDL_strcmp(adpcm_hint, "1") == 0) {
-        result = ADPCMLoad(src, spec, audio_buf, audio_len);
-        SDL_Log("ADPCM data loaded, buffer size: %d bytes", *audio_len);
-    } else {
-        *audio_buf = NULL;
-        *audio_len = 0;
+    *audio_buf = NULL;
+    *audio_len = 0;
 
-        file.riffhint = WaveGetRiffSizeHint();
-        file.trunchint = WaveGetTruncationHint();
-        file.facthint = WaveGetFactChunkHint();
+    file.riffhint = WaveGetRiffSizeHint();
+    file.trunchint = WaveGetTruncationHint();
+    file.facthint = WaveGetFactChunkHint();
 
-        result = WaveLoad(src, &file, spec, audio_buf, audio_len);
-    }
+    result = WaveLoad(src, &file, spec, audio_buf, audio_len);
 
     if (result < 0) {
         SDL_free(*audio_buf);
@@ -2157,29 +2115,14 @@ SDL_AudioSpec *SDL_LoadWAV_RW(SDL_RWops *src, int freesrc, SDL_AudioSpec *spec, 
         *audio_len = 0;
     }
 
-    /* Cleanup */
     if (freesrc) {
         SDL_RWclose(src);
     } else {
-        // No need to seek back in ADPCM case, but for consistency:
-        if (adpcm_hint && SDL_strcmp(adpcm_hint, "1") == 0) {
-            // ADPCM doesn't use file.chunk.position, so do nothing
-        } else {
-            SDL_RWseek(src, file.chunk.position, RW_SEEK_SET);
-        }
+        SDL_RWseek(src, file.chunk.position, RW_SEEK_SET);
     }
 
-    // Cleanup based on whether we used ADPCM or not
-    if (adpcm_hint && SDL_strcmp(adpcm_hint, "1") == 0) {
-        if (result == 0) {
-            // ADPCM cleanup, we free the buffer here since it's not used after this point
-            SDL_free(*audio_buf);
-        }
-    } else {
-        // Regular WAV file cleanup
-        WaveFreeChunkData(&file.chunk);
-        SDL_free(file.decoderdata);
-    }
+    WaveFreeChunkData(&file.chunk);
+    SDL_free(file.decoderdata);
 
     return spec;
 }
