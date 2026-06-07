@@ -2227,6 +2227,37 @@ extern SDL_DECLSPEC bool SDLCALL SDL_SetAudioPostmixCallback(SDL_AudioDeviceID d
  */
 extern SDL_DECLSPEC bool SDLCALL SDL_LoadWAV_IO(SDL_IOStream *src, bool closeio, SDL_AudioSpec *spec, Uint8 **audio_buf, Uint32 *audio_len);
 
+#ifdef SDL_PLATFORM_DREAMCAST
+/**
+ * Load a Dreamcast ADPCM audio stream.
+ *
+ * This helper loads the Dreamcast-specific raw 4-bit ADPCM stream format used
+ * by the Dreamcast audio backend.
+ *
+ * \param src the data source for the audio data.
+ * \param closeio if true, calls SDL_CloseIO() on `src` before returning, even
+ *                in the case of an error.
+ * \param spec an SDL_AudioSpec that will be filled in with the audio format.
+ * \param audio_buf a pointer filled with the audio data, allocated by the
+ *                  function.
+ * \param audio_len a pointer filled with the length of the audio data buffer
+ *                  in bytes.
+ * \returns true on success. `audio_buf` will be filled with a pointer to an
+ *          allocated buffer containing the audio data, and `audio_len` is
+ *          filled with the length of that audio buffer in bytes.
+ *
+ *          When the application is done with the data returned in
+ *          `audio_buf`, it should call SDL_free() to dispose of it.
+ *
+ * \threadsafety It is safe to call this function from any thread.
+ *
+ * \since This function is available since SDL 3.2.0.
+ *
+ * \sa SDL_free
+ */
+extern SDL_DECLSPEC bool SDLCALL SDL_LoadDreamcastADPCM_IO(SDL_IOStream *src, bool closeio, SDL_AudioSpec *spec, Uint8 **audio_buf, Uint32 *audio_len);
+#endif
+
 /**
  * Loads a WAV from a file path.
  *

@@ -12,6 +12,9 @@ int main(int argc, char *argv[])
     SDL_IOStream *stream = NULL;
     SDL_Event event;
     SDL_FRect dst = { 0.0f, 0.0f, 0.0f, 0.0f };
+    cont_btn_callback(0, CONT_START | CONT_A | CONT_B | CONT_X | CONT_Y, (cont_btn_callback_t)arch_exit);
+
+
     float tex_w = 0.0f;
     float tex_h = 0.0f;
     bool running = true;

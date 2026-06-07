@@ -287,12 +287,12 @@ bool SDL_IsVideoThread(void)
     return (SDL_GetCurrentThreadID() == SDL_VideoThreadID);
 }
 
-#ifdef SDL_PLATFORM_DREAMCAST
-static void DREAMCAST_resetCallback(uint8_t addr, uint32_t btns) {
-    printf("Software reset button sequence detected!\n");
-    exit(0);
-}
-#endif
+// #ifdef SDL_PLATFORM_DREAMCAST
+// static void DREAMCAST_resetCallback(uint8_t addr, uint32_t btns) {
+//     printf("Software reset button sequence detected!\n");
+//     exit(0);
+// }
+// #endif
 
 // Initialize all the subsystems that require initialization before threads start
 void SDL_InitMainThread(void)
@@ -304,9 +304,9 @@ void SDL_InitMainThread(void)
         SDL_MainThreadID = SDL_GetCurrentThreadID();
     }
 
-#ifdef SDL_PLATFORM_DREAMCAST
-    cont_btn_callback(0, CONT_RESET_BUTTONS, DREAMCAST_resetCallback);
-#endif
+// #ifdef SDL_PLATFORM_DREAMCAST
+//     cont_btn_callback(0, CONT_RESET_BUTTONS, DREAMCAST_resetCallback);
+// #endif
 
     SDL_InitTLSData();
     SDL_InitEnvironment();
