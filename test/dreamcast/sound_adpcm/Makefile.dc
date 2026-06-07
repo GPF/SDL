@@ -1,0 +1,19 @@
+TARGET = sound_adpcm
+OBJS = sound_adpcm.o romdisk.o
+KOS_ROMDISK_DIR = romdisk
+
+all: $(TARGET).bin
+
+include $(KOS_BASE)/Makefile.rules
+
+clean:
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin romdisk.o romdisk.img
+
+$(TARGET).elf: $(OBJS)
+	kos-cc -DDREAMCAST -D__DREAMCAST__ -DSDL_PLATFORM_DREAMCAST -o $(TARGET).elf $(OBJS) -lSDL3 -lGL -lm -lkosutils -lpthread -lsh4zam
+
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin
+
+run: $(TARGET).bin
+	$(KOS_LOADER) $(TARGET).bin
