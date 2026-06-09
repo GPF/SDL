@@ -37,15 +37,21 @@ char *SDL_SYS_GetBasePath(void)
         "/ide/"
     };
 
+    SDL_Log("DREAMCAST_GetBasePath: probing base paths");
+
     for (int i = 0; i < SDL_arraysize(paths); i++) {
         file_t f = fs_open(paths[i], O_RDONLY | O_DIR);
 
+        SDL_Log("DREAMCAST_GetBasePath: fs_open(%s) = %d", paths[i], (int)f);
+
         if (f != FILEHND_INVALID) {
             fs_close(f);
+            SDL_Log("DREAMCAST_GetBasePath: selected %s", paths[i]);
             return SDL_strdup(paths[i]);
         }
     }
 
+    SDL_Log("DREAMCAST_GetBasePath: no mount found, selected /");
     return SDL_strdup("/");
 }
 
