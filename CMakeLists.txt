@@ -3407,9 +3407,13 @@ elseif(PLATFORM_DREAMCAST)
   set(HAVE_SDL_TIME TRUE)
 
   set(SDL_FILESYSTEM_DREAMCAST 1)
-  set(HAVE_SDL_FILESYSTEM TRUE)
-  set(SDL_FILESYSTEM_DUMMY false)
   sdl_glob_sources("${SDL3_SOURCE_DIR}/src/filesystem/dreamcast/*.c")
+  set(HAVE_SDL_FILESYSTEM TRUE)
+  set(SDL_FSOPS_DUMMY 0)
+  set(SDL_FILESYSTEN_DUMMY 0)
+  set(SDL_FSOPS_POSIX 1)
+  sdl_glob_sources("${SDL3_SOURCE_DIR}/src/filesystem/posix/*.c")
+  set(HAVE_SDL_FSOPS TRUE)
 
 
   if(SDL_JOYSTICK)
