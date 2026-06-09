@@ -25,10 +25,28 @@
 #include "../SDL_sysfilesystem.h"
 #include <errno.h>
 
+#include <kos/fs.h>
+
 char *SDL_SYS_GetBasePath(void)
 {
-    // ROM disk path used by KOS
-    return SDL_strdup("/rd/");
+    const char *paths[] = {
+        "/rd/",
+        "/pc/",
+        "/cd/",
+        "/sd/",
+        "/ide/"
+    };
+
+    for (int i = 0; i < SDL_arraysize(paths); i++) {
+        file_t f = fs_open(paths[i], O_RDONLY | O_DIR);
+
+        if (f != FILEHND_INVALID) {
+            fs_close(f);
+            return SDL_strdup(paths[i]);
+        }
+    }
+
+    return SDL_strdup("/");
 }
 
 char *SDL_SYS_GetExeName(void)
