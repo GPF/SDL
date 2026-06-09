@@ -1,5 +1,6 @@
 #include <SDL3/SDL.h>
-
+#include <kos.h>
+#include <stdio.h>
 #define DT_PATH "/rd/Troy2024.dt"
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
@@ -24,7 +25,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    window = SDL_CreateWindow("Dreamcast SDL3 DT Viewer", WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_OPENGL);
+    window = SDL_CreateWindow("Dreamcast SDL3 DT Viewer", 320, 410, SDL_WINDOW_OPENGL);
     if (!window) {
         SDL_Log("Failed to create window: %s", SDL_GetError());
         SDL_Quit();
