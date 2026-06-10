@@ -60,13 +60,19 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
     int target_w = display->desktop_mode.w > 0 ? display->desktop_mode.w : 640;
     int target_h = display->desktop_mode.h > 0 ? display->desktop_mode.h : 480;
 
-    if (video_mode_hint &&
-        (SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0 ||
-         SDL_strcmp(video_mode_hint, "SDL_DC_DMA_VIDEO") == 0)) {
+    if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DMA_VIDEO") == 0) {
+        // DMA video always renders at full 640x480
         target_w = 640;
         target_h = 480;
-        SDL_Log("DREAMCAST_CreateWindow: Forcing native resolution %dx%d for %s",
-                target_w, target_h, video_mode_hint);
+        SDL_Log("DREAMCAST_CreateWindow: Forcing native resolution %dx%d for SDL_DC_DMA_VIDEO",
+                target_w, target_h);
+    } else if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0) {
+        // Textured video keeps the requested logical size; hardware always outputs 640x480
+        // via the PVR scaler. Keep requested_w/h as target.
+        target_w = requested_w;
+        target_h = requested_h;
+        SDL_Log("DREAMCAST_CreateWindow: Keeping logical resolution %dx%d for SDL_DC_TEXTURED_VIDEO",
+                target_w, target_h);
     } else if (direct_video) {
         if (__sdl_dc_is_60hz) {
             if (requested_w == 320 && requested_h == 240) {
@@ -217,6 +223,7 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
     window->flags |= SDL_WINDOW_INPUT_FOCUS;
 
     SDL_zero(mode);
+    // For textured video, fullscreen mode reports logical size; hardware scaler handles upscale
     mode.w = target_w;
     mode.h = target_h;
     mode.format =
@@ -263,11 +270,13 @@ void DREAMCAST_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
     int target_w = display->desktop_mode.w > 0 ? display->desktop_mode.w : 640;
     int target_h = display->desktop_mode.h > 0 ? display->desktop_mode.h : 480;
 
-    if (video_mode_hint &&
-        (SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0 ||
-         SDL_strcmp(video_mode_hint, "SDL_DC_DMA_VIDEO") == 0)) {
+    if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DMA_VIDEO") == 0) {
         target_w = 640;
         target_h = 480;
+    } else if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0) {
+        // Keep logical size for textured video; hardware scaler handles upscale to 640x480
+        target_w = requested_w;
+        target_h = requested_h;
     } else if (direct_video) {
         if (__sdl_dc_is_60hz) {
             if (requested_w == 320 && requested_h == 240) {

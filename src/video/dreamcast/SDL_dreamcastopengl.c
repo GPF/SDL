@@ -23,7 +23,7 @@
 #include "SDL_dreamcastopengl.h"
 
 
-#if defined(SDL_VIDEO_DRIVER_DREAMCAST) && defined(SDL_VIDEO_OPENGL)
+#ifdef SDL_VIDEO_DRIVER_DREAMCAST
 #include <kos.h>
 #include "GL/gl.h"
 #include "GL/glu.h"

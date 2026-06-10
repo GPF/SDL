@@ -146,6 +146,9 @@ void DREAMCAST_PumpEvents(SDL_VideoDevice *_this)
 static SDL_VideoDevice *DREAMCAST_CreateDevice(void)
 {
     SDL_VideoDevice *device;
+    const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
+    int use_opengl = (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") == 0);
+
     if (!DREAMCAST_Available()) {
         SDL_SetError("Dreamcast video driver is not available.");
         return 0;
@@ -158,7 +161,6 @@ static SDL_VideoDevice *DREAMCAST_CreateDevice(void)
         return 0;
     }
 
-
     /* Set the function pointers */
     device->VideoInit = DREAMCAST_VideoInit;
     device->VideoQuit = DREAMCAST_VideoQuit;
@@ -167,25 +169,25 @@ static SDL_VideoDevice *DREAMCAST_CreateDevice(void)
     // device->SetDisplayMode = DREAMCAST_SetDisplayMode;
     // device->HasScreenKeyboardSupport = DREAMCAST_HasScreenKeyboardSupport;
     device->StartTextInput = DREAMCAST_StartTextInput;
-    device->StopTextInput = DREAMCAST_StopTextInput;    
+    device->StopTextInput = DREAMCAST_StopTextInput;
 
     device->CreateSDLWindow = DREAMCAST_CreateWindow;
     device->SetWindowTitle = NULL;
     device->SetWindowSize = DREAMCAST_SetWindowSize;
     device->DestroyWindow = DREAMCAST_DestroyWindow;
 
-    device->CreateWindowFramebuffer = SDL_DREAMCAST_CreateWindowFramebuffer;
-    device->UpdateWindowFramebuffer = SDL_DREAMCAST_UpdateWindowFramebuffer;
-    device->DestroyWindowFramebuffer = SDL_DREAMCAST_DestroyWindowFramebuffer;
-
-#ifdef SDL_VIDEO_OPENGL
-    device->GL_LoadLibrary = DREAMCAST_GL_LoadLibrary;
-    device->GL_GetProcAddress = DREAMCAST_GL_GetProcAddress;
-    device->GL_MakeCurrent = DREAMCAST_GL_MakeCurrent;
-    device->GL_SwapWindow = DREAMCAST_GL_SwapBuffers;
-    device->GL_CreateContext = DREAMCAST_GL_CreateContext;
-    device->GL_DestroyContext = DREAMCAST_GL_DestroyContext;
-#endif
+    if (use_opengl) {
+        device->GL_LoadLibrary = DREAMCAST_GL_LoadLibrary;
+        device->GL_GetProcAddress = DREAMCAST_GL_GetProcAddress;
+        device->GL_MakeCurrent = DREAMCAST_GL_MakeCurrent;
+        device->GL_SwapWindow = DREAMCAST_GL_SwapBuffers;
+        device->GL_CreateContext = DREAMCAST_GL_CreateContext;
+        device->GL_DestroyContext = DREAMCAST_GL_DestroyContext;
+    } else {
+        device->CreateWindowFramebuffer = SDL_DREAMCAST_CreateWindowFramebuffer;
+        device->UpdateWindowFramebuffer = SDL_DREAMCAST_UpdateWindowFramebuffer;
+        device->DestroyWindowFramebuffer = SDL_DREAMCAST_DestroyWindowFramebuffer;
+    }
 
     device->free = DREAMCAST_DeleteDevice;
     // device->quirk_flags = VIDEO_DEVICE_QUIRK_FULLSCREEN_ONLY;
@@ -215,16 +217,16 @@ static bool DREAMCAST_VideoInit(SDL_VideoDevice *_this) {
         __sdl_dc_is_60hz = 1;
     }
 
-#ifndef SDL_VIDEO_OPENGL
-    if (!video_mode_hint) {
-        SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO");
-        SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");
-        video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
-        bool double_buffer = SDL_GetHintBoolean(SDL_HINT_VIDEO_DOUBLE_BUFFER, true);
-        SDL_Log("No video mode hint set. Using %s with %s buffering.",
-                video_mode_hint, double_buffer ? "double" : "single");
+    if (!video_mode_hint || SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") != 0) {
+        if (!video_mode_hint) {
+            SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DMA_VIDEO");
+            SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");
+            video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
+            bool double_buffer = SDL_GetHintBoolean(SDL_HINT_VIDEO_DOUBLE_BUFFER, true);
+            SDL_Log("No video mode hint set. Using %s with %s buffering.",
+                    video_mode_hint, double_buffer ? "double" : "single");
+        }
     }
-#endif
 
     // Initialize default display mode
     SDL_zero(mode);
@@ -280,20 +282,20 @@ else if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO")
     //     return false;
     // }
 
-#ifdef SDL_VIDEO_OPENGL
-    // For OpenGL, enforce 640x480 hardware resolution
-    disp_mode = __sdl_dc_is_60hz ? DM_640x480 : DM_640x480_PAL_IL;
-    pixel_mode = PM_RGB555; // OpenGL converts to ARGB1555
-    mode.format = SDL_PIXELFORMAT_ARGB1555;
-    mode.w = 640;
-    mode.h = 480;
-    SDL_Log("OpenGL mode: Setting hardware resolution to 640x480");
-    vid_set_mode(disp_mode, pixel_mode);
-#else
-    // For software modes, use 640x480 for display mode
-    mode.w = default_w;
-    mode.h = default_h;
-#endif
+    if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") == 0) {
+        // For OpenGL, enforce 640x480 hardware resolution
+        disp_mode = __sdl_dc_is_60hz ? DM_640x480 : DM_640x480_PAL_IL;
+        pixel_mode = PM_RGB555; // OpenGL converts to ARGB1555
+        mode.format = SDL_PIXELFORMAT_ARGB1555;
+        mode.w = 640;
+        mode.h = 480;
+        SDL_Log("OpenGL mode: Setting hardware resolution to 640x480");
+        vid_set_mode(disp_mode, pixel_mode);
+    } else {
+        // For software modes, use default resolution
+        mode.w = default_w;
+        mode.h = default_h;
+    }
     //     // Assume we have a mouse and keyboard
     // SDL_AddKeyboard(SDL_DEFAULT_KEYBOARD_ID, NULL, true);
     // SDL_AddMouse(SDL_DEFAULT_MOUSE_ID, NULL, true);

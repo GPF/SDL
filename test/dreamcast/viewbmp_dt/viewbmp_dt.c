@@ -1,7 +1,10 @@
 #include <SDL3/SDL.h>
 #include <kos.h>
+#include <kos/dbgio.h>
+#include <kos/dbglog.h>
 #include <stdio.h>
-#define DT_PATH "/rd/Troy2024.dt"
+#include <stdlib.h>
+#define DT_PATH "Troy2024.dt"
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
 
@@ -15,11 +18,10 @@ int main(int argc, char *argv[])
     SDL_FRect dst = { 0.0f, 0.0f, 0.0f, 0.0f };
     cont_btn_callback(0, CONT_START | CONT_A | CONT_B | CONT_X | CONT_Y, (cont_btn_callback_t)arch_exit);
 
-
     float tex_w = 0.0f;
     float tex_h = 0.0f;
     bool running = true;
-
+    SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_OPENGL_VIDEO");
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("SDL_Init failed: %s", SDL_GetError());
         return 1;
@@ -40,7 +42,21 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    stream = SDL_IOFromFile(DT_PATH, "rb");
+    const char *basepath = SDL_GetBasePath();
+    char *filepath = NULL;
+
+    if (!basepath) {
+        SDL_Log("SDL_GetBasePath failed: %s", SDL_GetError());
+        return 1;
+    }
+
+    if (SDL_asprintf(&filepath, "%s%s", basepath, DT_PATH) < 0 || !filepath) {
+        SDL_Log("SDL_asprintf failed");
+        SDL_free((void *)basepath);
+        return 1;
+    }
+
+    stream = SDL_IOFromFile(filepath, "rb");
     if (!stream) {
         SDL_Log("Failed to open %s: %s", DT_PATH, SDL_GetError());
         SDL_DestroyRenderer(renderer);
