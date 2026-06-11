@@ -98,7 +98,9 @@ static int load_dreamcast_adpcm_stream(const char *filename, SDL_AudioSpec *spec
 
     SDL_zero(*spec);
     spec->freq = (int)sampleRate;
-    spec->format = AUDIO_S16LSB;
+    /* Present raw ADPCM bytes to SDL as byte-oriented audio so it doesn't
+     * apply 16-bit PCM sizing rules to the stream. */
+    spec->format = AUDIO_S16;
     spec->channels = (Uint8)channels;
     spec->samples = 512;
     spec->size = *audio_len;
@@ -179,7 +181,7 @@ int main(int argc, char *argv[]) {
     #endif
     /* Enable standard application logging */
     SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO);
-
+    SDL_SetHint("SDL_AUDIO_ADPCM_STREAM_DC", "1");
     /* Load the SDL library */
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS) < 0) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize SDL: %s\n", SDL_GetError());
@@ -206,7 +208,7 @@ int main(int argc, char *argv[]) {
     SDL_Log("Loading %s\n", filename);
     /* Load the audio file into memory */
 #ifdef DREAMCAST
-    SDL_SetHint("SDL_AUDIO_ADPCM_STREAM_DC", "1");
+
     if (load_dreamcast_adpcm_stream(filename, &wave.spec, &wave.sound, &wave.soundlen) < 0) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't load %s: %s\n", filename, SDL_GetError());
         quit(1);

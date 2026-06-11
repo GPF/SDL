@@ -127,6 +127,9 @@ static void DREAMCAST_DeleteDevice(SDL_VideoDevice *device)
 static SDL_VideoDevice *DREAMCAST_CreateDevice(void)
 {
     SDL_VideoDevice *device;
+    const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
+    int use_opengl = (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") == 0);
+
     if (!DREAMCAST_Available()) {
         SDL_SetError("Dreamcast video driver is not available.");
         return 0;
@@ -156,20 +159,18 @@ static SDL_VideoDevice *DREAMCAST_CreateDevice(void)
     }
 #endif
 
-#ifndef SDL_VIDEO_OPENGL
-    device->CreateWindowFramebuffer = SDL_DREAMCAST_CreateWindowFramebuffer;
-    device->UpdateWindowFramebuffer = SDL_DREAMCAST_UpdateWindowFramebuffer;
-    device->DestroyWindowFramebuffer = SDL_DREAMCAST_DestroyWindowFramebuffer;
-#endif
-
-#ifdef SDL_VIDEO_OPENGL
-    device->GL_LoadLibrary = DREAMCAST_GL_LoadLibrary;
-    device->GL_GetProcAddress = DREAMCAST_GL_GetProcAddress;
-    device->GL_MakeCurrent = DREAMCAST_GL_MakeCurrent;
-    device->GL_SwapWindow = DREAMCAST_GL_SwapBuffers;
-    device->GL_CreateContext = DREAMCAST_GL_CreateContext;
-    device->GL_DeleteContext = DREAMCAST_GL_DeleteContext;
-#endif
+    if (use_opengl) {
+        device->GL_LoadLibrary = DREAMCAST_GL_LoadLibrary;
+        device->GL_GetProcAddress = DREAMCAST_GL_GetProcAddress;
+        device->GL_MakeCurrent = DREAMCAST_GL_MakeCurrent;
+        device->GL_SwapWindow = DREAMCAST_GL_SwapBuffers;
+        device->GL_CreateContext = DREAMCAST_GL_CreateContext;
+        device->GL_DeleteContext = DREAMCAST_GL_DeleteContext;
+    } else {
+        device->CreateWindowFramebuffer = SDL_DREAMCAST_CreateWindowFramebuffer;
+        device->UpdateWindowFramebuffer = SDL_DREAMCAST_UpdateWindowFramebuffer;
+        device->DestroyWindowFramebuffer = SDL_DREAMCAST_DestroyWindowFramebuffer;
+    }
 
     // ✅ FIX: Allocate driverdata
     SDL_VideoData *video_data = SDL_calloc(1, sizeof(SDL_VideoData));
@@ -252,14 +253,13 @@ int DREAMCAST_VideoInit(_THIS) {
         SDL_SetError("Failed to add video display");
         return -1;
     }
-#ifndef SDL_VIDEO_OPENGL    
-    if (video_mode_hint == NULL){
-        SDL_Log("No video mode hint set, defaulting to SDL_DC_DMA_VIDEO mode, with SDL_HINT_VIDEO_DOUBLE_BUFFER enabled");
-        SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DMA_VIDEO"); // Default video mode
-        SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1"); // Default double buffering
-        // SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
+    if (video_mode_hint == NULL || SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") != 0) {
+        if (video_mode_hint == NULL) {
+            SDL_Log("No video mode hint set, defaulting to SDL_DC_DMA_VIDEO mode, with SDL_HINT_VIDEO_DOUBLE_BUFFER enabled");
+            SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DMA_VIDEO"); // Default video mode
+            SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1"); // Default double buffering
+        }
     }
-#endif    
     // SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");
     SDL_Log("SDL2 Dreamcast video initialized: %dx%d", width, height);
     return 0;
@@ -294,20 +294,19 @@ int DREAMCAST_SetDisplayMode(_THIS, SDL_VideoDisplay *display, SDL_DisplayMode *
     int disp_mode = -1;
     const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
     const char *double_buffer_hint = SDL_GetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER);
+    int use_opengl = (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") == 0);
+
     if (video_mode_hint != NULL && strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0) {
         SDL_Log("Setting SDL_DC_TEXTURED_VIDEO mode");
         mode->w = 640;
         mode->h = 480;
     }
-  
-#ifdef SDL_VIDEO_OPENGL
-    // Enforce OpenGL requirement for 640x480 if SDL_VIDEO_OPENGL is disabled
-    // if (SDL_GetCurrentVideoDriver() && strcmp(SDL_GetCurrentVideoDriver(), "opengl") == 0) {
+
+    if (use_opengl) {
         mode->w = 640;
         mode->h = 480;
         mode->format = SDL_PIXELFORMAT_ARGB1555;
-    // }
-#endif
+    }
   
 
     // Detect cable and region

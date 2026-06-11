@@ -26,6 +26,7 @@
 
 #include "../../events/SDL_mouse_c.h"
 #include "../../events/SDL_keyboard_c.h"
+#include "SDL_hints.h"
 #include "SDL_dreamcastvideo.h"
 #include "SDL_dreamcastwindow.h"
 
@@ -54,12 +55,21 @@ int DREAMCAST_CreateWindow(_THIS, SDL_Window * window)
     window->flags &= ~SDL_WINDOW_HIDDEN;        // Ensure visible
     window->flags |= SDL_WINDOW_SHOWN;          // One always-visible window
     window->flags |= SDL_WINDOW_INPUT_FOCUS;    // Always has input focus
-    window->flags |= SDL_WINDOW_OPENGL;         // OpenGL context is required
+
+    // Only set OpenGL flag when explicitly requested via hint
+    const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
+    int use_opengl = (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") == 0);
+    if (use_opengl) {
+        window->flags |= SDL_WINDOW_OPENGL;
+        SDL_Log("DREAMCAST_CreateWindow: window %dx%d created with OpenGL flag", window->w, window->h);
+    } else {
+        window->flags &= ~SDL_WINDOW_OPENGL;
+        SDL_Log("DREAMCAST_CreateWindow: window %dx%d created with framebuffer", window->w, window->h);
+    }
 
     SDL_SetMouseFocus(window);
     SDL_SetKeyboardFocus(window);
 
-    SDL_Log("DREAMCAST_CreateWindow: window %dx%d created with OpenGL flag", window->w, window->h);
     return 0;
 }
 

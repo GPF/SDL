@@ -1336,6 +1336,16 @@ static SDL_AudioDeviceID open_audio_device(const char *devname, int iscapture,
         return 0;
     }
 
+#ifdef SDL_AUDIO_DRIVER_DREAMCAST
+    if (!iscapture &&
+        current_audio.name &&
+        SDL_strcmp(current_audio.name, "dcstreamingaudio") == 0 &&
+        SDL_GetHintBoolean(SDL_HINT_AUDIO_ADPCM_STREAM_DC, SDL_FALSE)) {
+        obtained->format = AUDIO_S8;
+        SDL_CalculateAudioSpec(obtained);
+    }
+#endif
+
     /* If app doesn't care about a specific device, let the user override. */
     if (devname == NULL) {
         devname = SDL_getenv("SDL_AUDIO_DEVICE_NAME");

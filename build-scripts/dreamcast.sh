@@ -14,10 +14,11 @@ ENABLE_SDL_TESTS=OFF
 ENABLE_PTHREADS=ON
 ENABLE_UNIX_TIMERS=ON
 BUILD_JOBS=$(nproc) # Use all available CPU cores by default
+TARGET="build"
 
 usage() {
     cat <<EOF
-Usage: $0 [options] [clean|distclean]
+Usage: $0 [options] [build|install|clean|distclean]
 
 Install layout options:
   --prefix PATH, --install-prefix PATH
@@ -91,19 +92,25 @@ case $1 in
         --disable-pthreads) ENABLE_PTHREADS=OFF ;;
         --enable-unix-timers)  ENABLE_UNIX_TIMERS=ON ;;
         --disable-unix-timers) ENABLE_UNIX_TIMERS=OFF ;;        
+        build)
+            TARGET="build"
+            ;;
+        install)
+            TARGET="install"
+            ;;
         clean) 
             echo "Cleaning build directory..."
             cd "$BUILD_DIR"
-            make clean            
-rm -rf CMakeFiles CMakeCache.txt Makefile
+            make clean
+            rm -rf CMakeFiles CMakeCache.txt Makefile
             exit 0
             ;;
         distclean)
             echo "Removing build directory..."
             cd "$BUILD_DIR"
             make uninstall
-rm -rf "$BUILD_DIR"
-exit 0
+            rm -rf "$BUILD_DIR"
+            exit 0
             ;;
         *) 
             echo "Unknown option: $1"
@@ -145,7 +152,11 @@ cmake -DCMAKE_TOOLCHAIN_FILE="$KOS_CMAKE_TOOLCHAIN" \
       -DCMAKE_INSTALL_INCLUDEDIR="$INSTALL_INCLUDEDIR" \
       "$SOURCE_DIR"
 # Build the project
-make -j"$BUILD_JOBS" install
+make -j"$BUILD_JOBS"
+
+if [ "$TARGET" = "install" ]; then
+    make install
+fi
 
 # Optional: Run tests or other commands here
 # Print a message indicating the build is complete

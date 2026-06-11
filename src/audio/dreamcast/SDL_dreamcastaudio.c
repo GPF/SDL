@@ -183,7 +183,7 @@ SDL_AudioSpec *SDL_LoadDreamcastADPCM_RW(SDL_RWops *src, int freesrc, SDL_AudioS
 
     SDL_zero(*spec);
     spec->freq = (int)sampleRate;
-    spec->format = AUDIO_S16LSB;
+    spec->format = AUDIO_S8;
     spec->channels = (Uint8)channels;
     spec->samples = 512;
     spec->size = *audio_len;
@@ -233,6 +233,9 @@ int DREAMCASTAUD_OpenDevice(_THIS, const char *devname)
 
     adpcm_hint = SDL_GetHint("SDL_AUDIO_ADPCM_STREAM_DC");
     adpcm_stream = (adpcm_hint && SDL_strcmp(adpcm_hint, "1") == 0) ? SDL_TRUE : SDL_FALSE;
+    if (adpcm_stream) {
+        _this->spec.format = AUDIO_S8;
+    }
 
     /* Ensure that the shutdown flag is clear for the new session */
     // SDL_AtomicSet(&_this->shutdown, 0);
@@ -264,7 +267,9 @@ int DREAMCASTAUD_OpenDevice(_THIS, const char *devname)
         hidden->buffer_size = _this->spec.samples * _this->spec.channels * sizeof(int16_t);
     }
     if (adpcm_stream) {
-        hidden->buffer_size = (_this->spec.samples * _this->spec.channels) / 2;
+        /* ADPCM bytes are already packed; expose them to SDL as 8-bit sized
+         * buffers so the callback stays byte-oriented. */
+        hidden->buffer_size = _this->spec.samples * _this->spec.channels;
     }
     SDL_Log("Buffer size: %d", hidden->buffer_size);
 

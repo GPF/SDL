@@ -4,10 +4,10 @@
 
 
 /* Size of the window */
-#define SCREEN_WIDTH  640
-#define SCREEN_HEIGHT 480
+#define SCREEN_WIDTH  320
+#define SCREEN_HEIGHT 240
 /* Size of the grass texture picture */
-#define GRASS_SIZE    32
+#define GRASS_SIZE    16
 
 /* In the sprite, we have 8 images of a 32x32 picture,
  * 2 images for each direction. */
@@ -58,9 +58,11 @@ int main(int argc, char* argv[])
     int currentDirection = DIR_RIGHT;
     int animationFlip = 0;
     SDL_Rect spritePosition;
-    // SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");
+    SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");
     // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
     // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO");
+    // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DMA_VIDEO");
+    SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_OPENGL_VIDEO");
     /* initialize SDL */
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) < 0) {
         SDL_Log("Failed to initialize SDL: %s", SDL_GetError());
@@ -101,7 +103,7 @@ SDL_Log("Joystick GUID: %s", guid_str);
     // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DMA_VIDEO"); // Set for DMA mode
     // SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "software");    
     // renderer = SDL_CreateRenderer(window, -1,  SDL_RENDERER_PRESENTVSYNC);
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
     // renderer = SDL_CreateRenderer(window, -1, 0);
     if (!renderer) {
         SDL_Log("Failed to create renderer: %s", SDL_GetError());
