@@ -108,7 +108,6 @@ static bool DREAMCASTAUD_PlayDevice(SDL_AudioDevice *device, const Uint8 *buffer
     (void)buffer;
     (void)buffer_size;
 
-    DREAMCASTAUD_WaitDevice(device);
     SDL_SetAtomicInt(&hidden->buffer_ready, 1);
     return true;
 }
@@ -173,9 +172,6 @@ static bool DREAMCASTAUD_OpenDevice(SDL_AudioDevice *device)
         device->spec.format = SDL_AUDIO_S8;
     }
 
-    channels = device->spec.channels;
-    frequency = device->spec.freq;
-
     // Match the SDL2 Dreamcast sample's ADPCM buffer cadence.
     if (adpcm_stream && device->sample_frames < 4096) {
         device->sample_frames = 4096;
@@ -187,25 +183,15 @@ static bool DREAMCASTAUD_OpenDevice(SDL_AudioDevice *device)
 
     if (adpcm_stream) {
         SDL_Log("Using 4-bit ADPCM audio");
-        hidden->buffer_size = (device->sample_frames * device->spec.channels) / 2;
-    } else if (device->spec.format == SDL_AUDIO_S16LE) {
-        SDL_Log("Using 16-bit PCM audio");
-        if (device->spec.channels == 1) {
-            hidden->buffer_size = device->sample_frames * device->spec.channels * 2 * (int)sizeof(int16_t);
-        } else {
-            hidden->buffer_size = device->sample_frames * device->spec.channels * (int)sizeof(int16_t);
-        }
-    } else if (device->spec.format == SDL_AUDIO_S8) {
-        SDL_Log("Using 8-bit PCM audio");
-        hidden->buffer_size = device->sample_frames * device->spec.channels * (int)sizeof(int8_t);
-    } else {
-        SDL_free(hidden);
-        snd_stream_shutdown();
-        return SDL_SetError("Unsupported audio format");
+        /* ADPCM bytes are packed; keep the stream buffer math byte-oriented so
+         * SDL doesn't apply PCM16 sizing rules to this passthrough path. */
+        device->buffer_size = device->sample_frames * device->spec.channels;
+        device->work_buffer_size = SDL_max(device->buffer_size, device->work_buffer_size);
+        SDL_Log("Buffer size: %d", device->buffer_size);
     }
 
-    device->buffer_size = hidden->buffer_size;
-    device->work_buffer_size = SDL_max(device->buffer_size, device->work_buffer_size);
+    hidden->buffer_size = device->buffer_size;
+
     hidden->stream_handle = snd_stream_alloc(NULL, hidden->buffer_size);
     if (hidden->stream_handle == SND_STREAM_INVALID) {
         SDL_free(hidden);
@@ -226,19 +212,35 @@ static bool DREAMCASTAUD_OpenDevice(SDL_AudioDevice *device)
     SDL_memset(hidden->mixbuf[0], 0, hidden->buffer_size);
     SDL_memset(hidden->mixbuf[1], 0, hidden->buffer_size);
 
-    audioDevice = device;
     snd_stream_reinit(hidden->stream_handle, stream_callback);
+
+    channels = device->spec.channels;
+    frequency = device->spec.freq;
+
+    audioDevice = device;
+    SDL_Log("Dreamcast audio spec: freq=%d channels=%d format=%s",
+            frequency, channels, SDL_GetAudioFormatName(device->spec.format));
 
     if (adpcm_stream) {
         snd_stream_start_adpcm(hidden->stream_handle, frequency, (channels == 2) ? 1 : 0);
     } else if (device->spec.format == SDL_AUDIO_S16LE) {
+        SDL_Log("Using 16-bit PCM audio");
         snd_stream_start(hidden->stream_handle, frequency, (channels == 2) ? 1 : 0);
-    } else {
+    } else if (device->spec.format == SDL_AUDIO_S8) {
+        SDL_Log("Using 8-bit PCM audio");
         snd_stream_start_pcm8(hidden->stream_handle, frequency, (channels == 2) ? 1 : 0);
+    } else {
+        SDL_free(hidden->mixbuf[0]);
+        SDL_free(hidden->mixbuf[1]);
+        SDL_free(hidden);
+        snd_stream_shutdown();
+        return SDL_SetError("Unsupported audio format");
     }
 
     SDL_SetAtomicInt(&hidden->active_buffer, 0);
     SDL_SetAtomicInt(&hidden->buffer_ready, 0);
+
+    SDL_Log("Dreamcast audio driver initialized successfully");
     return true;
 }
 
@@ -337,7 +339,7 @@ bool SDL_LoadDreamcastADPCM_IO(SDL_IOStream *src, bool closeio, SDL_AudioSpec *s
 
     SDL_zero(*spec);
     spec->freq = (int)sampleRate;
-    spec->format = SDL_AUDIO_S16LE;
+    spec->format = SDL_AUDIO_S8;
     spec->channels = (Uint8)channels;
 
     SDL_Log("ADPCM file loaded successfully: %" SDL_PRIu32 " bytes", *audio_len);

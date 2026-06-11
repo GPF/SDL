@@ -21,6 +21,7 @@ static struct
     Uint8 *raw;
     Uint8 *sound;
     Uint32 soundlen;
+    Uint32 soundpos;
     Uint32 freq;
     Uint32 channels;
 } wave;
@@ -29,56 +30,49 @@ static SDL_AudioStream *stream = NULL;
 
 static bool load_dreamcast_adpcm(const char *filename)
 {
-    Uint8 header[44];
     SDL_IOStream *io = SDL_IOFromFile(filename, "rb");
+    SDL_AudioSpec spec;
 
     if (!io) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't open %s", filename);
         return false;
     }
 
-    if (SDL_ReadIO(io, header, sizeof(header)) != sizeof(header)) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't read header from %s", filename);
-        SDL_CloseIO(io);
+    if (!SDL_LoadDreamcastADPCM_IO(io, true, &spec, &wave.raw, &wave.soundlen)) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't load %s: %s", filename, SDL_GetError());
         return false;
     }
 
-    Sint64 filesize = SDL_GetIOSize(io);
-    if (filesize < (Sint64)sizeof(header)) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s is too small", filename);
-        SDL_CloseIO(io);
-        return false;
-    }
-
-    Sint64 payloadsize = filesize - (Sint64)sizeof(header);
-    wave.raw = (Uint8 *)SDL_malloc((size_t)payloadsize);
-    if (!wave.raw) {
-        SDL_CloseIO(io);
-        return false;
-    }
-
-    SDL_SeekIO(io, (Sint64)sizeof(header), SDL_IO_SEEK_SET);
-
-    if (SDL_ReadIO(io, wave.raw, (size_t)payloadsize) != (size_t)payloadsize) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't read payload from %s", filename);
-        SDL_free(wave.raw);
-        wave.raw = NULL;
-        SDL_CloseIO(io);
-        return false;
-    }
-
-    SDL_CloseIO(io);
-
-    /* Parse sample rate and channels from WAV header (little-endian) */
-    wave.channels = (Uint32)header[22] | ((Uint32)header[23] << 8);
-    wave.freq     = (Uint32)header[24] | ((Uint32)header[25] << 8) |
-                    ((Uint32)header[26] << 16) | ((Uint32)header[27] << 24);
     wave.sound    = wave.raw;
-    wave.soundlen = (Uint32)payloadsize;
+    wave.freq     = (Uint32)spec.freq;
+    wave.channels = (Uint32)spec.channels;
 
     SDL_Log("Loaded %s: rate=%" SDL_PRIu32 " channels=%" SDL_PRIu32 " len=%" SDL_PRIu32,
             filename, wave.freq, wave.channels, wave.soundlen);
     return true;
+}
+
+static void SDLCALL fill_stream(void *userdata, SDL_AudioStream *audio_stream, int additional_amount, int total_amount)
+{
+    (void)userdata;
+    (void)total_amount;
+
+    while (additional_amount > 0 && wave.sound && wave.soundlen > 0) {
+        const Uint32 waveleft = wave.soundlen - wave.soundpos;
+        const int chunk = (waveleft < (Uint32)additional_amount) ? (int)waveleft : additional_amount;
+
+        if (!SDL_PutAudioStreamData(audio_stream, wave.sound + wave.soundpos, chunk)) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "sample put failed: %s", SDL_GetError());
+            return;
+        }
+
+        additional_amount -= chunk;
+        wave.soundpos += (Uint32)chunk;
+
+        if (wave.soundpos >= wave.soundlen) {
+            wave.soundpos = 0;
+        }
+    }
 }
 
 static void cleanup(void)
@@ -133,11 +127,11 @@ int main(int argc, char **argv)
 
     SDL_AudioSpec spec;
     SDL_zero(spec);
-    spec.format   = SDL_AUDIO_S8;
+    spec.format   = SDL_AUDIO_S16LE;
     spec.channels = (Uint8)wave.channels;
     spec.freq     = (int)wave.freq;
 
-    stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
+    stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, fill_stream, NULL);
 
     if (!stream) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
@@ -150,17 +144,7 @@ int main(int argc, char **argv)
     SDL_ResumeAudioStreamDevice(stream);
     SDL_Log("Streaming ADPCM: %s", WAV_PATH);
 
-    const int minimum = (int)((wave.soundlen / SDL_AUDIO_FRAMESIZE(spec)) / 2);
     for (;;) {
-        if (SDL_GetAudioStreamQueued(stream) < minimum) {
-            if (!SDL_PutAudioStreamData(stream, wave.sound, (int)wave.soundlen)) {
-                SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "sample put failed: %s", SDL_GetError());
-                cleanup();
-                SDL_Quit();
-                return 1;
-            }
-        }
-
         maple_device_t *cont = maple_enum_type(0, MAPLE_FUNC_CONTROLLER);
         if (!cont) { SDL_Delay(10); continue; }
 

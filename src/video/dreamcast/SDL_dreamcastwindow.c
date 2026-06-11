@@ -36,6 +36,11 @@
 
 extern int __sdl_dc_is_60hz;
 
+static bool DREAMCAST_IsOpenGLVideoMode(const char *video_mode_hint)
+{
+    return video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") == 0;
+}
+
 bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_PropertiesID props) {
     const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
     SDL_VideoDisplay *display = _this->displays[0];
@@ -43,6 +48,7 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
     bool direct_video =
         !video_mode_hint ||
         SDL_strcmp(video_mode_hint, "SDL_DC_DIRECT_VIDEO") == 0;
+    bool opengl_video = DREAMCAST_IsOpenGLVideoMode(video_mode_hint);
 
     DCWIN_PROBE("CreateWindow enter window=0x%08lx internal=0x%08lx flags=0x%08lx size=%dx%d pending=%dx%d\n",
                 (unsigned long)window,
@@ -60,7 +66,11 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
     int target_w = display->desktop_mode.w > 0 ? display->desktop_mode.w : 640;
     int target_h = display->desktop_mode.h > 0 ? display->desktop_mode.h : 480;
 
-    if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DMA_VIDEO") == 0) {
+    if (opengl_video) {
+        target_w = 640;
+        target_h = 480;
+        SDL_Log("DREAMCAST_CreateWindow: Forcing 640x480 for SDL_DC_OPENGL_VIDEO");
+    } else if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DMA_VIDEO") == 0) {
         // DMA video always renders at full 640x480
         target_w = 640;
         target_h = 480;
@@ -110,7 +120,10 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
     int disp_mode = -1;
     int pixel_mode = PM_RGB555;
 
-    if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0) {
+    if (opengl_video) {
+        disp_mode = __sdl_dc_is_60hz ? DM_640x480 : DM_640x480_PAL_IL;
+        pixel_mode = PM_RGB555;
+    } else if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0) {
         disp_mode = __sdl_dc_is_60hz ? DM_640x480 : DM_640x480_PAL_IL;
         pixel_mode = PM_RGB565;
     } else if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DMA_VIDEO") == 0) {
@@ -138,8 +151,7 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
         }
     }
 
-#ifdef SDL_VIDEO_OPENGL
-    if (window->flags & SDL_WINDOW_OPENGL) {
+    if (opengl_video || (window->flags & SDL_WINDOW_OPENGL)) {
         disp_mode = __sdl_dc_is_60hz ? DM_640x480 : DM_640x480_PAL_IL;
         pixel_mode = PM_RGB555;
         target_w = 640;
@@ -150,7 +162,6 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
         window->pending.h = target_h;
         SDL_Log("OpenGL mode: Setting hardware resolution to 640x480");
     }
-#endif
 
     if (disp_mode < 0) {
         SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Unsupported display mode for %dx%d", target_w, target_h);
@@ -167,7 +178,14 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
 
     int refresh_rate = __sdl_dc_is_60hz ? 60 : 50;
 
-    if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0) {
+    if (opengl_video) {
+        SDL_zero(mode);
+        mode.w = 640;
+        mode.h = 480;
+        mode.format = SDL_PIXELFORMAT_ARGB1555;
+        mode.refresh_rate = refresh_rate;
+        mode.pixel_density = 1.0f;
+    } else if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0) {
         const int textured_modes[][2] = {
             {320, 240}, {512, 256}, {640, 480}, {1024, 512}
         };
@@ -263,6 +281,7 @@ void DREAMCAST_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
     bool direct_video =
         !video_mode_hint ||
         SDL_strcmp(video_mode_hint, "SDL_DC_DIRECT_VIDEO") == 0;
+    bool opengl_video = DREAMCAST_IsOpenGLVideoMode(video_mode_hint);
 
     int requested_w = window->pending.w;
     int requested_h = window->pending.h;
@@ -270,7 +289,10 @@ void DREAMCAST_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
     int target_w = display->desktop_mode.w > 0 ? display->desktop_mode.w : 640;
     int target_h = display->desktop_mode.h > 0 ? display->desktop_mode.h : 480;
 
-    if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DMA_VIDEO") == 0) {
+    if (opengl_video) {
+        target_w = 640;
+        target_h = 480;
+    } else if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DMA_VIDEO") == 0) {
         target_w = 640;
         target_h = 480;
     } else if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0) {
@@ -303,12 +325,10 @@ void DREAMCAST_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
         }
     }
 
-#ifdef SDL_VIDEO_OPENGL
-    if (window->flags & SDL_WINDOW_OPENGL) {
+    if (opengl_video || (window->flags & SDL_WINDOW_OPENGL)) {
         target_w = 640;
         target_h = 480;
     }
-#endif
 
     DCWIN_PROBE("SetWindowSize requested=%dx%d applying=%dx%d flags=0x%08lx\n",
                 requested_w, requested_h, target_w, target_h,

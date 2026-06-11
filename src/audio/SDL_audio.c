@@ -1819,13 +1819,22 @@ static bool OpenPhysicalAudioDevice(SDL_AudioDevice *device, const SDL_AudioSpec
        ruining your surround-sound game because it got there first.
        These are just requests! The backend may change any of these values during OpenDevice method! */
 
-    const SDL_AudioFormat minimum_format = device->recording ? DEFAULT_AUDIO_RECORDING_FORMAT : DEFAULT_AUDIO_PLAYBACK_FORMAT;
-    const int minimum_channels = device->recording ? DEFAULT_AUDIO_RECORDING_CHANNELS : DEFAULT_AUDIO_PLAYBACK_CHANNELS;
-    const int minimum_freq = device->recording ? DEFAULT_AUDIO_RECORDING_FREQUENCY : DEFAULT_AUDIO_PLAYBACK_FREQUENCY;
+#ifdef SDL_PLATFORM_DREAMCAST
+    const bool dreamcast_adpcm_passthrough = !device->recording && SDL_GetHintBoolean(SDL_HINT_AUDIO_ADPCM_STREAM_DC, false);
+#else
+    const bool dreamcast_adpcm_passthrough = false;
+#endif
+    if (dreamcast_adpcm_passthrough) {
+        SDL_copyp(&device->spec, &spec);
+    } else {
+        const SDL_AudioFormat minimum_format = device->recording ? DEFAULT_AUDIO_RECORDING_FORMAT : DEFAULT_AUDIO_PLAYBACK_FORMAT;
+        const int minimum_channels = device->recording ? DEFAULT_AUDIO_RECORDING_CHANNELS : DEFAULT_AUDIO_PLAYBACK_CHANNELS;
+        const int minimum_freq = device->recording ? DEFAULT_AUDIO_RECORDING_FREQUENCY : DEFAULT_AUDIO_PLAYBACK_FREQUENCY;
 
-    device->spec.format = (SDL_AUDIO_BITSIZE(minimum_format) >= SDL_AUDIO_BITSIZE(spec.format)) ? minimum_format : spec.format;
-    device->spec.channels = SDL_max(minimum_channels, spec.channels);
-    device->spec.freq = SDL_max(minimum_freq, spec.freq);
+        device->spec.format = (SDL_AUDIO_BITSIZE(minimum_format) >= SDL_AUDIO_BITSIZE(spec.format)) ? minimum_format : spec.format;
+        device->spec.channels = SDL_max(minimum_channels, spec.channels);
+        device->spec.freq = SDL_max(minimum_freq, spec.freq);
+    }
     device->sample_frames = SDL_GetDefaultSampleFramesFromFreq(device->spec.freq);
     SDL_UpdatedAudioDeviceFormat(device);  // start this off sane.
 
@@ -2230,6 +2239,15 @@ SDL_AudioStream *SDL_OpenAudioDeviceStream(SDL_AudioDeviceID devid, const SDL_Au
             SDL_copyp(&tmpspec, &device->spec);
             spec = &tmpspec;
         }
+
+#ifdef SDL_PLATFORM_DREAMCAST
+        SDL_AudioSpec dreamcast_adpcm_spec;
+        if (!recording && SDL_GetHintBoolean(SDL_HINT_AUDIO_ADPCM_STREAM_DC, false)) {
+            SDL_copyp(&dreamcast_adpcm_spec, spec);
+            dreamcast_adpcm_spec.format = SDL_AUDIO_S8;
+            spec = &dreamcast_adpcm_spec;
+        }
+#endif
 
         if (recording) {
             stream = SDL_CreateAudioStream(&device->spec, spec);
@@ -2640,4 +2658,3 @@ void SDL_UpdateAudio(void)
         SDL_free(i);
     }
 }
-

@@ -146,8 +146,6 @@ void DREAMCAST_PumpEvents(SDL_VideoDevice *_this)
 static SDL_VideoDevice *DREAMCAST_CreateDevice(void)
 {
     SDL_VideoDevice *device;
-    const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
-    int use_opengl = (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") == 0);
 
     if (!DREAMCAST_Available()) {
         SDL_SetError("Dreamcast video driver is not available.");
@@ -176,18 +174,16 @@ static SDL_VideoDevice *DREAMCAST_CreateDevice(void)
     device->SetWindowSize = DREAMCAST_SetWindowSize;
     device->DestroyWindow = DREAMCAST_DestroyWindow;
 
-    if (use_opengl) {
-        device->GL_LoadLibrary = DREAMCAST_GL_LoadLibrary;
-        device->GL_GetProcAddress = DREAMCAST_GL_GetProcAddress;
-        device->GL_MakeCurrent = DREAMCAST_GL_MakeCurrent;
-        device->GL_SwapWindow = DREAMCAST_GL_SwapBuffers;
-        device->GL_CreateContext = DREAMCAST_GL_CreateContext;
-        device->GL_DestroyContext = DREAMCAST_GL_DestroyContext;
-    } else {
-        device->CreateWindowFramebuffer = SDL_DREAMCAST_CreateWindowFramebuffer;
-        device->UpdateWindowFramebuffer = SDL_DREAMCAST_UpdateWindowFramebuffer;
-        device->DestroyWindowFramebuffer = SDL_DREAMCAST_DestroyWindowFramebuffer;
-    }
+    device->GL_LoadLibrary = DREAMCAST_GL_LoadLibrary;
+    device->GL_GetProcAddress = DREAMCAST_GL_GetProcAddress;
+    device->GL_MakeCurrent = DREAMCAST_GL_MakeCurrent;
+    device->GL_SwapWindow = DREAMCAST_GL_SwapBuffers;
+    device->GL_CreateContext = DREAMCAST_GL_CreateContext;
+    device->GL_DestroyContext = DREAMCAST_GL_DestroyContext;
+
+    device->CreateWindowFramebuffer = SDL_DREAMCAST_CreateWindowFramebuffer;
+    device->UpdateWindowFramebuffer = SDL_DREAMCAST_UpdateWindowFramebuffer;
+    device->DestroyWindowFramebuffer = SDL_DREAMCAST_DestroyWindowFramebuffer;
 
     device->free = DREAMCAST_DeleteDevice;
     // device->quirk_flags = VIDEO_DEVICE_QUIRK_FULLSCREEN_ONLY;
@@ -195,7 +191,7 @@ static SDL_VideoDevice *DREAMCAST_CreateDevice(void)
 }
 
 VideoBootStrap DREAMCAST_bootstrap = {
-    "DREAMCASTVID_DRIVER_NAME", "SDL dreamcast video driver",
+    DREAMCASTVID_DRIVER_NAME, "SDL dreamcast video driver",
     DREAMCAST_CreateDevice,
     NULL /* no ShowMessageBox implementation */
 };
@@ -219,8 +215,8 @@ static bool DREAMCAST_VideoInit(SDL_VideoDevice *_this) {
 
     if (!video_mode_hint || SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") != 0) {
         if (!video_mode_hint) {
-            SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DMA_VIDEO");
-            SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");
+            SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_OPENGL_VIDEO");
+            // SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");
             video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
             bool double_buffer = SDL_GetHintBoolean(SDL_HINT_VIDEO_DOUBLE_BUFFER, true);
             SDL_Log("No video mode hint set. Using %s with %s buffering.",
