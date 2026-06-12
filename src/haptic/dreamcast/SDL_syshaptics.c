@@ -30,9 +30,65 @@ struct haptic_hweffect {
     int is_running;           // Indicates whether the effect is currently running
     uint8_t intensity;        // Stores the intensity for rumble (0-255)
     uint16_t length;          // Duration for the rumble effect in milliseconds
+    purupuru_effect_t rumble; // Cached Dreamcast rumble packet
 };
 
+static uint8_t DREAMCAST_ClampRumbleLevel(Uint16 magnitude)
+{
+    uint32_t level = ((uint32_t)magnitude * 7u + 16383u) / 32767u;
+    if (level > 7u) {
+        level = 7u;
+    }
+    if (level == 0u && magnitude > 0u) {
+        level = 1u;
+    }
+    return (uint8_t)level;
+}
+
+static void DREAMCAST_BuildRumblePacket(purupuru_effect_t *out, Uint16 magnitude, Uint32 length)
+{
+    uint8_t level;
+
+    SDL_memset(out, 0, sizeof(*out));
+    out->motor = 1;
+
+    if (magnitude == 0) {
+        return;
+    }
+
+    level = DREAMCAST_ClampRumbleLevel(magnitude);
+    out->fpow = level;
+    out->freq = 26;
+
+    /* The PuruPuru packet has no true millisecond duration field, so map the
+       SDL length onto the 8-bit inclination byte as a best-effort proxy. */
+    out->inc = (uint8_t)SDL_min(length / 10u, 255u);
+    if (out->inc == 0) {
+        out->inc = 1;
+    }
+}
+
 static haptic_hwdata haptic_devices[MAX_HAPTIC_DEVICES] = { {NULL} };
+
+static int DREAMCAST_InitHapticHandle(SDL_Haptic *haptic, int index)
+{
+    haptic->index = index;
+    haptic->supported = SDL_HAPTIC_LEFTRIGHT;
+    haptic->neffects = 1;
+    haptic->nplaying = 1;
+
+    haptic->effects = (struct haptic_effect *)SDL_malloc(sizeof(struct haptic_effect) * haptic->neffects);
+    if (!haptic->effects) {
+        return SDL_OutOfMemory();
+    }
+    SDL_memset(haptic->effects, 0, sizeof(struct haptic_effect) * haptic->neffects);
+
+    haptic->hwdata = (struct haptic_hwdata *)&haptic_devices[index];
+    haptic_devices[index].haptic = haptic;
+
+    SDL_Log("Haptic device initialized successfully: Rumble supported!");
+    return 0;
+}
 
 int SDL_SYS_HapticInit(void)
 {
@@ -73,27 +129,7 @@ int SDL_SYS_HapticOpen(SDL_Haptic *haptic)
     if (!haptic || haptic->index >= MAX_HAPTIC_DEVICES || !haptic_devices[haptic->index].device) {
         return SDL_SetError("Invalid haptic device.");
     }
-
-    // Hardcode rumble support
-    haptic->supported = SDL_HAPTIC_LEFTRIGHT; // Enable simple rumble effect
-    haptic->neffects = 1; // Only one effect supported (rumble)
-    haptic->nplaying = 1; // One effect can be played at a time
-
-    // Allocate memory for the effect
-    haptic->effects = (struct haptic_effect *)SDL_malloc(sizeof(struct haptic_effect) * haptic->neffects);
-    if (!haptic->effects) {
-        return SDL_OutOfMemory();
-    }
-    SDL_memset(haptic->effects, 0, sizeof(struct haptic_effect) * haptic->neffects);
-
-    // Assign the haptic device
-    haptic->hwdata = (struct haptic_hwdata *)&haptic_devices[haptic->index];
-    haptic_devices[haptic->index].haptic = haptic;
-
-    // Log success
-    SDL_Log("Haptic device initialized successfully: Rumble supported!");
-
-    return 0;
+    return DREAMCAST_InitHapticHandle(haptic, haptic->index);
 }
 
 int SDL_SYS_HapticMouse(void)
@@ -116,13 +152,16 @@ int SDL_SYS_HapticOpenFromJoystick(SDL_Haptic *haptic, SDL_Joystick *joystick)
         return SDL_SetError("No haptic device found for joystick.");
     }
 
-    haptic->hwdata = (struct haptic_hwdata *)&haptic_devices[joystick->instance_id]; /* Fix pointer assignment */
-    return 0;
+    return DREAMCAST_InitHapticHandle(haptic, joystick->instance_id);
 }
 
 int SDL_SYS_JoystickSameHaptic(SDL_Haptic *haptic, SDL_Joystick *joystick)
 {
-    return 0;
+    if (!haptic || !joystick) {
+        return 0;
+    }
+
+    return (haptic->index == joystick->instance_id);
 }
 
 /*
@@ -140,13 +179,16 @@ int SDL_SYS_HapticRunEffect(SDL_Haptic *haptic, struct haptic_effect *effect, Ui
     if (!dev) return SDL_SetError("Haptic device not found.");
 
     // Mark the effect as running
-    if (effect->hweffect) {
+    if (effect && effect->hweffect) {
         effect->hweffect->is_running = 1;
     }
 
     // Start rumble
     if (iterations > 0) {
-        return purupuru_rumble_raw(dev, 1); // Updated function
+        if (effect && effect->hweffect) {
+            return purupuru_rumble(dev, &effect->hweffect->rumble);
+        }
+        return SDL_SetError("Haptic effect data missing.");
     } else {
         return SDL_SYS_HapticStopEffect(haptic, effect);
     }
@@ -167,12 +209,12 @@ int SDL_SYS_HapticStopEffect(SDL_Haptic *haptic, struct haptic_effect *effect)
     if (!dev) return SDL_SetError("Haptic device not found.");
 
     // Mark the effect as not running
-    if (effect->hweffect) {
+    if (effect && effect->hweffect) {
         effect->hweffect->is_running = 0;
     }
 
     // Stop rumble
-    return purupuru_rumble_raw(dev, 0); // Updated function
+    return purupuru_rumble(dev, &(const purupuru_effect_t){ .motor = 1 });
 }
 
 void SDL_SYS_HapticDestroyEffect(SDL_Haptic *haptic, struct haptic_effect *effect)
@@ -229,37 +271,30 @@ int SDL_SYS_HapticNewEffect(SDL_Haptic *haptic, struct haptic_effect *effect, SD
 
 int SDL_SYS_HapticUpdateEffect(SDL_Haptic *haptic, struct haptic_effect *effect, SDL_HapticEffect *data)
 {
+    SDL_HapticLeftRight *leftright;
+    uint16_t length;
+    uint16_t intensity;
+    haptic_hwdata *hwdata;
+    maple_device_t *dev;
+
     if (!haptic || !effect || !data) {
         return SDL_SetError("Haptic: Invalid parameters.");
     }
 
-    // // Dreamcast only supports simple rumble, so handle only SDL_HAPTIC_CONSTANT
-    // if (data->type != SDL_HAPTIC_CONSTANT) {
-    //     return SDL_SetError("Haptic: Unsupported effect type.");
-    // }
+    if (data->type != SDL_HAPTIC_LEFTRIGHT) {
+        return SDL_SetError("Haptic: Unsupported effect type.");
+    }
 
-    SDL_HapticConstant *constant = &data->constant;
+    leftright = &data->leftright;
+    length = leftright->length;
+    intensity = (uint16_t)(((uint32_t)leftright->large_magnitude + (uint32_t)leftright->small_magnitude) / 2u);
 
-    // Correct the variable declaration order
-    uint16_t length = constant->length ? constant->length : 1000;  // Default to 1000ms if no length is set
+    hwdata = (haptic_hwdata *)haptic->hwdata;
+    dev = hwdata->device;
 
-    // Declare intensity variable and assign it from the SDL_HapticConstant structure
-    uint16_t intensity = constant->level ? constant->level : 100;  // Default to 100 if no intensity is set
+    DREAMCAST_BuildRumblePacket(&effect->hweffect->rumble, intensity, length);
 
-    // Create the effect for Purupuru (Dreamcast)
-    purupuru_effect_t effect_data = {
-        .duration = length,    // Set duration from SDL_HapticConstant (or default)
-        .effect1 = intensity,  // Store intensity in effect1
-        .effect2 = 0,          // Unused field, setting to 0
-        .special = 0           // Unused field, setting to 0
-    };
-
-    // Fix invalid haptic_hwdata usage
-    haptic_hwdata *hwdata = (haptic_hwdata *)haptic->hwdata;
-    maple_device_t *dev = hwdata->device;
-
-    // Call the purupuru rumble function with the new effect data
-    if (purupuru_rumble(dev, &effect_data) < 0) {
+    if (purupuru_rumble(dev, &effect->hweffect->rumble) < 0) {
         return SDL_SetError("Haptic: Failed to update effect.");
     }
 
