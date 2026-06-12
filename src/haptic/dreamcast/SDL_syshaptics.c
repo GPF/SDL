@@ -27,8 +27,8 @@ struct haptic_hweffect {
     int is_running;
     uint8_t intensity;
     uint16_t length;
-    int pattern_index;  // -1 = raw; 0+ = catalog index
-    const char *description_override;
+    uint32_t raw;
+    int pattern_index;
 };
 
 typedef struct {
@@ -37,12 +37,12 @@ typedef struct {
 } baked_pattern_t;
 
 static const baked_pattern_t catalog[] = {
-    {0x011A7010, "Basic Thud (.5s jolt)"},
-    {0x31071011, "Car Idle (69 Mustang)"},
-    {0x2615F010, "Car Idle (VW Beetle)"},
-    {0x3339F010, "Earthquake (fade out)"},
-    {0x05281011, "Helicopter"},
-    {0x00072010, "Ship's Thrust (AAC)"}
+    { 0x011A7010, "Basic Thud (.5s jolt)" },
+    { 0x31071011, "Car Idle (69 Mustang)" },
+    { 0x2615F010, "Car Idle (VW Beetle)" },
+    { 0x3339F010, "Earthquake (fade out)" },
+    { 0x05281011, "Helicopter" },
+    { 0x00072010, "Ship's Thrust (AAC)" }
 };
 
 typedef union rumble_fields {
@@ -64,8 +64,6 @@ typedef union rumble_fields {
     };
 } rumble_fields_t;
 
-
-
 #define NUM_BAKED_PATTERNS (sizeof(catalog) / sizeof(catalog[0]))
 
 static haptic_hwdata haptic_devices[MAX_HAPTIC_DEVICES] = {
@@ -82,6 +80,69 @@ static haptic_hwdata *DC_HapticByInstanceID(SDL_HapticID id)
         }
     }
     return NULL;
+}
+
+static Uint8 DREAMCAST_ClampRumbleLevel(Uint16 magnitude)
+{
+    uint32_t level = ((uint32_t)magnitude * 7u + 16383u) / 32767u;
+    if (level > 7u) {
+        level = 7u;
+    }
+    if (level == 0u && magnitude > 0u) {
+        level = 1u;
+    }
+    return (Uint8)level;
+}
+
+static Uint32 DREAMCAST_BuildRumblePattern(Uint16 magnitude)
+{
+    rumble_fields_t rf = { .raw = 0 };
+    const Uint8 scaled = DREAMCAST_ClampRumbleLevel(magnitude);
+
+    if (scaled == 0) {
+        return 0;
+    }
+
+    rf.special_motor1 = 1;
+    rf.duration = 255;
+    rf.fx1_intensity = scaled;
+    rf.fx2_lintensity = scaled;
+    rf.fx2_uintensity = scaled;
+
+    if (scaled >= 6) {
+        rf.special_pulse = 1;
+        rf.fx1_pulse = 1;
+        rf.fx2_pulse = 1;
+    } else if (scaled >= 3) {
+        rf.fx2_decay = 1;
+    }
+
+    return rf.raw;
+}
+
+static Uint32 DREAMCAST_BuildRumblePatternDual(Uint16 left, Uint16 right)
+{
+    const Uint16 magnitude = (Uint16)(((Uint32)left + (Uint32)right) / 2u);
+    return DREAMCAST_BuildRumblePattern(magnitude);
+}
+
+static bool DREAMCAST_InitHapticHandle(SDL_Haptic *haptic, haptic_hwdata *hw)
+{
+    haptic->supported = SDL_HAPTIC_CONSTANT |
+                        SDL_HAPTIC_LEFTRIGHT |
+                        SDL_HAPTIC_SINE |
+                        SDL_HAPTIC_SAWTOOTHUP |
+                        SDL_HAPTIC_SQUARE;
+    haptic->neffects = 5;
+    haptic->nplaying = 1;
+    haptic->effects = SDL_calloc(haptic->neffects, sizeof(struct haptic_effect));
+    if (!haptic->effects) {
+        return false;
+    }
+
+    haptic->hwdata = hw;
+    hw->haptic = haptic;
+    return true;
 }
 
 bool SDL_SYS_HapticInit(void)
@@ -131,25 +192,18 @@ const char *SDL_SYS_HapticName(int index)
 
 bool SDL_SYS_HapticOpen(SDL_Haptic *haptic)
 {
+    if (!haptic) {
+        SDL_SetError("Invalid haptic device.");
+        return false;
+    }
+
     haptic_hwdata *hw = DC_HapticByInstanceID(haptic->instance_id);
     if (!hw || !hw->device) {
         SDL_SetError("Haptic device not found.");
         return false;
     }
 
-    haptic->hwdata = hw;
-    hw->haptic = haptic;
-
-    haptic->supported = SDL_HAPTIC_CONSTANT |
-                        SDL_HAPTIC_LEFTRIGHT |
-                        SDL_HAPTIC_SINE |
-                        SDL_HAPTIC_SAWTOOTHUP |
-                        SDL_HAPTIC_SQUARE;
-
-    haptic->neffects = 5;
-    haptic->nplaying = 1;
-    haptic->effects = SDL_calloc(haptic->neffects, sizeof(struct haptic_effect));
-    return haptic->effects != NULL;
+    return DREAMCAST_InitHapticHandle(haptic, hw);
 }
 
 
@@ -165,77 +219,25 @@ int SDL_SYS_HapticMouse(void)
 bool SDL_SYS_JoystickIsHaptic(SDL_Joystick *joystick)
 {
     SDL_JoystickID instance_id = SDL_GetJoystickID(joystick);
-    return (instance_id >= 0 && instance_id < MAX_HAPTIC_DEVICES &&
-            haptic_devices[instance_id].device != NULL);
+    return (DC_HapticByInstanceID(instance_id) != NULL);
 }
 
 bool SDL_SYS_HapticOpenFromJoystick(SDL_Haptic *haptic, SDL_Joystick *joystick)
 {
     SDL_JoystickID instance_id = SDL_GetJoystickID(joystick);
-    if (instance_id < 0 || instance_id >= MAX_HAPTIC_DEVICES || !haptic_devices[instance_id].device) {
+    haptic_hwdata *hw = DC_HapticByInstanceID(instance_id);
+    if (!hw || !hw->device) {
         SDL_SetError("Invalid joystick instance ID for haptics.");
         return false;
     }
 
-    haptic->hwdata = &haptic_devices[instance_id];
-    haptic_devices[instance_id].haptic = haptic;
-    return true;
+    return DREAMCAST_InitHapticHandle(haptic, hw);
 }
 
 
 bool SDL_SYS_JoystickSameHaptic(SDL_Haptic *haptic, SDL_Joystick *joystick)
 {
-    return false;
-}
-
-static inline uint32_t build_rumble_pattern_from_intensity(Uint16 intensity)
-{
-    rumble_fields_t rf = { .raw = 0 };
-
-    // Always use motor1 (most jump packs support only motor1)
-    rf.special_motor1 = 1;
-
-    // Max duration
-    rf.duration = 255;
-
-    // Convert SDL 0-32767 scale into 1–7 (or 0–7 if you want full range)
-    int scaled = (intensity * 7 + 16383) / 32767;
-    if (scaled > 7) scaled = 7;
-
-    // Use scaled intensity for both parts
-    rf.fx1_intensity = scaled;
-    rf.fx2_lintensity = scaled;
-    rf.fx2_uintensity = scaled;
-
-    // Add pulse effects for higher intensities
-    if (scaled >= 6) {
-        rf.fx1_pulse = 1;
-        rf.fx2_pulse = 1;
-        rf.special_pulse = 1;
-    }
-
-    // Optional: decay effect for low-to-mid
-    if (scaled >= 3 && scaled < 6) {
-        rf.fx2_decay = 1;
-    }
-
-    return rf.raw;
-}
-
-uint32_t build_rumble_pattern_dual_motor(Uint16 left, Uint16 right)
-{
-    rumble_fields_t f = { .raw = 0 };
-
-    // Normalize to 0-7 range (valid intensity range)
-    int lval = (left * 7 + 16384) / 32767;
-    int rval = (right * 7 + 16384) / 32767;
-
-    f.special_motor1 = 1;
-    f.fx1_intensity = lval;
-    f.fx2_lintensity = rval;
-    f.duration = 255;
-
-    return f.raw;
+    return haptic && joystick && (haptic->instance_id == SDL_GetJoystickID(joystick));
 }
 
 bool SDL_SYS_HapticRunEffect(SDL_Haptic *haptic, struct haptic_effect *effect, Uint32 iterations)
@@ -254,47 +256,20 @@ bool SDL_SYS_HapticRunEffect(SDL_Haptic *haptic, struct haptic_effect *effect, U
 
     struct haptic_hweffect *hw_effect = (struct haptic_hweffect *)effect->hweffect;
 
-    if (hw_effect->pattern_index >= 0 && hw_effect->pattern_index < NUM_BAKED_PATTERNS) {
-        uint32_t pattern = catalog[hw_effect->pattern_index].pattern;
-        if (purupuru_rumble_raw(dev, pattern) < 0) {
-            SDL_SetError("Failed to send pattern rumble command");
+    if (iterations == 0) {
+        return SDL_SYS_HapticStopEffect(haptic, effect);
+    }
+
+    if (hw_effect->raw) {
+        if (purupuru_rumble_raw(dev, hw_effect->raw) < 0) {
+            SDL_SetError("Failed to send rumble command");
             return false;
         }
         hw_effect->is_running = 1;
         return true;
     }
 
-    Uint16 intensity = 32767;
-    uint32_t raw = 0;
-
-    if (hw_effect->effect.type == SDL_HAPTIC_CONSTANT) {
-        intensity = SDL_abs(hw_effect->effect.constant.level);
-        if (intensity > 32767) intensity = 32767;
-
-        // Optional boost for low values
-        if (intensity > 0 && intensity < 8000) {
-            intensity = 8000;
-        }
-        raw = build_rumble_pattern_from_intensity(intensity);
-    } else if (hw_effect->effect.type == SDL_HAPTIC_LEFTRIGHT) {
-        Uint16 left = hw_effect->effect.leftright.large_magnitude;
-        Uint16 right = hw_effect->effect.leftright.small_magnitude;
-        raw = build_rumble_pattern_dual_motor(left, right);
-    } else {
-        // fallback to default intensity if unsupported type
-        raw = build_rumble_pattern_from_intensity(intensity);
-    }
-
-    if (purupuru_rumble_raw(dev, raw) < 0) {
-        SDL_SetError("Failed to send rumble command");
-        return false;
-    }
-
-    hw_effect->intensity = intensity;
-    hw_effect->length = 255;
-    hw_effect->is_running = 1;
-
-    return true;
+    return SDL_SYS_HapticStopEffect(haptic, effect);
 }
 
 bool SDL_SYS_HapticStopEffect(SDL_Haptic *haptic, struct haptic_effect *effect)
@@ -329,6 +304,9 @@ void SDL_SYS_HapticDestroyEffect(SDL_Haptic *haptic, struct haptic_effect *effec
 void SDL_SYS_HapticClose(SDL_Haptic *haptic)
 {
     if (haptic) {
+        if (haptic->hwdata) {
+            ((haptic_hwdata *)haptic->hwdata)->haptic = NULL;
+        }
         haptic->hwdata = NULL;
     }
 }
@@ -337,6 +315,8 @@ void SDL_SYS_HapticQuit(void)
 {
     for (int i = 0; i < MAX_HAPTIC_DEVICES; ++i) {
         haptic_devices[i].device = NULL;
+        haptic_devices[i].haptic = NULL;
+        haptic_devices[i].instance_id = 0;
     }
 }
 
@@ -355,37 +335,37 @@ bool SDL_SYS_HapticNewEffect(SDL_Haptic *haptic, struct haptic_effect *effect, c
 
     effect->hweffect->effect = *base;
     effect->hweffect->length = 1000;
-    effect->hweffect->intensity = 128;  // midpoint (~0.5 strength), fits in uint8_t
+    effect->hweffect->intensity = 128;
+    effect->hweffect->pattern_index = -1;
 
     switch (base->type) {
     case SDL_HAPTIC_CONSTANT:
-        effect->hweffect->pattern_index = 3;  // "Earthquake"
-        effect->hweffect->description_override = "Emulated Constant (Sine)";
+        effect->hweffect->pattern_index = 3;
+        effect->hweffect->raw = catalog[3].pattern;
         break;
 
     case SDL_HAPTIC_LEFTRIGHT:
-        effect->hweffect->pattern_index = 4;  // "Helicopter"
-        effect->hweffect->description_override = "Emulated Left/Right (Sawtooth)";
+        effect->hweffect->raw = DREAMCAST_BuildRumblePatternDual(base->leftright.large_magnitude,
+                                                                  base->leftright.small_magnitude);
+        if (!effect->hweffect->raw) {
+            effect->hweffect->pattern_index = 4;
+            effect->hweffect->raw = catalog[4].pattern;
+        }
         break;
 
     case SDL_HAPTIC_SINE:
         effect->hweffect->pattern_index = 3;
-        effect->hweffect->description_override = catalog[3].description;
+        effect->hweffect->raw = catalog[3].pattern;
         break;
 
     case SDL_HAPTIC_SQUARE:
         effect->hweffect->pattern_index = 0;
-        effect->hweffect->description_override = catalog[0].description;
+        effect->hweffect->raw = catalog[0].pattern;
         break;
 
     case SDL_HAPTIC_SAWTOOTHUP:
         effect->hweffect->pattern_index = 4;
-        effect->hweffect->description_override = catalog[4].description;
-        break;
-
-    case SDL_HAPTIC_CUSTOM:
-        effect->hweffect->pattern_index = 1;
-        effect->hweffect->description_override = catalog[1].description;
+        effect->hweffect->raw = catalog[4].pattern;
         break;
 
     default:
@@ -412,44 +392,53 @@ bool SDL_SYS_HapticUpdateEffect(SDL_Haptic *haptic, struct haptic_effect *effect
         SDL_SetError("No valid device.");
         return false;
     }
-    Uint16 intensity = 0;
-    Uint32 duration = 1000;
-
-    // if (data->type == SDL_HAPTIC_CONSTANT) {
-    //     duration = data->constant.length ? data->constant.length : 1000;
-    //     intensity = SDL_abs(data->constant.level);
-    //     if (intensity < 8000 && intensity > 0) intensity = 8000;
-    // } else if (data->type == SDL_HAPTIC_LEFTRIGHT) {
-        intensity = (data->leftright.large_magnitude + data->leftright.small_magnitude) / 2;
-        // duration = data->leftright.length ? data->leftright.length : 1000;
-    // } else {
-    //     SDL_SetError("Unsupported effect type");
-    //     return false;
-    // }
-
-    uint32_t raw;
-
-    // if (data->type == SDL_HAPTIC_LEFTRIGHT) {
-    //     Uint16 left = data->leftright.large_magnitude;
-    //     Uint16 right = data->leftright.small_magnitude;
-    //     raw = build_rumble_pattern_dual_motor(left, right);
-    // } else {
-        raw = build_rumble_pattern_from_intensity(intensity);
-    // }
-    Uint32 start = SDL_GetTicks();
-    Uint32 now = start;
-
-    while ((now - start) < duration) {
-        purupuru_rumble_raw(hwdata->device, raw);
-        SDL_Delay(100);  // re-send every 100ms to keep it alive
-        now = SDL_GetTicks();
+    if (!effect->hweffect) {
+        SDL_SetError("Invalid effect state.");
+        return false;
     }
 
-    purupuru_rumble_raw(hwdata->device, 0);  // stop rumble
+    effect->hweffect->effect = *data;
+    effect->hweffect->pattern_index = -1;
 
-    if (effect->hweffect) {
-        effect->hweffect->intensity = intensity;
-        effect->hweffect->length = duration;
+    switch (data->type) {
+    case SDL_HAPTIC_CONSTANT:
+        effect->hweffect->intensity = (Uint8)SDL_min(SDL_abs(data->constant.level), 255);
+        effect->hweffect->length = data->constant.length ? data->constant.length : 1000;
+        effect->hweffect->raw = DREAMCAST_BuildRumblePattern(SDL_abs(data->constant.level));
+        break;
+
+    case SDL_HAPTIC_LEFTRIGHT:
+        effect->hweffect->intensity = (Uint8)SDL_min(((Uint32)data->leftright.large_magnitude +
+                                                      (Uint32)data->leftright.small_magnitude) / 2u, 255u);
+        effect->hweffect->length = data->leftright.length ? data->leftright.length : 1000;
+        effect->hweffect->raw = DREAMCAST_BuildRumblePatternDual(data->leftright.large_magnitude,
+                                                                  data->leftright.small_magnitude);
+        break;
+
+    case SDL_HAPTIC_SINE:
+        effect->hweffect->intensity = (Uint8)SDL_min(SDL_abs(data->periodic.magnitude), 255);
+        effect->hweffect->length = data->periodic.length ? data->periodic.length : 1000;
+        effect->hweffect->raw = catalog[3].pattern;
+        effect->hweffect->pattern_index = 3;
+        break;
+
+    case SDL_HAPTIC_SQUARE:
+        effect->hweffect->intensity = (Uint8)SDL_min(SDL_abs(data->periodic.magnitude), 255);
+        effect->hweffect->length = data->periodic.length ? data->periodic.length : 1000;
+        effect->hweffect->raw = catalog[0].pattern;
+        effect->hweffect->pattern_index = 0;
+        break;
+
+    case SDL_HAPTIC_SAWTOOTHUP:
+        effect->hweffect->intensity = (Uint8)SDL_min(SDL_abs(data->periodic.magnitude), 255);
+        effect->hweffect->length = data->periodic.length ? data->periodic.length : 1000;
+        effect->hweffect->raw = catalog[4].pattern;
+        effect->hweffect->pattern_index = 4;
+        break;
+
+    default:
+        SDL_SetError("Unsupported effect type.");
+        return false;
     }
 
     return true;

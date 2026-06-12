@@ -203,6 +203,10 @@ static bool DREAMCAST_VideoInit(SDL_VideoDevice *_this) {
     int disp_mode = -1;
     int default_w = 640, default_h = 480; // Default resolution for display mode
     const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
+    const bool textured_video =
+        video_mode_hint &&
+        (SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0 ||
+         SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_STRIDED_VIDEO") == 0);
 
     // Determine NTSC (60Hz) or PAL (50Hz)
     if (!vid_check_cable()) {
@@ -244,8 +248,8 @@ static bool DREAMCAST_VideoInit(SDL_VideoDevice *_this) {
         default_w = 640;
         default_h = 480;
     } 
-else if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0) {
-    SDL_Log("Initializing SDL_DC_TEXTURED_VIDEO mode");
+else if (textured_video) {
+    SDL_Log("Initializing %s mode", video_mode_hint);
 
     // Default texture size if not already specified
     if (!SDL_GetHint(SDL_HINT_DC_SCREEN_WIDTH_TEXTURED)) {

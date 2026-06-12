@@ -39,6 +39,11 @@ static int sdl_dc_height=0;
 static int sdl_dc_bpp=0;
 static int sdl_dc_wtex=0;
 static int sdl_dc_htex=0;
+static int sdl_dc_pvr_wtex=0;
+static int sdl_dc_pvr_htex=0;
+static int sdl_dc_tex_bytes=0;
+static int sdl_dc_strided=0;
+static uint32_t sdl_dc_txr_format=0;
 static pvr_ptr_t sdl_dc_memtex;
 static unsigned short *sdl_dc_buftex;
 static void *sdl_dc_memfreed;
@@ -51,6 +56,19 @@ static float sdl_dc_v1=0.9f;
 static float sdl_dc_v2=0.6f;
 extern unsigned int __sdl_dc_mouse_shift;
 SDL_Surface *cursorSurface = NULL;
+
+static bool sdl_dc_is_textured_mode(const char *video_mode_hint)
+{
+    return video_mode_hint &&
+           (SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0 ||
+            SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_STRIDED_VIDEO") == 0);
+}
+
+static bool sdl_dc_is_strided_textured_mode(const char *video_mode_hint)
+{
+    return video_mode_hint &&
+           SDL_strcmp(video_mode_hint, "SDL_DC_TEXTURED_STRIDED_VIDEO") == 0;
+}
 /* XPM */
 static const char *arrow[] = {
     /* width height num_colors chars_per_pixel */
@@ -157,14 +175,17 @@ static void sdl_dc_blit_textured(void)
 
     if (sdl_dc_buftex)
     {
-        dcache_flush_range((unsigned)sdl_dc_buftex, sdl_dc_wtex*sdl_dc_htex*2);
+        dcache_flush_range((unsigned)sdl_dc_buftex, sdl_dc_tex_bytes);
         while (!pvr_dma_ready());
-        pvr_txr_load_dma(sdl_dc_buftex, sdl_dc_memtex, sdl_dc_wtex*sdl_dc_htex*2, -1, NULL, 0);
-        // pvr_txr_load(sdl_dc_buftex, sdl_dc_memtex, sdl_dc_wtex*sdl_dc_htex*2);
+        pvr_txr_load_dma(sdl_dc_buftex, sdl_dc_memtex, sdl_dc_tex_bytes, -1, NULL, 0);
+        // pvr_txr_load(sdl_dc_buftex, sdl_dc_memtex, sdl_dc_tex_bytes);
     }
 
-    // pvr_dr_init(&dr_state);
-    pvr_poly_cxt_txr(&cxt, PVR_LIST_OP_POLY, PVR_TXRFMT_RGB565|PVR_TXRFMT_NONTWIDDLED, sdl_dc_wtex, sdl_dc_htex, sdl_dc_memtex, PVR_FILTER_NEAREST);
+    pvr_dr_init(&dr_state);
+    if (sdl_dc_strided) {
+        PVR_SET(PVR_TEXTURE_MODULO, sdl_dc_wtex / 32);
+    }
+    pvr_poly_cxt_txr(&cxt, PVR_LIST_OP_POLY, sdl_dc_txr_format, sdl_dc_pvr_wtex, sdl_dc_pvr_htex, sdl_dc_memtex, PVR_FILTER_NEAREST);
 
     hdr = (pvr_poly_hdr_t *)pvr_dr_target(dr_state);
     pvr_poly_compile(hdr, &cxt);
@@ -415,13 +436,15 @@ void SDL_DREAMCAST_DestroyWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *
 bool DREAMCAST_CreateWindowTexture(SDL_VideoDevice *_this, SDL_Window *window, SDL_PixelFormat *format, void **pixels, int *pitch)
 {
     const char *double_buffer_hint = SDL_GetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER);
+    const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
     int logical_w = SDL_atoi(SDL_GetHint(SDL_HINT_DC_SCREEN_WIDTH_TEXTURED) ?: "640");
     int logical_h = SDL_atoi(SDL_GetHint(SDL_HINT_DC_SCREEN_HEIGHT_TEXTURED) ?: "480");
     int w, h;
+    const bool strided = sdl_dc_is_strided_textured_mode(video_mode_hint) && ((logical_w % 32) == 0);
     sdl_dc_width = logical_w;
     sdl_dc_height = logical_h;
-    sdl_dc_wtex = 1 << (32 - __builtin_clz(logical_w - 1));
-    sdl_dc_htex = 1 << (32 - __builtin_clz(logical_h - 1));
+    sdl_dc_wtex = strided ? logical_w : (1 << (32 - __builtin_clz(logical_w - 1)));
+    sdl_dc_htex = strided ? logical_h : (1 << (32 - __builtin_clz(logical_h - 1)));
     SDL_GetWindowSizeInPixels(window, &w, &h);
     *format = SDL_PIXELFORMAT_RGB565;
     sdl_dc_bpp = SDL_BITSPERPIXEL(*format);
@@ -431,12 +454,20 @@ bool DREAMCAST_CreateWindowTexture(SDL_VideoDevice *_this, SDL_Window *window, S
     pvr_dma_init();
     sdl_dc_pvr_inited = 1;
     sdl_dc_textured = 1;
+    sdl_dc_strided = strided ? 1 : 0;
+    sdl_dc_pvr_wtex = sdl_dc_wtex;
+    sdl_dc_pvr_htex = sdl_dc_htex;
+    sdl_dc_tex_bytes = sdl_dc_wtex * sdl_dc_htex * (sdl_dc_bpp >> 3);
+    sdl_dc_txr_format = PVR_TXRFMT_RGB565 | PVR_TXRFMT_NONTWIDDLED;
+    if (sdl_dc_strided) {
+        sdl_dc_txr_format |= PVR_TXRFMT_X32_STRIDE;
+    }
 
     sdl_dc_memtex = pvr_mem_malloc(tex_size);
     sdl_dc_u1 = 0.0f;
     sdl_dc_v1 = 0.0f;
-    sdl_dc_u2 = (float)512 / (float)sdl_dc_wtex;
-    sdl_dc_v2 = (float)256 / (float)sdl_dc_htex;
+    sdl_dc_u2 = (float)sdl_dc_width / (float)sdl_dc_wtex;
+    sdl_dc_v2 = (float)sdl_dc_height / (float)sdl_dc_htex;
 
     if (SDL_GetHintBoolean(SDL_HINT_VIDEO_DOUBLE_BUFFER, true)) {
         sdl_dc_memfreed = calloc(64 + tex_size, 1);
@@ -451,8 +482,9 @@ bool DREAMCAST_CreateWindowTexture(SDL_VideoDevice *_this, SDL_Window *window, S
     // *pitch = 1280;
     __sdl_dc_mouse_shift = 640.0f / (float)sdl_dc_width;
 
-    SDL_Log("DREAMCAST_CreateWindowTexture: Logical %dx%d, tex size %dx%d, pitch %d",
-            sdl_dc_width, sdl_dc_height, sdl_dc_wtex, sdl_dc_htex, *pitch);
+    SDL_Log("DREAMCAST_CreateWindowTexture: Logical %dx%d, tex size %dx%d%s, pitch %d",
+            sdl_dc_width, sdl_dc_height, sdl_dc_wtex, sdl_dc_htex,
+            sdl_dc_strided ? " (strided)" : "", *pitch);
     // SDL_SetWindowSize(window, sdl_dc_wtex, sdl_dc_htex);
 
     return true;
@@ -480,6 +512,11 @@ void DREAMCAST_DestroyWindowTexture(SDL_VideoDevice *_this, SDL_Window *window)
         pvr_mem_free(sdl_dc_memtex);
         sdl_dc_memtex = NULL;
     }
+    sdl_dc_pvr_wtex = 0;
+    sdl_dc_pvr_htex = 0;
+    sdl_dc_tex_bytes = 0;
+    sdl_dc_strided = 0;
+    sdl_dc_txr_format = 0;
 }
 
 

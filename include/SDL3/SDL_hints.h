@@ -4957,6 +4957,9 @@ extern "C" {
  * - "SDL_DC_TEXTURED_VIDEO": Uses textured pvr video rendering.
  *    SDL_HINT_DC_SCREEN_WIDTH_TEXTURED and SDL_HINT_DC_SCREEN_HEIGHT_TEXTURED
  *    must be set to the intended screen width and height rendered into the texture for the SDL_DC_TEXTURED_VIDEO mode.
+ * - "SDL_DC_TEXTURED_STRIDED_VIDEO": Uses a strided textured PVR mode.
+ *    SDL_HINT_DC_SCREEN_WIDTH_TEXTURED and SDL_HINT_DC_SCREEN_HEIGHT_TEXTURED
+ *    should match the logical surface size, and width should be 32-byte aligned.
  */
 #define SDL_HINT_DC_VIDEO_MODE "SDL_DC_VIDEO_MODE"
 #define SDL_HINT_DC_SCREEN_WIDTH_TEXTURED  "SDL_DC_SCREEN_WIDTH_TEXTURED"
