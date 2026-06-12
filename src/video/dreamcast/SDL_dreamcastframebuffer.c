@@ -36,6 +36,11 @@ static int sdl_dc_height=0;
 static int sdl_dc_bpp=0;
 static int sdl_dc_wtex=0;
 static int sdl_dc_htex=0;
+static int sdl_dc_pvr_wtex=0;
+static int sdl_dc_pvr_htex=0;
+static int sdl_dc_tex_bytes=0;
+static int sdl_dc_strided=0;
+static uint32_t sdl_dc_txr_format=0;
 static pvr_ptr_t sdl_dc_memtex;
 static unsigned short *sdl_dc_buftex;
 static void *sdl_dc_memfreed;
@@ -48,6 +53,20 @@ static float sdl_dc_v1=0.9f;
 static float sdl_dc_v2=0.6f;
 
 SDL_Surface *cursorSurface = NULL;
+
+static SDL_bool sdl_dc_is_textured_mode(const char *video_mode_hint)
+{
+    return video_mode_hint != NULL &&
+           (strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0 ||
+            strcmp(video_mode_hint, "SDL_DC_TEXTURED_STRIDED_VIDEO") == 0);
+}
+
+static SDL_bool sdl_dc_is_strided_textured_mode(const char *video_mode_hint)
+{
+    return video_mode_hint != NULL &&
+           strcmp(video_mode_hint, "SDL_DC_TEXTURED_STRIDED_VIDEO") == 0;
+}
+
 /* XPM */
 static const char *arrow[] = {
     /* width height num_colors chars_per_pixel */
@@ -146,14 +165,17 @@ static void sdl_dc_blit_textured(void)
 
     if (sdl_dc_buftex)
     {
-        dcache_flush_range((unsigned)sdl_dc_buftex, sdl_dc_wtex*sdl_dc_htex*2);
+        dcache_flush_range((unsigned)sdl_dc_buftex, sdl_dc_tex_bytes);
         while (!pvr_dma_ready());
-        pvr_txr_load_dma(sdl_dc_buftex, sdl_dc_memtex, sdl_dc_wtex*sdl_dc_htex*2, -1, NULL, 0);
-        // pvr_txr_load(sdl_dc_buftex, sdl_dc_memtex, sdl_dc_wtex*sdl_dc_htex*2);
+        pvr_txr_load_dma(sdl_dc_buftex, sdl_dc_memtex, sdl_dc_tex_bytes, -1, NULL, 0);
+        // pvr_txr_load(sdl_dc_buftex, sdl_dc_memtex, sdl_dc_tex_bytes);
     }
 
     pvr_dr_init(&dr_state);
-    pvr_poly_cxt_txr(&cxt, PVR_LIST_OP_POLY, PVR_TXRFMT_ARGB1555|PVR_TXRFMT_NONTWIDDLED, sdl_dc_wtex, sdl_dc_htex, sdl_dc_memtex, PVR_FILTER_NEAREST);
+    if (sdl_dc_strided) {
+        PVR_SET(PVR_TEXTURE_MODULO, sdl_dc_wtex / 32);
+    }
+    pvr_poly_cxt_txr(&cxt, PVR_LIST_OP_POLY, sdl_dc_txr_format, sdl_dc_pvr_wtex, sdl_dc_pvr_htex, sdl_dc_memtex, PVR_FILTER_NEAREST);
 
     hdr = (pvr_poly_hdr_t *)pvr_dr_target(dr_state);
     pvr_poly_compile(hdr, &cxt);
@@ -207,6 +229,7 @@ int SDL_DREAMCAST_CreateWindowFramebuffer(_THIS, SDL_Window *window, Uint32 *for
     int target_bpp;
     const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
     const char *double_buffer_hint = SDL_GetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER);
+    SDL_bool textured_strided = SDL_FALSE;
 
     /* Free the old framebuffer surface */
     SDL_DREAMCAST_DestroyWindowFramebuffer(_this, window);
@@ -227,14 +250,17 @@ int SDL_DREAMCAST_CreateWindowFramebuffer(_THIS, SDL_Window *window, Uint32 *for
     }
 
     // Determine color depth (bit depth) based on video mode
-    if (video_mode_hint != NULL && strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0) {
+    if (sdl_dc_is_textured_mode(video_mode_hint)) {
         // Use 16-bit for textured mode, keep the format but change bit depth
         target_bpp = 16;  // Adjust bit depth to 16-bit for textured mode
         surface_format = SDL_PIXELFORMAT_ARGB1555;
         sdl_dc_width = w;
         sdl_dc_height = h;
-        w = SDL_powerof2(w);  
-        h = SDL_powerof2(h);         
+        textured_strided = sdl_dc_is_strided_textured_mode(video_mode_hint) && ((w % 32) == 0);
+        if (!textured_strided) {
+            w = SDL_powerof2(w);
+            h = SDL_powerof2(h);
+        }
     } else {
         target_bpp = SDL_BITSPERPIXEL(surface_format);  // Maintain the original depth if not textured mode
         // surface_format = SDL_PIXELFORMAT_RGB565;
@@ -265,25 +291,34 @@ int SDL_DREAMCAST_CreateWindowFramebuffer(_THIS, SDL_Window *window, Uint32 *for
         surface->pixels = (void *)sdl_dc_dblmem;
     }
 
-    if (sdl_dc_pvr_inited != 1 &&sdl_dc_textured != 1 && (video_mode_hint != NULL && strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0)) {
+    if (sdl_dc_pvr_inited != 1 && sdl_dc_textured != 1 && sdl_dc_is_textured_mode(video_mode_hint)) {
         pvr_init_defaults();
         pvr_dma_init();
         sdl_dc_pvr_inited = 1;
         sdl_dc_textured = 1;
         sdl_dc_bpp = SDL_BITSPERPIXEL(surface_format);
+        sdl_dc_strided = textured_strided ? 1 : 0;
         sdl_dc_wtex = w;  
         sdl_dc_htex = h;   
+        sdl_dc_pvr_wtex = sdl_dc_strided ? SDL_powerof2(w) : w;
+        sdl_dc_pvr_htex = sdl_dc_strided ? SDL_powerof2(h) : h;
         SDL_Log("sdl_dc_wtex: %d", sdl_dc_wtex);
         SDL_Log("sdl_dc_htex: %d", sdl_dc_htex);
-        sdl_dc_memtex = pvr_mem_malloc(sdl_dc_wtex * sdl_dc_htex * 2);        
+        sdl_dc_tex_bytes = sdl_dc_wtex * sdl_dc_htex * (sdl_dc_bpp >> 3);
+        sdl_dc_txr_format = PVR_TXRFMT_ARGB1555 | PVR_TXRFMT_NONTWIDDLED;
+        if (sdl_dc_strided) {
+            sdl_dc_txr_format |= PVR_TXRFMT_X32_STRIDE;
+            SDL_Log("Inited SDL_DC_TEXTURED_STRIDED_VIDEO modulo=%d", sdl_dc_wtex / 32);
+        }
+        sdl_dc_memtex = pvr_mem_malloc(sdl_dc_pvr_wtex * sdl_dc_pvr_htex * (sdl_dc_bpp >> 3));
         sdl_dc_u1 = 0.0f;
         sdl_dc_v1 = 0.0f;
-        sdl_dc_u2 = (float)sdl_dc_width / (float)sdl_dc_wtex;
-        sdl_dc_v2 = (float)sdl_dc_height / (float)sdl_dc_htex;
+        sdl_dc_u2 = (float)sdl_dc_width / (float)sdl_dc_pvr_wtex;
+        sdl_dc_v2 = (float)sdl_dc_height / (float)sdl_dc_pvr_htex;
 
         if (double_buffer_hint && SDL_GetHintBoolean(SDL_HINT_VIDEO_DOUBLE_BUFFER, SDL_TRUE)) {
             SDL_Log("Inited SDL_DC_TEXTURED_VIDEO with double buffer");
-            sdl_dc_memfreed = calloc(64 + (sdl_dc_wtex * sdl_dc_htex * (sdl_dc_bpp >> 3)), 1);
+            sdl_dc_memfreed = calloc(64 + sdl_dc_tex_bytes, 1);
             sdl_dc_buftex = (unsigned short *)(((((unsigned)sdl_dc_memfreed) + 32) / 32) * 32);            
             surface->pixels = (void *)sdl_dc_buftex;
         } else {
@@ -378,7 +413,7 @@ if (video_mode_hint != NULL && strcmp(video_mode_hint, "SDL_DC_DIRECT_VIDEO") ==
 
     // Update the entire framebuffer in one go if no specific rectangles are provided
     if (numrects == 1) {
-    if (video_mode_hint != NULL && strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0) {
+    if (sdl_dc_is_textured_mode(video_mode_hint)) {
         sdl_dc_blit_textured();
     }
     else if (video_mode_hint != NULL && strcmp(video_mode_hint, "SDL_DC_DMA_VIDEO") == 0) {
@@ -405,7 +440,7 @@ if (video_mode_hint != NULL && strcmp(video_mode_hint, "SDL_DC_DIRECT_VIDEO") ==
         }
     }
 
-    if (video_mode_hint != NULL && strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") != 0) {
+    if (!sdl_dc_is_textured_mode(video_mode_hint)) {
         // Check SDL hints before synchronization
             if (vsync_hint) {
                 vid_waitvbl();
@@ -463,6 +498,11 @@ void SDL_DREAMCAST_DestroyWindowFramebuffer(_THIS, SDL_Window *window)
     sdl_dc_bpp = 0;
     sdl_dc_wtex = 0;
     sdl_dc_htex = 0;
+    sdl_dc_pvr_wtex = 0;
+    sdl_dc_pvr_htex = 0;
+    sdl_dc_tex_bytes = 0;
+    sdl_dc_strided = 0;
+    sdl_dc_txr_format = 0;
 }
 
 #endif /* SDL_VIDEO_DRIVER_DREAMCAST */

@@ -227,8 +227,10 @@ int DREAMCAST_VideoInit(_THIS) {
     int height = 480;   
     __sdl_dc_mouse_shift=640/width; 
     const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
-    if (video_mode_hint != NULL && strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0) {
-        SDL_Log("Initializing SDL_DC_TEXTURED_VIDEO");
+    if (video_mode_hint != NULL &&
+        (strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0 ||
+         strcmp(video_mode_hint, "SDL_DC_TEXTURED_STRIDED_VIDEO") == 0)) {
+        SDL_Log("Initializing %s", video_mode_hint);
         width = 320;
         height = 240;
         __sdl_dc_mouse_shift=640/width;
@@ -296,8 +298,10 @@ int DREAMCAST_SetDisplayMode(_THIS, SDL_VideoDisplay *display, SDL_DisplayMode *
     const char *double_buffer_hint = SDL_GetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER);
     int use_opengl = (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") == 0);
 
-    if (video_mode_hint != NULL && strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0) {
-        SDL_Log("Setting SDL_DC_TEXTURED_VIDEO mode");
+    if (video_mode_hint != NULL &&
+        (strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0 ||
+         strcmp(video_mode_hint, "SDL_DC_TEXTURED_STRIDED_VIDEO") == 0)) {
+        SDL_Log("Setting %s mode", video_mode_hint);
         mode->w = 640;
         mode->h = 480;
     }

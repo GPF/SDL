@@ -2269,6 +2269,8 @@ extern "C" {
  *
  * - "SDL_DC_DIRECT_VIDEO": Uses direct framebuffer access without DMA.
  * - "SDL_DC_DMA_VIDEO": Uses DMA for transferring video data (default).
+ * - "SDL_DC_TEXTURED_VIDEO": Uses a power-of-two non-twiddled PVR texture.
+ * - "SDL_DC_TEXTURED_STRIDED_VIDEO": Uses a strided non-twiddled PVR texture.
  */
 #define SDL_HINT_DC_VIDEO_MODE "SDL_DC_VIDEO_MODE"
 

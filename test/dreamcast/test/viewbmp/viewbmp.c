@@ -1,6 +1,7 @@
     #ifdef DREAMCAST
     #include <kos.h>
     #define BMP_PATH "/rd/Troy2024.bmp"
+
     #else
     #define BMP_PATH "data/Troy2024.bmp"
     #endif
@@ -33,12 +34,13 @@
         SDL_Renderer *renderer;
         SDL_Event event;
         int running = 1;
+        cont_btn_callback(0, CONT_START | CONT_A | CONT_B | CONT_X | CONT_Y, (cont_btn_callback_t)arch_exit);
 
-
-        SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1"); // SDL2 defaults to double buffering, this shuts it off
-        SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
+        // SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1"); // SDL2 defaults to double buffering, this shuts it off
+        // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
         // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO");
         // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DMA_VIDEO");
+        SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_OPENGL_VIDEO");
         // SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
         printf("SDL2_INIT_VIDEO\n");
         // Initialize SDL
@@ -78,7 +80,7 @@
         SDL_GetRendererInfo(renderer, &info);
         SDL_Log("Renderer Info:");
         SDL_Log("Name: %s", info.name);
-        SDL_Log("Flags: %u", info.flags);
+        SDL_Log("Flags: %lu", info.flags);
         // Load BMP file
         SDL_RWops *rw = SDL_RWFromFile(BMP_PATH, "rb");
         if (!rw) {  
@@ -106,8 +108,8 @@
     printf("Image surface format: %s\n", format_name);    
     // Uint32 transparentColor = *(Uint32 *)image_surface->pixels;
     // SDL_SetColorKey(image_surface->pixels, SDL_TRUE, transparentColor);
-    // Convert the surface to ARGB8888 format
-    SDL_Surface *converted_surface = SDL_ConvertSurfaceFormat(image_surface, SDL_PIXELFORMAT_ARGB1555, 0);
+    // Convert the surface to RGB565 for the Dreamcast OpenGL path.
+    SDL_Surface *converted_surface = SDL_ConvertSurfaceFormat(image_surface, SDL_PIXELFORMAT_RGB565, 0);
     if (!converted_surface) {
         printf("Failed to convert surface format: %s\n", SDL_GetError());
         SDL_FreeSurface(image_surface);
@@ -193,8 +195,8 @@
         // Toggle k to flip texture on next frame
         k = !k;
 
-        // Optional delay for frame rate control (approximately 60 FPS)
-        // SDL_Delay(116);
+        // Small delay so the flip is visible.
+        SDL_Delay(250);
     }
         // Clean up
         if (joystick) {
