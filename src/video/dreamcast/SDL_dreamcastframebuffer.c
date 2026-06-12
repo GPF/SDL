@@ -183,7 +183,7 @@ static void sdl_dc_blit_textured(void)
 
     pvr_dr_init(&dr_state);
     if (sdl_dc_strided) {
-        PVR_SET(PVR_TEXTURE_MODULO, sdl_dc_wtex / 32);
+        pvr_txr_set_stride(sdl_dc_wtex);
     }
     pvr_poly_cxt_txr(&cxt, PVR_LIST_OP_POLY, sdl_dc_txr_format, sdl_dc_pvr_wtex, sdl_dc_pvr_htex, sdl_dc_memtex, PVR_FILTER_NEAREST);
 
@@ -441,10 +441,12 @@ bool DREAMCAST_CreateWindowTexture(SDL_VideoDevice *_this, SDL_Window *window, S
     int logical_h = SDL_atoi(SDL_GetHint(SDL_HINT_DC_SCREEN_HEIGHT_TEXTURED) ?: "480");
     int w, h;
     const bool strided = sdl_dc_is_strided_textured_mode(video_mode_hint) && ((logical_w % 32) == 0);
+    const int padded_w = 1 << (32 - __builtin_clz(logical_w - 1));
+    const int padded_h = 1 << (32 - __builtin_clz(logical_h - 1));
     sdl_dc_width = logical_w;
     sdl_dc_height = logical_h;
-    sdl_dc_wtex = strided ? logical_w : (1 << (32 - __builtin_clz(logical_w - 1)));
-    sdl_dc_htex = strided ? logical_h : (1 << (32 - __builtin_clz(logical_h - 1)));
+    sdl_dc_wtex = strided ? logical_w : padded_w;
+    sdl_dc_htex = strided ? logical_h : padded_h;
     SDL_GetWindowSizeInPixels(window, &w, &h);
     *format = SDL_PIXELFORMAT_RGB565;
     sdl_dc_bpp = SDL_BITSPERPIXEL(*format);
@@ -455,9 +457,9 @@ bool DREAMCAST_CreateWindowTexture(SDL_VideoDevice *_this, SDL_Window *window, S
     sdl_dc_pvr_inited = 1;
     sdl_dc_textured = 1;
     sdl_dc_strided = strided ? 1 : 0;
-    sdl_dc_pvr_wtex = sdl_dc_wtex;
-    sdl_dc_pvr_htex = sdl_dc_htex;
-    sdl_dc_tex_bytes = sdl_dc_wtex * sdl_dc_htex * (sdl_dc_bpp >> 3);
+    sdl_dc_pvr_wtex = padded_w;
+    sdl_dc_pvr_htex = padded_h;
+    sdl_dc_tex_bytes = tex_size;
     sdl_dc_txr_format = PVR_TXRFMT_RGB565 | PVR_TXRFMT_NONTWIDDLED;
     if (sdl_dc_strided) {
         sdl_dc_txr_format |= PVR_TXRFMT_X32_STRIDE;
@@ -466,8 +468,8 @@ bool DREAMCAST_CreateWindowTexture(SDL_VideoDevice *_this, SDL_Window *window, S
     sdl_dc_memtex = pvr_mem_malloc(tex_size);
     sdl_dc_u1 = 0.0f;
     sdl_dc_v1 = 0.0f;
-    sdl_dc_u2 = (float)sdl_dc_width / (float)sdl_dc_wtex;
-    sdl_dc_v2 = (float)sdl_dc_height / (float)sdl_dc_htex;
+    sdl_dc_u2 = (float)sdl_dc_width / (float)sdl_dc_pvr_wtex;
+    sdl_dc_v2 = (float)sdl_dc_height / (float)sdl_dc_pvr_htex;
 
     if (SDL_GetHintBoolean(SDL_HINT_VIDEO_DOUBLE_BUFFER, true)) {
         sdl_dc_memfreed = calloc(64 + tex_size, 1);
