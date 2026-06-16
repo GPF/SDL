@@ -2270,9 +2270,15 @@ extern "C" {
  * - "SDL_DC_DIRECT_VIDEO": Uses direct framebuffer access without DMA.
  * - "SDL_DC_DMA_VIDEO": Uses DMA for transferring video data (default).
  * - "SDL_DC_TEXTURED_VIDEO": Uses a power-of-two non-twiddled PVR texture.
+ *    SDL_HINT_DC_SCREEN_WIDTH_TEXTURED and SDL_HINT_DC_SCREEN_HEIGHT_TEXTURED
+ *    must be set to the intended screen width and height rendered into the texture for the SDL_DC_TEXTURED_VIDEO mode.
  * - "SDL_DC_TEXTURED_STRIDED_VIDEO": Uses a strided non-twiddled PVR texture.
+ *    SDL_HINT_DC_SCREEN_WIDTH_TEXTURED and SDL_HINT_DC_SCREEN_HEIGHT_TEXTURED
+ *    should match the logical surface size, and width should be 32-byte aligned.
  */
 #define SDL_HINT_DC_VIDEO_MODE "SDL_DC_VIDEO_MODE"
+#define SDL_HINT_DC_SCREEN_WIDTH_TEXTURED  "SDL_DC_SCREEN_WIDTH_TEXTURED"
+#define SDL_HINT_DC_SCREEN_HEIGHT_TEXTURED "SDL_DC_SCREEN_HEIGHT_TEXTURED"
 
 /**
  * A variable controlling whether the Android / tvOS remotes should be listed

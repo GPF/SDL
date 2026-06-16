@@ -1,5 +1,6 @@
     #ifdef DREAMCAST
     #include <kos.h>
+    #include <SDL2/SDL_hints.h>
     #define DT_PATH "/rd/Troy2024.dt"
 
     #else
@@ -35,10 +36,8 @@
         int running = 1;
         cont_btn_callback(0, CONT_START | CONT_A | CONT_B | CONT_X | CONT_Y, (cont_btn_callback_t)arch_exit);
 
-        // SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1"); // SDL2 defaults to double buffering, this shuts it off
-        // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_TEXTURED_VIDEO");
-        // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO");
-        // SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DMA_VIDEO");
+        SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1"); // SDL2 defaults to double buffering, this shuts it off
+        SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_OPENGL_VIDEO");
         // SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
         printf("SDL2_INIT_VIDEO\n");
         // Initialize SDL

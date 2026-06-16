@@ -61,6 +61,26 @@ static int sdl_dc_default_60hz=0;
 unsigned int __sdl_dc_mouse_shift=1;
 #include "60hz.h"
 
+static void DREAMCAST_GetTexturedScreenSize(int *width, int *height)
+{
+    const char *width_hint = SDL_GetHint(SDL_HINT_DC_SCREEN_WIDTH_TEXTURED);
+    const char *height_hint = SDL_GetHint(SDL_HINT_DC_SCREEN_HEIGHT_TEXTURED);
+
+    if (width) {
+        *width = width_hint ? SDL_atoi(width_hint) : 640;
+        if (*width <= 0) {
+            *width = 640;
+        }
+    }
+
+    if (height) {
+        *height = height_hint ? SDL_atoi(height_hint) : 480;
+        if (*height <= 0) {
+            *height = 480;
+        }
+    }
+}
+
 void SDL_DC_ShowAskHz(SDL_bool value)
 {
 	sdl_dc_no_ask_60hz=!value;
@@ -231,9 +251,16 @@ int DREAMCAST_VideoInit(_THIS) {
         (strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0 ||
          strcmp(video_mode_hint, "SDL_DC_TEXTURED_STRIDED_VIDEO") == 0)) {
         SDL_Log("Initializing %s", video_mode_hint);
-        width = 320;
-        height = 240;
-        __sdl_dc_mouse_shift=640/width;
+        if (!SDL_GetHint(SDL_HINT_DC_SCREEN_WIDTH_TEXTURED)) {
+            SDL_SetHint(SDL_HINT_DC_SCREEN_WIDTH_TEXTURED, "640");
+        }
+        if (!SDL_GetHint(SDL_HINT_DC_SCREEN_HEIGHT_TEXTURED)) {
+            SDL_SetHint(SDL_HINT_DC_SCREEN_HEIGHT_TEXTURED, "480");
+        }
+
+        DREAMCAST_GetTexturedScreenSize(&width, &height);
+        __sdl_dc_mouse_shift = 640.0f / (float)width;
+        SDL_Log("Textured framebuffer logical size set to %dx%d", width, height);
     }
     SDL_zero(current_mode);
 
@@ -301,7 +328,10 @@ int DREAMCAST_SetDisplayMode(_THIS, SDL_VideoDisplay *display, SDL_DisplayMode *
     if (video_mode_hint != NULL &&
         (strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0 ||
          strcmp(video_mode_hint, "SDL_DC_TEXTURED_STRIDED_VIDEO") == 0)) {
-        SDL_Log("Setting %s mode", video_mode_hint);
+        int textured_width = 640;
+        int textured_height = 480;
+        DREAMCAST_GetTexturedScreenSize(&textured_width, &textured_height);
+        SDL_Log("Setting %s mode (logical framebuffer %dx%d)", video_mode_hint, textured_width, textured_height);
         mode->w = 640;
         mode->h = 480;
     }

@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
     SDL_Event event;
     int running = 1;
 
-
+    SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_OPENGL_VIDEO");
 
     // Initialize SDL
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
