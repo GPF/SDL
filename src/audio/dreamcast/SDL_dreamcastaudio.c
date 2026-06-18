@@ -53,14 +53,20 @@ static Uint8 *DREAMCASTAUD_GetDeviceBuf(_THIS)
  */
 static void *stream_callback(snd_stream_hnd_t hnd, int req, int *done) {
     SDL_AudioDevice *device = audioDevice;
-    SDL_PrivateAudioData *hidden = (SDL_PrivateAudioData *)device->hidden;
-    const int buffer_size = hidden->buffer_size;
+    SDL_PrivateAudioData *hidden = NULL;
     *done = 0;
-    
+
+    if (!device || !device->hidden) {
+        return NULL;
+    }
+
+    hidden = (SDL_PrivateAudioData *)device->hidden;
+
     if (SDL_AtomicGet(&hidden->buffer_ready)) {
         /* Get the next buffer index */
         const int current_active = SDL_AtomicGet(&hidden->active_buffer);
         const int next_buf = current_active ^ 1;
+        const int buffer_size = hidden->buffer_size;
 
         *done = SDL_min(req, buffer_size);
         
@@ -83,16 +89,20 @@ static void DREAMCASTAUD_WaitDevice(_THIS)
     // SDL_Log("WAITDEVICE");
 
     // if (SDL_AtomicGet(&_this->paused)) return;
+    if (!hidden || hidden->stream_handle == SND_STREAM_INVALID) {
+        return;
+    }
 
-
-    // SDL_Log("Waiting for buffer %d", SDL_AtomicGet(&hidden->active_buffer));
+    /* Exit immediately once the core has started teardown. */
     while (SDL_AtomicGet(&hidden->buffer_ready)) {
-        // SDL_Log("Polling stream...");
-        if (!SDL_AtomicGet(&_this->paused)) {
-            if (SDL_AtomicGet(&_this->enabled)) {
-                snd_stream_poll(hidden->stream_handle);
-            }
+        if (SDL_AtomicGet(&_this->shutdown) ||
+            SDL_AtomicGet(&_this->paused) ||
+            !SDL_AtomicGet(&_this->enabled)) {
+            SDL_AtomicSet(&hidden->buffer_ready, 0);
+            break;
         }
+
+        snd_stream_poll(hidden->stream_handle);
         SDL_Delay(1);
     }
 }
@@ -109,10 +119,27 @@ static void DREAMCASTAUD_PlayDevice(_THIS)
     // SDL_Log("PLAYDEVICE");
     // if (!SDL_AtomicGet(&_this->enabled)) return;
     // if (SDL_AtomicGet(&_this->paused)) return;
+    if (!hidden || hidden->stream_handle == SND_STREAM_INVALID) {
+        return;
+    }
+
+    if (SDL_AtomicGet(&_this->shutdown) ||
+        SDL_AtomicGet(&_this->paused) ||
+        !SDL_AtomicGet(&_this->enabled)) {
+        SDL_AtomicSet(&hidden->buffer_ready, 0);
+        return;
+    }
+
     /* Wait until the previous buffer has been consumed */
     DREAMCASTAUD_WaitDevice(_this);
 
     // SDL_LockMutex(hidden->lock);
+    if (SDL_AtomicGet(&_this->shutdown) ||
+        SDL_AtomicGet(&_this->paused) ||
+        !SDL_AtomicGet(&_this->enabled)) {
+        SDL_AtomicSet(&hidden->buffer_ready, 0);
+        return;
+    }
     SDL_AtomicSet(&hidden->buffer_ready, 1);
     // SDL_UnlockMutex(hidden->lock);
 
@@ -223,12 +250,16 @@ int DREAMCASTAUD_OpenDevice(_THIS, const char *devname)
     SDL_bool adpcm_stream = SDL_FALSE;
 
     SDL_Log("Opening audio device\n");
-
+        /* Initialize the sound stream system */
+    if (snd_stream_init() != 0) {
+        return SDL_SetError("Failed to initialize sound stream system");
+    }
     hidden = (SDL_PrivateAudioData *)SDL_malloc(sizeof(*hidden));
     if (!hidden) {
         return SDL_OutOfMemory();
     }
     SDL_zerop(hidden);
+    hidden->stream_handle = SND_STREAM_INVALID;
     _this->hidden = (struct SDL_PrivateAudioData *)hidden;
 
     adpcm_hint = SDL_GetHint("SDL_AUDIO_ADPCM_STREAM_DC");
@@ -337,15 +368,17 @@ static void DREAMCASTAUD_CloseDevice(_THIS)
     SDL_Log("Closing audio device\n");
 
     /* Signal the SDL mixing thread to exit. */
-    // SDL_AtomicSet(&_this->shutdown, 1);
-
-    // Disable the audio device
-    // SDL_AtomicSet(&_this->enabled, 0);
+    SDL_AtomicSet(&_this->paused, 1);
+    SDL_AtomicSet(&_this->shutdown, 1);
+    SDL_AtomicSet(&_this->enabled, 0);
 
     if (hidden) {
-        // Stop and destroy the sound stream if it's valid
+        SDL_AtomicSet(&hidden->buffer_ready, 0);
+
+        /* Detach the callback first so any late poll only sees silence. */
         if (hidden->stream_handle != SND_STREAM_INVALID) {
             SDL_Log("Stopping and destroying sound stream\n");
+            snd_stream_reinit(hidden->stream_handle, NULL);
             snd_stream_stop(hidden->stream_handle);
             // snd_stream_reinit(hidden->stream_handle, NULL);
             snd_stream_destroy(hidden->stream_handle);
@@ -375,9 +408,7 @@ static void DREAMCASTAUD_CloseDevice(_THIS)
     }
     SDL_Log("Audio device closed\n");
     
-    // Shutdown the sound system
-    // snd_mem_shutdown();
-    // snd_mem_init(0x030000);    
+    /* Shutdown the sound system once the stream has been stopped and destroyed. */
     snd_stream_shutdown();  // This should be called last to finalize the system shutdown
 
 
@@ -389,10 +420,7 @@ static void DREAMCASTAUD_CloseDevice(_THIS)
 static SDL_bool DREAMCASTAUD_Init(SDL_AudioDriverImpl *impl)
 {
 
-        /* Initialize the sound stream system */
-    if (snd_stream_init() != 0) {
-        return SDL_SetError("Failed to initialize sound stream system");
-    }
+
 
     impl->OpenDevice  = DREAMCASTAUD_OpenDevice;
     impl->CloseDevice = DREAMCASTAUD_CloseDevice;
