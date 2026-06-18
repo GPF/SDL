@@ -20,7 +20,7 @@ clean:
 	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin romdisk.img
 
 $(TARGET).elf: $(OBJS)
-	kos-cc -o $(TARGET).elf $(OBJS) -lSDL2 -lSDL2main -lGL -lm -lkosutils
+	kos-cc -o $(TARGET).elf $(OBJS) -lSDL2 -lSDL2main -lGL -lpthread -lm -lkosutils
 
 $(TARGET).bin: $(TARGET).elf
 	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin

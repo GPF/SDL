@@ -31,10 +31,92 @@
 #include "SDL_timer.h"
 #include "SDL_hints.h"
 #include "kos.h"
+#include <dc/sound/sfxmgr.h>
+
+#define DREAMCASTAUD_MAX_ADPCM_SFX 64
+
+typedef struct
+{
+    const Uint8 *buf;
+    Uint32 len;
+    sfxhnd_t handle;
+} DreamcastADPCMSfx;
 
 /* Global device references */
 static SDL_AudioDevice *audioDevice = NULL;   /* Active output device */
 static SDL_AudioDevice *captureDevice = NULL;   /* Active capture device */
+static DreamcastADPCMSfx adpcm_sfx[DREAMCASTAUD_MAX_ADPCM_SFX];
+
+int SDL_DreamcastRegisterADPCMSfx(const Uint8 *buf, Uint32 len, int rate, int channels)
+{
+    int free_slot = -1;
+    sfxhnd_t handle;
+    int i;
+
+    if (!buf || len == 0) {
+        return SDL_InvalidParamError("buf");
+    }
+
+    for (i = 0; i < SDL_arraysize(adpcm_sfx); i++) {
+        if (adpcm_sfx[i].buf == buf) {
+            return 0;
+        }
+        if (!adpcm_sfx[i].buf && free_slot < 0) {
+            free_slot = i;
+        }
+    }
+
+    if (free_slot < 0) {
+        return SDL_SetError("No free Dreamcast ADPCM SFX slots");
+    }
+
+    if (snd_init() < 0) {
+        return SDL_SetError("snd_init failed");
+    }
+
+    handle = snd_sfx_load_raw_buf((char *)buf, len, (uint32_t)rate, 4, (uint16_t)channels);
+    if (handle == SFXHND_INVALID) {
+        return SDL_SetError("snd_sfx_load_raw_buf failed");
+    }
+
+    adpcm_sfx[free_slot].buf = buf;
+    adpcm_sfx[free_slot].len = len;
+    adpcm_sfx[free_slot].handle = handle;
+    return 0;
+}
+
+int SDL_DreamcastQueueADPCMSfx(const void *data, Uint32 len)
+{
+    int i;
+
+    for (i = 0; i < SDL_arraysize(adpcm_sfx); i++) {
+        if (adpcm_sfx[i].buf == data) {
+            if (adpcm_sfx[i].len != len) {
+                return SDL_SetError("Dreamcast ADPCM SFX length mismatch");
+            }
+            return (snd_sfx_play(adpcm_sfx[i].handle, 255, 128) >= 0) ? 1 : SDL_SetError("snd_sfx_play failed");
+        }
+    }
+
+    return 0;
+}
+
+void SDL_DreamcastUnregisterADPCMSfx(const Uint8 *buf)
+{
+    int i;
+
+    if (!buf) {
+        return;
+    }
+
+    for (i = 0; i < SDL_arraysize(adpcm_sfx); i++) {
+        if (adpcm_sfx[i].buf == buf) {
+            snd_sfx_unload(adpcm_sfx[i].handle);
+            SDL_zero(adpcm_sfx[i]);
+            return;
+        }
+    }
+}
 
 /*
  * Return pointer to the current active buffer.
@@ -47,6 +129,15 @@ static Uint8 *DREAMCASTAUD_GetDeviceBuf(_THIS)
     return hidden->mixbuf[ SDL_AtomicGet(&hidden->active_buffer) ];
 }
 
+static void DREAMCASTAUD_ConvertPCM8ToSigned(Uint8 *buffer, int len)
+{
+    int i;
+
+    for (i = 0; i < len; i++) {
+        buffer[i] ^= 0x80;
+    }
+}
+
 /*
  * Stream callback invoked by the KOS sound stream system.
  * We lock the mutex to safely access our atomic flags.
@@ -54,6 +145,7 @@ static Uint8 *DREAMCASTAUD_GetDeviceBuf(_THIS)
 static void *stream_callback(snd_stream_hnd_t hnd, int req, int *done) {
     SDL_AudioDevice *device = audioDevice;
     SDL_PrivateAudioData *hidden = NULL;
+    const int requested = req;
     *done = 0;
 
     if (!device || !device->hidden) {
@@ -69,16 +161,23 @@ static void *stream_callback(snd_stream_hnd_t hnd, int req, int *done) {
         const int buffer_size = hidden->buffer_size;
 
         *done = SDL_min(req, buffer_size);
-        
+
+        if (device->spec.format == AUDIO_U8) {
+            DREAMCASTAUD_ConvertPCM8ToSigned(hidden->mixbuf[current_active], *done);
+        }
+
         SDL_AtomicSet(&hidden->active_buffer, next_buf);
         SDL_AtomicSet(&hidden->buffer_ready, 0);
 
         // SDL_Log("Switching to buffer %d (%d bytes)", next_buf, *done);
-        return hidden->mixbuf[next_buf];
+        return hidden->mixbuf[current_active];
     }
 
-    SDL_Log("Stream callback: no data available");
-    return hidden->mixbuf[SDL_AtomicGet(&hidden->active_buffer)];
+    if (hidden->silencebuf) {
+        *done = SDL_min(requested, hidden->buffer_size);
+        return hidden->silencebuf;
+    }
+    return NULL;
 }
 /*
  * WaitDevice - block until the current buffer has been consumed.
@@ -215,7 +314,13 @@ SDL_AudioSpec *SDL_LoadDreamcastADPCM_RW(SDL_RWops *src, int freesrc, SDL_AudioS
     spec->samples = 512;
     spec->size = *audio_len;
 
-    SDL_Log("ADPCM file loaded successfully: %u bytes", *audio_len);
+    if (SDL_DreamcastRegisterADPCMSfx(*audio_buf, *audio_len, spec->freq, spec->channels) < 0) {
+        SDL_free(*audio_buf);
+        *audio_buf = NULL;
+        goto fail;
+    }
+
+    SDL_Log("ADPCM file loaded successfully: %" SDL_PRIu32 " bytes", *audio_len);
 
     if (freesrc) {
         SDL_RWclose(src);
@@ -245,8 +350,9 @@ int DREAMCASTAUD_OpenDevice(_THIS, const char *devname)
 {
     SDL_PrivateAudioData *hidden;
     SDL_AudioFormat test_format;
+    int bytes_per_sample;
     int channels, frequency;
-    char *adpcm_hint;  /* ADPCM hint from SDL hints */
+    const char *adpcm_hint;  /* ADPCM hint from SDL hints */
     SDL_bool adpcm_stream = SDL_FALSE;
 
     SDL_Log("Opening audio device\n");
@@ -280,7 +386,8 @@ int DREAMCASTAUD_OpenDevice(_THIS, const char *devname)
     for (test_format = SDL_FirstAudioFormat(_this->spec.format);
          test_format;
          test_format = SDL_NextAudioFormat()) {
-        if ((test_format == AUDIO_S8) || (test_format == AUDIO_S16LSB)) {
+        if ((adpcm_stream && test_format == AUDIO_S8) ||
+            (!adpcm_stream && ((test_format == AUDIO_U8) || (test_format == AUDIO_S16LSB)))) {
             _this->spec.format = test_format;
             break;
         }
@@ -292,15 +399,15 @@ int DREAMCASTAUD_OpenDevice(_THIS, const char *devname)
     }
 
     SDL_CalculateAudioSpec(&_this->spec);
-    if (_this->spec.channels == 1) {
-        hidden->buffer_size = _this->spec.samples * _this->spec.channels * 2 * sizeof(int16_t);
-    } else {
-        hidden->buffer_size = _this->spec.samples * _this->spec.channels * sizeof(int16_t);
-    }
+    bytes_per_sample = SDL_AUDIO_BITSIZE(_this->spec.format) / 8;
     if (adpcm_stream) {
         /* ADPCM bytes are already packed; expose them to SDL as 8-bit sized
          * buffers so the callback stays byte-oriented. */
         hidden->buffer_size = _this->spec.samples * _this->spec.channels;
+    } else {
+        /* KOS streams ask for half of the circular buffer per channel. Size
+         * the KOS buffer so each request matches one SDL-filled device buffer. */
+        hidden->buffer_size = _this->spec.samples * bytes_per_sample * 2;
     }
     SDL_Log("Buffer size: %d", hidden->buffer_size);
 
@@ -314,19 +421,28 @@ int DREAMCASTAUD_OpenDevice(_THIS, const char *devname)
     /* Allocate two aligned buffers for double buffering */
     hidden->mixbuf[0] = (Uint8 *)memalign(32, hidden->buffer_size);
     hidden->mixbuf[1] = (Uint8 *)memalign(32, hidden->buffer_size);
-    if (!hidden->mixbuf[0] || !hidden->mixbuf[1]) {
+    hidden->silencebuf = (Uint8 *)memalign(32, hidden->buffer_size);
+    if (!hidden->mixbuf[0] || !hidden->mixbuf[1] || !hidden->silencebuf) {
         SDL_free(hidden);
         snd_stream_shutdown();
         return SDL_OutOfMemory();
     }
     SDL_memset(hidden->mixbuf[0], _this->spec.silence, hidden->buffer_size);
     SDL_memset(hidden->mixbuf[1], _this->spec.silence, hidden->buffer_size);
+    SDL_memset(hidden->silencebuf, _this->spec.silence, hidden->buffer_size);
 
     /* Set up the stream callback */
     snd_stream_reinit(hidden->stream_handle, stream_callback);
 
     channels = _this->spec.channels;
     frequency = _this->spec.freq;
+
+    /* snd_stream_start_*() pre-fills the KOS stream immediately. Publish the
+     * device and initial state first so PCM8 prefill gets SDL's 0x80 silence
+     * instead of KOS's zero-filled fallback. */
+    SDL_AtomicSet(&hidden->active_buffer, 0);
+    SDL_AtomicSet(&hidden->buffer_ready, 0);
+    audioDevice = _this;
 
     if (adpcm_stream) {
         SDL_Log("4-bit ADPCM audio format enabled\n");
@@ -335,8 +451,8 @@ int DREAMCASTAUD_OpenDevice(_THIS, const char *devname)
     } else if (_this->spec.format == AUDIO_S16LSB) {
         SDL_Log("16-bit PCM audio format enabled\n");
         snd_stream_start(hidden->stream_handle, frequency, (channels == 2) ? 1 : 0);
-    } else if (_this->spec.format == AUDIO_S8) {
-        SDL_Log("8-bit PCM audio format enabled\n");
+    } else if (_this->spec.format == AUDIO_U8) {
+        SDL_Log("8-bit unsigned PCM audio format enabled\n");
         snd_stream_start_pcm8(hidden->stream_handle, frequency, (channels == 2) ? 1 : 0);
     } else {
         SDL_SetError("Unsupported audio format: %d", _this->spec.format);
@@ -347,15 +463,11 @@ int DREAMCASTAUD_OpenDevice(_THIS, const char *devname)
     
     // SDL_Log("stream handle: %d", hidden->stream_handle);
     // SDL_Log("_this->spec.userdata: %d", _this->spec.userdata);
-    /* Initialize state: set active buffer to 0 and buffer_ready to 0 */
-    SDL_AtomicSet(&hidden->active_buffer, 0);
-    SDL_AtomicSet(&hidden->buffer_ready, 0);
     SDL_Log("Dreamcast audio driver initialized\n");
     
     /* Mark the device as enabled */
     // SDL_AtomicSet(&_this->enabled, 1);
 
-    audioDevice = _this;
     return 0;
 }
 /*
@@ -393,6 +505,10 @@ static void DREAMCASTAUD_CloseDevice(_THIS)
         if (hidden->mixbuf[1]) {
             SDL_free(hidden->mixbuf[1]);
             hidden->mixbuf[1] = NULL;
+        }
+        if (hidden->silencebuf) {
+            SDL_free(hidden->silencebuf);
+            hidden->silencebuf = NULL;
         }
 
         // Free the hidden structure

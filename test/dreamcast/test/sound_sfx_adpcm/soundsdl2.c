@@ -2,7 +2,8 @@
  * Dreamcast ADPCM SFX sample.
  *
  * This loads Dreamcast ADPCM WAV files with SDL_LoadDreamcastADPCM_RW() and
- * hands the raw buffers to the KOS sound-effect manager for per-channel SFX
+ * plays them with SDL_QueueAudio(). On Dreamcast, SDL_QueueAudio() routes
+ * these ADPCM buffers through the KOS sound-effect manager for per-channel SFX
  * playback.
  */
 
@@ -12,8 +13,6 @@
 
 #ifdef DREAMCAST
 #include "kos.h"
-#include <dc/sound/sound.h>
-#include <dc/sound/sfxmgr.h>
 #include <dc/maple.h>
 #include <dc/maple/controller.h>
 
@@ -22,11 +21,9 @@ KOS_INIT_ROMDISK(romdisk);
 
 typedef struct SfxClip
 {
+    SDL_AudioSpec spec;
     Uint8 *buf;
     Uint32 len;
-    uint32_t rate;
-    uint16_t channels;
-    sfxhnd_t handle;
     const char *name;
 } SfxClip;
 
@@ -45,6 +42,7 @@ static const char *clip_names[] = {
 };
 
 static SfxClip clips[4];
+static SDL_AudioDeviceID audio_device;
 
 static cont_state_t *get_cont_state(void)
 {
@@ -63,12 +61,8 @@ static int button_pressed(uint32_t current_buttons, uint32_t changed_buttons, ui
 static void free_clips(void)
 {
     for (int i = 0; i < 4; i++) {
-        if (clips[i].handle != SFXHND_INVALID) {
-            snd_sfx_unload(clips[i].handle);
-            clips[i].handle = SFXHND_INVALID;
-        }
         if (clips[i].buf) {
-            SDL_free(clips[i].buf);
+            SDL_FreeWAV(clips[i].buf);
             clips[i].buf = NULL;
         }
     }
@@ -76,29 +70,20 @@ static void free_clips(void)
 
 static int load_clip(int idx)
 {
-    SDL_AudioSpec spec;
     SDL_RWops *rw = SDL_RWFromFile(clip_paths[idx], "rb");
     if (!rw) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't open %s: %s", clip_paths[idx], SDL_GetError());
         return -1;
     }
 
-    if (SDL_LoadDreamcastADPCM_RW(rw, 1, &spec, &clips[idx].buf, &clips[idx].len) == NULL) {
+    if (SDL_LoadDreamcastADPCM_RW(rw, 1, &clips[idx].spec, &clips[idx].buf, &clips[idx].len) == NULL) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't load %s: %s", clip_paths[idx], SDL_GetError());
         return -1;
     }
 
-    clips[idx].rate = (uint32_t)spec.freq;
-    clips[idx].channels = (uint16_t)spec.channels;
     clips[idx].name = clip_names[idx];
 
-    clips[idx].handle = snd_sfx_load_raw_buf((char *)clips[idx].buf, clips[idx].len, clips[idx].rate, 4, clips[idx].channels);
-    if (clips[idx].handle == SFXHND_INVALID) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "snd_sfx_load_raw_buf failed for %s", clips[idx].name);
-        return -1;
-    }
-
-    SDL_Log("Loaded %s: rate=%" SDL_PRIu32 " channels=%u len=%" SDL_PRIu32, clips[idx].name, clips[idx].rate, clips[idx].channels, clips[idx].len);
+    SDL_Log("Loaded %s: rate=%d channels=%u len=%" SDL_PRIu32, clips[idx].name, clips[idx].spec.freq, clips[idx].spec.channels, clips[idx].len);
     return 0;
 }
 
@@ -110,6 +95,28 @@ static int load_clips(void)
         }
     }
     return 0;
+}
+
+static int open_audio(void)
+{
+    SDL_AudioSpec desired = clips[0].spec;
+
+    desired.callback = NULL;
+    audio_device = SDL_OpenAudioDevice(NULL, SDL_FALSE, &desired, NULL, 0);
+    if (!audio_device) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't open audio: %s", SDL_GetError());
+        return -1;
+    }
+
+    SDL_PauseAudioDevice(audio_device, 0);
+    return 0;
+}
+
+static void play_clip(int idx)
+{
+    if (SDL_QueueAudio(audio_device, clips[idx].buf, clips[idx].len) < 0) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't play %s: %s", clips[idx].name, SDL_GetError());
+    }
 }
 
 static void draw_instructions(void)
@@ -131,11 +138,21 @@ int main(int argc, char **argv)
     SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO);
 
     vid_set_mode(DM_640x480, PM_RGB555);
-    snd_init();
+
+    if (SDL_Init(SDL_INIT_AUDIO) < 0) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize SDL audio: %s", SDL_GetError());
+        return 1;
+    }
 
     if (load_clips() < 0) {
         free_clips();
-        snd_shutdown();
+        SDL_Quit();
+        return 1;
+    }
+
+    if (open_audio() < 0) {
+        free_clips();
+        SDL_Quit();
         return 1;
     }
 
@@ -151,16 +168,16 @@ int main(int argc, char **argv)
         previous_buttons = current_buttons;
 
         if (button_pressed(current_buttons, changed_buttons, CONT_A)) {
-            snd_sfx_play(clips[0].handle, 255, 128);
+            play_clip(0);
         }
         if (button_pressed(current_buttons, changed_buttons, CONT_B)) {
-            snd_sfx_play(clips[1].handle, 255, 128);
+            play_clip(1);
         }
         if (button_pressed(current_buttons, changed_buttons, CONT_X)) {
-            snd_sfx_play(clips[2].handle, 255, 128);
+            play_clip(2);
         }
         if (button_pressed(current_buttons, changed_buttons, CONT_Y)) {
-            snd_sfx_play(clips[3].handle, 255, 128);
+            play_clip(3);
         }
 
         if (button_pressed(current_buttons, changed_buttons, CONT_START)) {
@@ -168,8 +185,12 @@ int main(int argc, char **argv)
         }
     }
 
+    if (audio_device) {
+        SDL_CloseAudioDevice(audio_device);
+        audio_device = 0;
+    }
     free_clips();
-    snd_shutdown();
+    SDL_Quit();
     return 0;
 }
 #endif /* DREAMCAST */

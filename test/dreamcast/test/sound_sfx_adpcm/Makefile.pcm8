@@ -1,0 +1,21 @@
+TARGET = SDL2dcPCM8QueueTest
+OBJS = pcm8_queue_test.o
+
+KOS_CFLAGS+=-DDREAMCAST -D__DREAMCAST__
+
+all: $(TARGET).bin
+
+include $(KOS_BASE)/Makefile.rules
+
+clean:
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin
+
+$(TARGET).elf: $(OBJS)
+	kos-cc -o $(TARGET).elf \
+	$(OBJS) $(OBJEXTRA) -lSDL2 -lSDL2main -lGL -lm -lkosutils -lpthread
+
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -R .stack -O binary $(TARGET).elf $(TARGET).bin
+
+run: $(TARGET).bin
+	$(KOS_LOADER) $(TARGET).bin

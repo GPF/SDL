@@ -39,11 +39,15 @@ typedef struct {
     SDL_atomic_t buffer_ready;
     int buffer_size;
     Uint8 *mixbuf[2];
+    Uint8 *silencebuf;
     int playing;
     SDL_bool direct_buffer_access;
     SDL_mutex *lock;
 } SDL_PrivateAudioData;
 
+extern int SDL_DreamcastRegisterADPCMSfx(const Uint8 *buf, Uint32 len, int rate, int channels);
+extern int SDL_DreamcastQueueADPCMSfx(const void *data, Uint32 len);
+extern void SDL_DreamcastUnregisterADPCMSfx(const Uint8 *buf);
 
 #endif /* SDL_dreamcastaudio_h_ */
 /* vi: set ts=4 sw=4 expandtab: */

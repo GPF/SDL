@@ -31,6 +31,10 @@
 
 #define _THIS SDL_AudioDevice *_this
 
+#ifdef __DREAMCAST__
+extern int SDL_DreamcastQueueADPCMSfx(const void *data, Uint32 len);
+#endif
+
 typedef struct AudioThreadStartupData
 {
     SDL_AudioDevice *device;
@@ -604,6 +608,12 @@ int SDL_QueueAudio(SDL_AudioDeviceID devid, const void *data, Uint32 len)
     }
 
     if (len > 0) {
+#ifdef __DREAMCAST__
+        const int sfx_rc = SDL_DreamcastQueueADPCMSfx(data, len);
+        if (sfx_rc != 0) {
+            return (sfx_rc > 0) ? 0 : -1;
+        }
+#endif
         current_audio.impl.LockDevice(device);
         rc = SDL_WriteToDataQueue(device->buffer_queue, data, len);
         current_audio.impl.UnlockDevice(device);

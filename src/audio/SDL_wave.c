@@ -38,6 +38,10 @@
 #include "SDL_wave.h"
 #include "SDL_audio_c.h"
 
+#ifdef __DREAMCAST__
+extern void SDL_DreamcastUnregisterADPCMSfx(const Uint8 *buf);
+#endif
+
 /* Reads the value stored at the location of the f1 pointer, multiplies it
  * with the second argument and then stores the result to f1.
  * Returns 0 on success, or -1 if the multiplication overflows, in which case f1
@@ -2132,6 +2136,9 @@ SDL_AudioSpec *SDL_LoadWAV_RW(SDL_RWops *src, int freesrc, SDL_AudioSpec *spec, 
  */
 void SDL_FreeWAV(Uint8 *audio_buf)
 {
+#ifdef __DREAMCAST__
+    SDL_DreamcastUnregisterADPCMSfx(audio_buf);
+#endif
     SDL_free(audio_buf);
 }
 
