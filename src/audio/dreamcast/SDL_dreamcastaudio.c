@@ -27,10 +27,81 @@
 #include "SDL_dreamcastaudio.h"  /* defines SDL_PrivateAudioData */
 #include <dc/sound/stream.h>
 #include <dc/sound/sound.h>
+#include <dc/sound/sfxmgr.h>
 #include <kos/thread.h>
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_hints.h>
 #include "kos.h"
+
+typedef struct
+{
+    const Uint8 *buf;
+    Uint32 len;
+    sfxhnd_t handle;
+} DreamcastADPCMSfx;
+
+static DreamcastADPCMSfx adpcm_sfx[64];
+
+static int DREAMCASTAUD_RegisterADPCMSfx(const Uint8 *buf, Uint32 len, int rate, int channels)
+{
+    int free_slot = -1;
+    sfxhnd_t handle;
+
+    if (!buf || (len == 0)) {
+        return SDL_InvalidParamError("buf");
+    }
+
+    for (int i = 0; i < SDL_arraysize(adpcm_sfx); i++) {
+        if (adpcm_sfx[i].buf == buf) {
+            return 0;
+        }
+        if (!adpcm_sfx[i].buf && (free_slot < 0)) {
+            free_slot = i;
+        }
+    }
+
+    if (free_slot < 0) {
+        return SDL_SetError("No free Dreamcast ADPCM SFX slots");
+    }
+
+    if (snd_init() < 0) {
+        return SDL_SetError("snd_init failed");
+    }
+
+    handle = snd_sfx_load_raw_buf((char *)buf, len, (uint32_t) rate, 4, (uint16_t) channels);
+    if (handle == SFXHND_INVALID) {
+        return SDL_SetError("snd_sfx_load_raw_buf failed");
+    }
+
+    adpcm_sfx[free_slot].buf = buf;
+    adpcm_sfx[free_slot].len = len;
+    adpcm_sfx[free_slot].handle = handle;
+    return 0;
+}
+
+int SDL_DreamcastQueueADPCMSfx(const void *data, Uint32 len)
+{
+    for (int i = 0; i < SDL_arraysize(adpcm_sfx); i++) {
+        if (adpcm_sfx[i].buf == data) {
+            if (adpcm_sfx[i].len != len) {
+                return SDL_SetError("Dreamcast ADPCM SFX length mismatch");
+            }
+            return (snd_sfx_play(adpcm_sfx[i].handle, 255, 128) >= 0) ? 1 : SDL_SetError("snd_sfx_play failed");
+        }
+    }
+
+    return 0;
+}
+
+static void DREAMCASTAUD_UnregisterAllADPCMSfx(void)
+{
+    for (int i = 0; i < SDL_arraysize(adpcm_sfx); i++) {
+        if (adpcm_sfx[i].buf) {
+            snd_sfx_unload(adpcm_sfx[i].handle);
+            SDL_zero(adpcm_sfx[i]);
+        }
+    }
+}
 
 
 
@@ -45,6 +116,15 @@ static Uint8 *DREAMCASTAUD_GetDeviceBuf(SDL_AudioDevice *device, int *buffer_siz
         *buffer_size = hidden->buffer_size;
     }
     return hidden->mixbuf[ SDL_GetAtomicInt(&hidden->active_buffer) ];
+}
+
+static void DREAMCASTAUD_ConvertPCM8ToSigned(Uint8 *buffer, int len)
+{
+    int i;
+
+    for (i = 0; i < len; i++) {
+        buffer[i] ^= 0x80;
+    }
 }
 
 /* Global device references */
@@ -105,8 +185,11 @@ static bool DREAMCASTAUD_WaitDevice(SDL_AudioDevice *device)
 static bool DREAMCASTAUD_PlayDevice(SDL_AudioDevice *device, const Uint8 *buffer, int buffer_size)
 {
     struct SDL_PrivateAudioData *hidden = (struct SDL_PrivateAudioData *)device->hidden;
-    (void)buffer;
     (void)buffer_size;
+
+    if (device->spec.format == SDL_AUDIO_U8) {
+        DREAMCASTAUD_ConvertPCM8ToSigned((Uint8 *) buffer, buffer_size);
+    }
 
     SDL_SetAtomicInt(&hidden->buffer_ready, 1);
     return true;
@@ -124,6 +207,12 @@ static void DREAMCASTAUD_ThreadInit(SDL_AudioDevice *device)
 static void DREAMCASTAUD_ThreadDeinit(SDL_AudioDevice *device)
 {
     SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_LOW);
+}
+
+static void DREAMCASTAUD_Deinitialize(void)
+{
+    DREAMCASTAUD_UnregisterAllADPCMSfx();
+    snd_stream_shutdown();
 }
 
 /*
@@ -156,7 +245,9 @@ static bool DREAMCASTAUD_OpenDevice(SDL_AudioDevice *device)
     // Pick supported audio format using SDL_ClosestAudioFormats
     closefmts = SDL_ClosestAudioFormats(device->spec.format);
     while ((test_format = *(closefmts++)) != 0) {
-        if (test_format == SDL_AUDIO_S8 || test_format == SDL_AUDIO_S16LE) {
+        if (test_format == SDL_AUDIO_U8 ||
+            test_format == SDL_AUDIO_S8 ||
+            test_format == SDL_AUDIO_S16LE) {
             device->spec.format = test_format;
             break;
         }
@@ -209,8 +300,8 @@ static bool DREAMCASTAUD_OpenDevice(SDL_AudioDevice *device)
         return SDL_OutOfMemory();
     }
 
-    SDL_memset(hidden->mixbuf[0], 0, hidden->buffer_size);
-    SDL_memset(hidden->mixbuf[1], 0, hidden->buffer_size);
+    SDL_memset(hidden->mixbuf[0], device->silence_value, hidden->buffer_size);
+    SDL_memset(hidden->mixbuf[1], device->silence_value, hidden->buffer_size);
 
     snd_stream_reinit(hidden->stream_handle, stream_callback);
 
@@ -342,6 +433,12 @@ bool SDL_LoadDreamcastADPCM_IO(SDL_IOStream *src, bool closeio, SDL_AudioSpec *s
     spec->format = SDL_AUDIO_S8;
     spec->channels = (Uint8)channels;
 
+    if (DREAMCASTAUD_RegisterADPCMSfx(*audio_buf, *audio_len, spec->freq, spec->channels) < 0) {
+        SDL_free(*audio_buf);
+        *audio_buf = NULL;
+        goto fail;
+    }
+
     SDL_Log("ADPCM file loaded successfully: %" SDL_PRIu32 " bytes", *audio_len);
 
     if (closeio) {
@@ -381,6 +478,7 @@ static bool DREAMCASTAUD_Init(SDL_AudioDriverImpl *impl)
     impl->GetDeviceBuf = DREAMCASTAUD_GetDeviceBuf;
     impl->ThreadInit  = DREAMCASTAUD_ThreadInit;
     impl->ThreadDeinit = DREAMCASTAUD_ThreadDeinit;
+    impl->Deinitialize = DREAMCASTAUD_Deinitialize;
     impl->OnlyHasDefaultPlaybackDevice = true;
     return true;
 }

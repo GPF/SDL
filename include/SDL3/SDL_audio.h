@@ -1106,6 +1106,8 @@ extern SDL_DECLSPEC SDL_AudioStream * SDLCALL SDL_CreateAudioStream(const SDL_Au
 extern SDL_DECLSPEC SDL_PropertiesID SDLCALL SDL_GetAudioStreamProperties(SDL_AudioStream *stream);
 
 #define SDL_PROP_AUDIOSTREAM_AUTO_CLEANUP_BOOLEAN "SDL.audiostream.auto_cleanup"
+/* Dreamcast-specific opt-in for raw ADPCM SFX fast-path playback. */
+#define SDL_PROP_AUDIOSTREAM_DREAMCAST_ADPCM_SFX_BOOLEAN "SDL.audiostream.dreamcast_adpcm_sfx"
 
 
 /**
@@ -2256,6 +2258,7 @@ extern SDL_DECLSPEC bool SDLCALL SDL_LoadWAV_IO(SDL_IOStream *src, bool closeio,
  * \sa SDL_free
  */
 extern SDL_DECLSPEC bool SDLCALL SDL_LoadDreamcastADPCM_IO(SDL_IOStream *src, bool closeio, SDL_AudioSpec *spec, Uint8 **audio_buf, Uint32 *audio_len);
+
 #endif
 
 /**

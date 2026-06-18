@@ -855,6 +855,17 @@ static void SDLCALL FreeAllocatedAudioBuffer(void *userdata, const void *buf, in
     SDL_free((void *)buf);
 }
 
+#ifdef SDL_PLATFORM_DREAMCAST
+static bool DreamcastAudioStreamUsesADPCMSfx(SDL_AudioStream *stream)
+{
+    if (stream->props == 0) {
+        return false;
+    }
+
+    return SDL_GetBooleanProperty(stream->props, SDL_PROP_AUDIOSTREAM_DREAMCAST_ADPCM_SFX_BOOLEAN, false);
+}
+#endif
+
 bool SDL_PutAudioStreamData(SDL_AudioStream *stream, const void *buf, int len)
 {
     CHECK_PARAM(!stream) {
@@ -870,6 +881,15 @@ bool SDL_PutAudioStreamData(SDL_AudioStream *stream, const void *buf, int len)
     if (len == 0) {
         return true; // nothing to do.
     }
+
+#ifdef SDL_PLATFORM_DREAMCAST
+    if (DreamcastAudioStreamUsesADPCMSfx(stream)) {
+        const int sfx_rc = SDL_DreamcastQueueADPCMSfx(buf, (Uint32)len);
+        if (sfx_rc != 0) {
+            return (sfx_rc > 0);
+        }
+    }
+#endif
 
     // When copying in large amounts of data, try and do as much work as possible
     // outside of the stream lock, otherwise the output device is likely to be starved.
@@ -1073,6 +1093,15 @@ bool SDL_PutAudioStreamDataNoCopy(SDL_AudioStream *stream, const void *buf, int 
         }
         return true; // nothing to do.
     }
+
+#ifdef SDL_PLATFORM_DREAMCAST
+    if (DreamcastAudioStreamUsesADPCMSfx(stream)) {
+        const int sfx_rc = SDL_DreamcastQueueADPCMSfx(buf, (Uint32)len);
+        if (sfx_rc != 0) {
+            return (sfx_rc > 0);
+        }
+    }
+#endif
 
     return PutAudioStreamBuffer(stream, buf, len, callback ? callback : DontFreeThisAudioBuffer, userdata);
 }

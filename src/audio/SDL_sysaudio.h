@@ -117,6 +117,10 @@ extern void ConvertAudioSwapEndian(void *dst, const void *src, int num_samples, 
 extern bool SDL_ChannelMapIsDefault(const int *map, int channels);
 extern bool SDL_ChannelMapIsBogus(const int *map, int channels);
 
+#ifdef SDL_PLATFORM_DREAMCAST
+extern int SDL_DreamcastQueueADPCMSfx(const void *data, Uint32 len);
+#endif
+
 // this gets used from the audio device threads. It has rules, don't use this if you don't know how to use it!
 extern void ConvertAudio(int num_frames,
                          const void *src, SDL_AudioFormat src_format, int src_channels, const int *src_map,
