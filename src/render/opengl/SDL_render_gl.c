@@ -704,6 +704,11 @@ static bool convert_format(Uint32 pixel_format, GLint *internalFormat, GLenum *f
         *format = GL_RGBA;
         *type = GL_UNSIGNED_BYTE;  // Dreamcast-specific handling for ARGB8888
         break;
+    case SDL_PIXELFORMAT_ABGR8888:
+        *internalFormat = GL_RGBA;
+        *format = GL_RGBA;
+        *type = GL_UNSIGNED_BYTE;
+        break;
 #else        
     case SDL_PIXELFORMAT_BGRA32:
     case SDL_PIXELFORMAT_BGRX32:
@@ -873,7 +878,8 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
         texture->format != SDL_PIXELFORMAT_RGB565 &&
         texture->format != SDL_PIXELFORMAT_ARGB1555 &&
         texture->format != SDL_PIXELFORMAT_ARGB4444 &&
-        texture->format != SDL_PIXELFORMAT_RGB24) {
+        texture->format != SDL_PIXELFORMAT_RGB24 &&
+        texture->format != SDL_PIXELFORMAT_ABGR8888) {
         texture->format = SDL_PIXELFORMAT_ARGB1555;
     }
 #endif
@@ -2531,11 +2537,12 @@ static bool GL_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_Pr
 
     renderer->name = GL_RenderDriver.name;
 #ifdef SDL_PLATFORM_DREAMCAST
-    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB1555);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGB565);
+    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB1555);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB4444);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGB24);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_BGR24);
+    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ABGR8888);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_XRGB8888);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB8888);
 #else
