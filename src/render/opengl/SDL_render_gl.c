@@ -2621,8 +2621,8 @@ SDL_RenderDriver GL_RenderDriver = {
 #ifdef __DREAMCAST__
       {
         SDL_PIXELFORMAT_ARGB1555,    // optimal - native PVR with alpha
-        SDL_PIXELFORMAT_RGB565,      // optimal - native PVR
-        SDL_PIXELFORMAT_ARGB4444,    // optimal - native PVR with alpha
+        // SDL_PIXELFORMAT_RGB565,   // native PVR, but should not be selected as the streaming texture fallback
+        // SDL_PIXELFORMAT_ARGB4444, // native PVR with alpha, but not used by SDL's Dreamcast texture fallback
         SDL_PIXELFORMAT_RGB24,       // fallback - works but not optimal
         SDL_PIXELFORMAT_RGB888,
         SDL_PIXELFORMAT_ARGB8888,

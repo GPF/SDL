@@ -5,9 +5,8 @@
 
 #include <stdio.h>
 
-#define BMP_PATH "/rd/Troy2024.bmp"
+#define BMP_PATH "/rd/Troy2024_320X240.bmp"
 
-// Function to load BMP into an OpenGL texture (Dreamcast specific)
 GLuint LoadBMPTexture(const char *filename) {
     GLuint textureID;
     SDL_Surface *surface = SDL_LoadBMP(filename);
@@ -18,33 +17,31 @@ GLuint LoadBMPTexture(const char *filename) {
 
     printf("Loaded BMP file successfully.\n");
 
-    // Convert BGR to RGB
-    if (surface->format->BytesPerPixel == 3) {
-        unsigned char *pixels = (unsigned char *)surface->pixels;
-        for (int i = 0; i < surface->w * surface->h; ++i) {
-            unsigned char temp = pixels[i * 3];
-            pixels[i * 3] = pixels[i * 3 + 2];
-            pixels[i * 3 + 2] = temp;
-        }
+    // Convert to RGB24 regardless of source format (handles BGR888, indexed, etc.)
+    SDL_Surface *converted = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGB24, 0);
+    SDL_FreeSurface(surface);
+    if (!converted) {
+        printf("Failed to convert surface format: %s\n", SDL_GetError());
+        return 0;
     }
 
     glGenTextures(1, &textureID);
-    printf("Generated texture ID: %u\n", textureID);
-
     glBindTexture(GL_TEXTURE_2D, textureID);
-    printf("Bound texture ID: %u\n", textureID);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    printf("Set texture parameters.\n");
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_STRIDE_KOS, converted->w);
 
-    GLenum format = GL_RGB;
-    GLenum internalFormat = GL_RGB;
+glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, converted->w, converted->h, 0,
+             GL_RGB, GL_UNSIGNED_BYTE, NULL);  // NULL like SDL2 render driver
 
-    glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, surface->w, surface->h, 0, format, GL_UNSIGNED_BYTE, surface->pixels);
-    printf("Created texture image. (Width: %d, Height: %d, Format: %d)\n", surface->w, surface->h, internalFormat);
+// Step 2 - mirrors GL_UpdateTexture (glTexSubImage2D)
+glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, converted->w, converted->h,
+                GL_RGB, GL_UNSIGNED_BYTE, converted->pixels);
 
-    SDL_FreeSurface(surface);
+    printf("Texture loaded: %ux%u id=%u\n", converted->w, converted->h, textureID);
+
+    SDL_FreeSurface(converted);
     return textureID;
 }
 
@@ -54,7 +51,7 @@ int main(int argc, char *argv[]) {
     GLuint texture;
     SDL_Event event;
     int running = 1;
-
+    cont_btn_callback(0, CONT_START | CONT_A | CONT_B | CONT_X | CONT_Y, (cont_btn_callback_t)arch_exit);
     SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_OPENGL_VIDEO");
 
     // Initialize SDL
@@ -117,9 +114,9 @@ int main(int argc, char *argv[]) {
         glBindTexture(GL_TEXTURE_2D, texture);
         glBegin(GL_QUADS);
         glTexCoord2f(0.0f, 0.0f); glVertex2f(0.0f, 0.0f);      // Top-left
-        glTexCoord2f(1.0f, 0.0f); glVertex2f(256.0f, 0.0f);    // Top-right
-        glTexCoord2f(1.0f, 1.0f); glVertex2f(256.0f, 256.0f);  // Bottom-right
-        glTexCoord2f(0.0f, 1.0f); glVertex2f(0.0f, 256.0f);    // Bottom-left
+        glTexCoord2f(1.0f, 0.0f); glVertex2f(320.0f, 0.0f);    // Top-right
+        glTexCoord2f(1.0f, 1.0f); glVertex2f(320.0f, 240.0f);  // Bottom-right
+        glTexCoord2f(0.0f, 1.0f); glVertex2f(0.0f, 240.0f);    // Bottom-left
         glEnd();
 
         // Swap the buffers
