@@ -72,6 +72,9 @@
 #ifndef GL_ARGB1555_TWID_KOS
 #define GL_ARGB1555_TWID_KOS 0xEF45
 #endif
+#ifndef GL_TEXTURE_STRIDE_KOS
+#define GL_TEXTURE_STRIDE_KOS 0xEF52
+#endif
 #ifndef GL_COMPRESSED_RGB_565_VQ_KOS
 #define GL_COMPRESSED_RGB_565_VQ_KOS 0xEEE4
 #endif
@@ -223,6 +226,7 @@ typedef struct
     GL_FBOList *fbo;
 #ifdef __DREAMCAST__
     Uint32 original_format;
+    SDL_bool strided;
 #endif
 } GL_TextureData;
 
@@ -252,6 +256,7 @@ typedef struct SDL_DreamcastDtHeader
 #define SDL_DC_DT_PIXEL_FORMAT_MASK 0x7
 #define SDL_DC_DT_NOT_TWIDDLED_SHIFT 26
 #define SDL_DC_DT_STRIDE_SHIFT 25
+#define SDL_DC_MAX_STRIDE_WIDTH 992
 
 enum
 {
@@ -278,6 +283,38 @@ static SDL_bool GL_DreamcastDtTwiddled(Uint32 pvr_type)
 static SDL_bool GL_DreamcastDtStrided(Uint32 pvr_type)
 {
     return (SDL_bool)((pvr_type >> SDL_DC_DT_STRIDE_SHIFT) & 1);
+}
+
+static SDL_bool GL_DreamcastIsPowerOfTwo(int value)
+{
+    return (SDL_bool)(value > 0 && ((value & (value - 1)) == 0));
+}
+
+static SDL_bool GL_DreamcastCanUseStridedTexture(const SDL_Texture *texture)
+{
+    if (texture->access == SDL_TEXTUREACCESS_TARGET) {
+        return SDL_FALSE;
+    }
+
+    if (GL_DreamcastIsPowerOfTwo(texture->w) && GL_DreamcastIsPowerOfTwo(texture->h)) {
+        return SDL_FALSE;
+    }
+
+    if ((texture->w <= 0) || ((texture->w % 32) != 0) || (texture->w > SDL_DC_MAX_STRIDE_WIDTH)) {
+        return SDL_FALSE;
+    }
+
+    switch (texture->format) {
+    case SDL_PIXELFORMAT_YV12:
+    case SDL_PIXELFORMAT_IYUV:
+    case SDL_PIXELFORMAT_NV12:
+    case SDL_PIXELFORMAT_NV21:
+        return SDL_FALSE;
+    default:
+        break;
+    }
+
+    return SDL_TRUE;
 }
 
 static int GL_DreamcastDtPixelFormat(Uint32 pvr_type)
@@ -625,6 +662,11 @@ convert_format(GL_RenderData *renderdata, Uint32 pixel_format,
 {
     switch (pixel_format) {
 #ifdef __DREAMCAST__
+    case SDL_PIXELFORMAT_RGB24:
+        *internalFormat = GL_RGB;
+        *format = GL_RGB;
+        *type = GL_UNSIGNED_BYTE;
+        break;
     case SDL_PIXELFORMAT_RGB888:
         *internalFormat = GL_RGB;
         *format = GL_RGB;
@@ -696,6 +738,8 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     GLenum scaleMode;
 #ifdef __DREAMCAST__
     Uint32 dreamcast_original_format = texture->format;
+    SDL_bool dreamcast_strided = SDL_FALSE;
+    SDL_Log("GL_CreateTexture: incoming format=%s", SDL_GetPixelFormatName(texture->format));
 #endif
 
     GL_ActivateRenderer(renderer);
@@ -712,10 +756,18 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     if (texture->access != SDL_TEXTUREACCESS_STREAMING &&
         texture->format != SDL_PIXELFORMAT_RGB565 &&
         texture->format != SDL_PIXELFORMAT_ARGB1555 &&
-        texture->format != SDL_PIXELFORMAT_ARGB4444) {
+        texture->format != SDL_PIXELFORMAT_ARGB4444 &&
+        texture->format != SDL_PIXELFORMAT_RGB24) {
         texture->format = SDL_PIXELFORMAT_ARGB1555;
     }
-#endif 
+    /* GLdc has no GL_BGR — remap BGR24 to RGB24 so GL_UpdateTexture
+       converts it via SDL_ConvertPixels before upload */
+    if (texture->format == SDL_PIXELFORMAT_BGR24) {
+        texture->format = SDL_PIXELFORMAT_RGB24;
+    }
+
+    SDL_Log("GL_CreateTexture: after DC format fix=%s", SDL_GetPixelFormatName(texture->format));
+#endif
     if (!convert_format(renderdata, texture->format, &internalFormat,
                         &format, &type)) {
         return SDL_SetError("Texture format %s not supported by OpenGL",
@@ -729,6 +781,7 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 
 #ifdef __DREAMCAST__
     data->original_format = dreamcast_original_format;
+    data->strided = SDL_FALSE;
 #endif
 
     if (texture->access == SDL_TEXTUREACCESS_STREAMING) {
@@ -790,7 +843,18 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
         isPowerOfTwoWidth = (texture->w & (texture->w - 1)) == 0;
         isPowerOfTwoHeight = (texture->h & (texture->h - 1)) == 0;
 
-        if (!isPowerOfTwoWidth || !isPowerOfTwoHeight) {
+        dreamcast_strided = GL_DreamcastCanUseStridedTexture(texture);
+
+        if (dreamcast_strided) {
+            texture_w = texture->w;
+            texture_h = texture->h;
+            data->texw = 1.0f;
+            data->texh = 1.0f;
+            data->strided = SDL_TRUE;
+
+            SDL_Log("Dreamcast: using GL_KOS_texture_stride: w=%d, h=%d",
+                    texture_w, texture_h);
+        } else if (!isPowerOfTwoWidth || !isPowerOfTwoHeight) {
             int oldtexture_w = texture->w;
             int oldtexture_h = texture->h;
             int texturebpp;
@@ -841,6 +905,11 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
         renderdata->glTexParameteri(textype, GL_TEXTURE_WRAP_T,
                                     GL_CLAMP_TO_EDGE);
     }
+#ifdef __DREAMCAST__
+    if (data->strided) {
+        renderdata->glTexParameteri(textype, GL_TEXTURE_STRIDE_KOS, texture_w);
+    }
+#endif
 #ifdef __MACOSX__
 #ifndef GL_TEXTURE_STORAGE_HINT_APPLE
 #define GL_TEXTURE_STORAGE_HINT_APPLE 0x85BC
@@ -1208,7 +1277,16 @@ static int GL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
 #else
     renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, (pitch / texturebpp));
 #endif
-
+SDL_Log("GL_UpdateTexture: format=0x%X type=0x%X original_format=%s texture_format=%s upload_pitch=%d w=%d h=%d conversion_fired=%s",
+        data->format,
+        data->formattype,
+        SDL_GetPixelFormatName(data->original_format),
+        SDL_GetPixelFormatName(texture->format),
+        upload_pitch,
+        rect->w,
+        rect->h,
+        (data->original_format != texture->format) ? "YES" : "NO");
+        
     renderdata->glTexSubImage2D(textype, 0, rect->x, rect->y, rect->w,
                                 rect->h, data->format, data->formattype,
 #ifdef __DREAMCAST__
@@ -2542,12 +2620,14 @@ SDL_RenderDriver GL_RenderDriver = {
       4,
 #ifdef __DREAMCAST__
       {
-        SDL_PIXELFORMAT_RGB565,
-        SDL_PIXELFORMAT_ARGB1555,
+        SDL_PIXELFORMAT_ARGB1555,    // optimal - native PVR with alpha
+        SDL_PIXELFORMAT_RGB565,      // optimal - native PVR
+        SDL_PIXELFORMAT_ARGB4444,    // optimal - native PVR with alpha
+        SDL_PIXELFORMAT_RGB24,       // fallback - works but not optimal
         SDL_PIXELFORMAT_RGB888,
-        SDL_PIXELFORMAT_ARGB4444,
+        SDL_PIXELFORMAT_ARGB8888,
         SDL_PIXELFORMAT_XRGB8888,
-        SDL_PIXELFORMAT_ARGB8888},
+      },
 #else
       { SDL_PIXELFORMAT_ARGB8888,
         SDL_PIXELFORMAT_ABGR8888,
