@@ -71,9 +71,6 @@
 #ifndef GL_ARGB1555_TWID_KOS
 #define GL_ARGB1555_TWID_KOS 0xEF45
 #endif
-#ifndef GL_TEXTURE_STRIDE_KOS
-#define GL_TEXTURE_STRIDE_KOS 0xEF52
-#endif
 #ifndef GL_COMPRESSED_RGB_565_VQ_KOS
 #define GL_COMPRESSED_RGB_565_VQ_KOS 0xEEE4
 #endif
@@ -1038,14 +1035,7 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
     renderdata->glBindTexture(textype, data->texture);
 
 #ifdef SDL_PLATFORM_DREAMCAST
-    if (data->strided) {
-        renderdata->glTexParameteri(textype, GL_TEXTURE_STRIDE_KOS, texture_w);
-    }
-#endif
-
-#ifdef SDL_PLATFORM_DREAMCAST
     {
-        // Always allocate the full POT texture up front, zeroed
         const size_t initial_size = (size_t)texture_w * (size_t)texture_h * SDL_BYTESPERPIXEL(texture->format);
         void *initial_pixels = SDL_calloc(1, initial_size);
 
@@ -1057,8 +1047,15 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
 
         renderdata->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, texture_w);
+
+        SetTextureScaleMode(renderdata, textype, texture->format, data->texture_scale_mode);
+        SetTextureAddressMode(renderdata, textype,
+                              data->texture_address_mode_u,
+                              data->texture_address_mode_v);
+
         renderdata->glTexImage2D(textype, 0, internalFormat, texture_w,
                                  texture_h, 0, format, type, initial_pixels);
+
         renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
         SDL_free(initial_pixels);
     }
