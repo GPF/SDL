@@ -1,6 +1,7 @@
 #include <kos.h>
 #include <SDL2/SDL.h>
 #include <GL/gl.h>
+#include <GL/glext.h>
 #include <GL/glkos.h>
 
 #include <stdio.h>
@@ -30,7 +31,8 @@ GLuint LoadBMPTexture(const char *filename) {
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_STRIDE_KOS, converted->w);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, converted->w, converted->h, 0,
              GL_RGB, GL_UNSIGNED_BYTE, NULL);  // NULL like SDL2 render driver
@@ -113,10 +115,10 @@ int main(int argc, char *argv[]) {
         // Render the texture
         glBindTexture(GL_TEXTURE_2D, texture);
         glBegin(GL_QUADS);
-        glTexCoord2f(0.0f, 0.0f); glVertex2f(0.0f, 0.0f);      // Top-left
-        glTexCoord2f(1.0f, 0.0f); glVertex2f(320.0f, 0.0f);    // Top-right
-        glTexCoord2f(1.0f, 1.0f); glVertex2f(320.0f, 240.0f);  // Bottom-right
-        glTexCoord2f(0.0f, 1.0f); glVertex2f(0.0f, 240.0f);    // Bottom-left
+        glTexCoord2f(0.0f, 0.0f); glVertex2f(0.0f,   0.0f);
+        glTexCoord2f(1.0f, 0.0f); glVertex2f(640.0f, 0.0f);
+        glTexCoord2f(1.0f, 1.0f); glVertex2f(640.0f, 480.0f);
+        glTexCoord2f(0.0f, 1.0f); glVertex2f(0.0f,   480.0f);
         glEnd();
 
         // Swap the buffers

@@ -133,7 +133,7 @@ int main(int argc, char *argv[]) {
 
         SDL_RenderClear(renderer);
 
-        SDL_Rect dest_rect = { 0, 0, 320, 240 };
+        SDL_Rect dest_rect = { 0, 0, 640, 480 };
         SDL_RenderCopyEx(renderer, texture, NULL, &dest_rect, 0, NULL, SDL_FLIP_NONE);
 
         SDL_RenderPresent(renderer);

@@ -72,9 +72,6 @@
 #ifndef GL_ARGB1555_TWID_KOS
 #define GL_ARGB1555_TWID_KOS 0xEF45
 #endif
-#ifndef GL_TEXTURE_STRIDE_KOS
-#define GL_TEXTURE_STRIDE_KOS 0xEF52
-#endif
 #ifndef GL_COMPRESSED_RGB_565_VQ_KOS
 #define GL_COMPRESSED_RGB_565_VQ_KOS 0xEEE4
 #endif
@@ -852,8 +849,8 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
             data->texh = 1.0f;
             data->strided = SDL_TRUE;
 
-            SDL_Log("Dreamcast: using GL_KOS_texture_stride: w=%d, h=%d",
-                    texture_w, texture_h);
+            SDL_Log("Dreamcast: using GL_KOS_texture_non_power_of_two: w=%d, h=%d",
+             texture_w, texture_h);
         } else if (!isPowerOfTwoWidth || !isPowerOfTwoHeight) {
             int oldtexture_w = texture->w;
             int oldtexture_h = texture->h;
@@ -905,11 +902,7 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
         renderdata->glTexParameteri(textype, GL_TEXTURE_WRAP_T,
                                     GL_CLAMP_TO_EDGE);
     }
-#ifdef __DREAMCAST__
-    if (data->strided) {
-        renderdata->glTexParameteri(textype, GL_TEXTURE_STRIDE_KOS, texture_w);
-    }
-#endif
+
 #ifdef __MACOSX__
 #ifndef GL_TEXTURE_STORAGE_HINT_APPLE
 #define GL_TEXTURE_STORAGE_HINT_APPLE 0x85BC
