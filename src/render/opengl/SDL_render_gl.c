@@ -2537,9 +2537,7 @@ static bool GL_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_Pr
 
     renderer->name = GL_RenderDriver.name;
 #ifdef SDL_PLATFORM_DREAMCAST
-    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGB565);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB1555);
-    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB4444);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGB24);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_BGR24);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ABGR8888);
