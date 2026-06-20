@@ -71,6 +71,9 @@
 #ifndef GL_ARGB1555_TWID_KOS
 #define GL_ARGB1555_TWID_KOS 0xEF45
 #endif
+#ifndef GL_TEXTURE_STRIDE_KOS
+#define GL_TEXTURE_STRIDE_KOS 0xEF52
+#endif
 #ifndef GL_COMPRESSED_RGB_565_VQ_KOS
 #define GL_COMPRESSED_RGB_565_VQ_KOS 0xEEE4
 #endif
@@ -139,6 +142,7 @@ typedef struct SDL_DreamcastDtHeader
 #define SDL_DC_DT_PIXEL_FORMAT_MASK 0x7
 #define SDL_DC_DT_NOT_TWIDDLED_SHIFT 26
 #define SDL_DC_DT_STRIDE_SHIFT 25
+#define SDL_DC_MAX_STRIDE_WIDTH 992
 
 enum
 {
@@ -165,6 +169,38 @@ static bool GL_DreamcastDtTwiddled(Uint32 pvr_type)
 static bool GL_DreamcastDtStrided(Uint32 pvr_type)
 {
     return (bool)((pvr_type >> SDL_DC_DT_STRIDE_SHIFT) & 1);
+}
+
+static bool GL_DreamcastIsPowerOfTwo(int value)
+{
+    return (value > 0) && ((value & (value - 1)) == 0);
+}
+
+static bool GL_DreamcastCanUseStridedTexture(const SDL_Texture *texture)
+{
+    if (texture->access == SDL_TEXTUREACCESS_TARGET) {
+        return false;
+    }
+
+    if (GL_DreamcastIsPowerOfTwo(texture->w) && GL_DreamcastIsPowerOfTwo(texture->h)) {
+        return false;
+    }
+
+    if ((texture->w <= 0) || ((texture->w % 32) != 0) || (texture->w > SDL_DC_MAX_STRIDE_WIDTH)) {
+        return false;
+    }
+
+    switch (texture->format) {
+    case SDL_PIXELFORMAT_YV12:
+    case SDL_PIXELFORMAT_IYUV:
+    case SDL_PIXELFORMAT_NV12:
+    case SDL_PIXELFORMAT_NV21:
+        return false;
+    default:
+        break;
+    }
+
+    return true;
 }
 
 static int GL_DreamcastDtPixelFormat(Uint32 pvr_type)
@@ -358,6 +394,11 @@ typedef struct
     const float *shader_params;
     void *pixels;
     int pitch;
+#ifdef SDL_PLATFORM_DREAMCAST
+    int texture_w;
+    int texture_h;
+    bool strided;
+#endif
     SDL_Rect locked_rect;
 #ifdef SDL_HAVE_YUV
     // YUV texture support
@@ -374,7 +415,7 @@ typedef struct
     GL_FBOList *fbo;
 #ifdef SDL_PLATFORM_DREAMCAST
     Uint32 original_format;
-#endif    
+#endif
 } GL_TextureData;
 
 static const char *GL_TranslateError(GLenum error)
@@ -633,6 +674,11 @@ static bool convert_format(Uint32 pixel_format, GLint *internalFormat, GLenum *f
 {
     switch (pixel_format) {
 #ifdef SDL_PLATFORM_DREAMCAST
+    case SDL_PIXELFORMAT_RGB24:
+        *internalFormat = GL_RGB;
+        *format = GL_RGB;
+        *type = GL_UNSIGNED_BYTE;
+        break;
     case SDL_PIXELFORMAT_XRGB8888:
         *internalFormat = GL_RGBA;
         *format = GL_RGBA;
@@ -806,6 +852,7 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
 
 #ifdef SDL_PLATFORM_DREAMCAST
     Uint32 dreamcast_original_format = texture->format;
+    bool dreamcast_strided = false;
 #endif
 
     GL_ActivateRenderer(renderer);
@@ -819,10 +866,14 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
     }
 
 #ifdef SDL_PLATFORM_DREAMCAST
+    if (texture->format == SDL_PIXELFORMAT_BGR24) {
+        texture->format = SDL_PIXELFORMAT_RGB24;
+    }
     if (texture->access != SDL_TEXTUREACCESS_STREAMING &&
         texture->format != SDL_PIXELFORMAT_RGB565 &&
         texture->format != SDL_PIXELFORMAT_ARGB1555 &&
-        texture->format != SDL_PIXELFORMAT_ARGB4444) {
+        texture->format != SDL_PIXELFORMAT_ARGB4444 &&
+        texture->format != SDL_PIXELFORMAT_RGB24) {
         texture->format = SDL_PIXELFORMAT_ARGB1555;
     }
 #endif
@@ -847,29 +898,8 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
 
 #ifdef SDL_PLATFORM_DREAMCAST
     data->original_format = dreamcast_original_format;
+    data->strided = false;
 #endif
-
-    if (texture->access == SDL_TEXTUREACCESS_STREAMING) {
-        size_t size;
-        data->pitch = texture->w * SDL_BYTESPERPIXEL(texture->format);
-        size = (size_t)texture->h * data->pitch;
-
-        if (texture->format == SDL_PIXELFORMAT_YV12 ||
-            texture->format == SDL_PIXELFORMAT_IYUV) {
-            size += 2 * ((texture->h + 1) / 2) * ((data->pitch + 1) / 2);
-        }
-
-        if (texture->format == SDL_PIXELFORMAT_NV12 ||
-            texture->format == SDL_PIXELFORMAT_NV21) {
-            size += 2 * ((texture->h + 1) / 2) * ((data->pitch + 1) / 2);
-        }
-
-        data->pixels = SDL_calloc(1, size);
-        if (!data->pixels) {
-            SDL_free(data);
-            return false;
-        }
-    }
 
     if (texture->access == SDL_TEXTUREACCESS_TARGET) {
         data->fbo = GL_GetFBO(renderdata, texture->w, texture->h);
@@ -913,11 +943,17 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
         isPowerOfTwoWidth = (texture->w & (texture->w - 1)) == 0;
         isPowerOfTwoHeight = (texture->h & (texture->h - 1)) == 0;
 
-        if (!isPowerOfTwoWidth || !isPowerOfTwoHeight) {
+        dreamcast_strided = GL_DreamcastCanUseStridedTexture(texture);
+
+        if (dreamcast_strided) {
+            texture_w = texture->w;
+            texture_h = texture->h;
+            data->texw = 1.0f;
+            data->texh = 1.0f;
+            data->strided = true;
+        } else if (!isPowerOfTwoWidth || !isPowerOfTwoHeight) {
             int oldtexture_w = texture->w;
             int oldtexture_h = texture->h;
-            int texturebpp;
-            int newStride;
 
             texture_w = (texture->w <= maxSize) ? SDL_powerof2(texture->w) : maxSize;
             texture_h = (texture->h <= maxSize) ? SDL_powerof2(texture->h) : maxSize;
@@ -929,16 +965,14 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
                     oldtexture_w, oldtexture_h, texture_w, texture_h, maxSize);
 
             texture->scaleMode = SDL_SCALEMODE_NEAREST;
-
-            texturebpp = SDL_BYTESPERPIXEL(texture->format);
-            newStride = texture_w * texturebpp;
-            renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, (newStride / texturebpp));
         } else {
             texture_w = texture->w;
             texture_h = texture->h;
             data->texw = 1.0f;
             data->texh = 1.0f;
         }
+        // Always reset GL_UNPACK_ROW_LENGTH after the POT block
+        renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 #else
         texture_w = SDL_powerof2(texture->w);
         texture_h = SDL_powerof2(texture->h);
@@ -953,6 +987,41 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
     SDL_SetFloatProperty(props, SDL_PROP_TEXTURE_OPENGL_TEX_W_FLOAT, data->texw);
     SDL_SetFloatProperty(props, SDL_PROP_TEXTURE_OPENGL_TEX_H_FLOAT, data->texh);
 
+#ifdef SDL_PLATFORM_DREAMCAST
+    data->texture_w = texture_w;
+    data->texture_h = texture_h;
+#endif
+
+    if (texture->access == SDL_TEXTUREACCESS_STREAMING) {
+        size_t size;
+#ifdef SDL_PLATFORM_DREAMCAST
+        // For Dreamcast, allocate the streaming pixel buffer at POT size so
+        // GL_UpdateTexture can upload the full POT buffer directly each frame
+        // without a per-frame row-copy. data->pitch uses the POT width so
+        // SDL_LockTexture hands Doom a correctly-strided pointer into it.
+        data->pitch = texture_w * SDL_BYTESPERPIXEL(texture->format);
+        size = (size_t)texture_h * data->pitch;
+#else
+        data->pitch = texture->w * SDL_BYTESPERPIXEL(texture->format);
+        size = (size_t)texture->h * data->pitch;
+
+        if (texture->format == SDL_PIXELFORMAT_YV12 ||
+            texture->format == SDL_PIXELFORMAT_IYUV) {
+            size += 2 * ((texture->h + 1) / 2) * ((data->pitch + 1) / 2);
+        }
+
+        if (texture->format == SDL_PIXELFORMAT_NV12 ||
+            texture->format == SDL_PIXELFORMAT_NV21) {
+            size += 2 * ((texture->h + 1) / 2) * ((data->pitch + 1) / 2);
+        }
+#endif
+        data->pixels = SDL_calloc(1, size);
+        if (!data->pixels) {
+            SDL_free(data);
+            return false;
+        }
+    }
+
     data->format = format;
     data->formattype = type;
     data->texture_scale_mode = texture->scaleMode;
@@ -962,8 +1031,35 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
     renderdata->glEnable(textype);
     renderdata->glBindTexture(textype, data->texture);
 
+#ifdef SDL_PLATFORM_DREAMCAST
+    if (data->strided) {
+        renderdata->glTexParameteri(textype, GL_TEXTURE_STRIDE_KOS, texture_w);
+    }
+#endif
+
+#ifdef SDL_PLATFORM_DREAMCAST
+    {
+        // Always allocate the full POT texture up front, zeroed
+        const size_t initial_size = (size_t)texture_w * (size_t)texture_h * SDL_BYTESPERPIXEL(texture->format);
+        void *initial_pixels = SDL_calloc(1, initial_size);
+
+        if (!initial_pixels) {
+            SDL_free(data->pixels);
+            SDL_free(data);
+            return SDL_OutOfMemory();
+        }
+
+        renderdata->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, texture_w);
+        renderdata->glTexImage2D(textype, 0, internalFormat, texture_w,
+                                 texture_h, 0, format, type, initial_pixels);
+        renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        SDL_free(initial_pixels);
+    }
+#else
     renderdata->glTexImage2D(textype, 0, internalFormat, texture_w,
                              texture_h, 0, format, type, NULL);
+#endif
 
     if (!GL_CheckError("glTexImage2D()", renderer)) {
         return false;
@@ -1172,6 +1268,7 @@ static bool GL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
     void *converted_pixels = NULL;
     const void *upload_pixels = pixels;
     int upload_pitch = pitch;
+    SDL_Rect upload_rect;
 #endif
 
     SDL_assert_release(texturebpp != 0);
@@ -1181,6 +1278,8 @@ static bool GL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
     renderdata->drawstate.texture = NULL;
 
 #ifdef SDL_PLATFORM_DREAMCAST
+    upload_rect = *rect;
+
     if (data->original_format != texture->format) {
         upload_pitch = rect->w * SDL_BYTESPERPIXEL(texture->format);
         converted_pixels = SDL_malloc((size_t)upload_pitch * rect->h);
@@ -1208,14 +1307,64 @@ static bool GL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
         upload_pixels = converted_pixels;
     }
 
-    renderdata->glBindTexture(textype, data->texture);
-    renderdata->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, (upload_pitch / texturebpp));
-    renderdata->glTexSubImage2D(textype, 0, rect->x, rect->y, rect->w,
-                                rect->h, data->format, data->formattype,
-                                upload_pixels);
+    if (texture->access == SDL_TEXTUREACCESS_STREAMING) {
+        // Streaming textures: data->pixels is already POT-sized and
+        // data->pitch is already the POT stride, so upload the full
+        // POT buffer directly — no per-frame row copy needed.
+        renderdata->glBindTexture(textype, data->texture);
+        renderdata->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, data->texture_w);
+        renderdata->glTexSubImage2D(textype, 0, 0, 0,
+                                    data->texture_w, data->texture_h,
+                                    data->format, data->formattype,
+                                    data->pixels);
+        renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    } else {
+        // Static textures: POT blit only happens on explicit UpdateTexture
+        // calls which are infrequent (UI elements, title screen, etc.)
+        if ((data->texture_w != texture->w || data->texture_h != texture->h) &&
+            rect->x == 0 && rect->y == 0 &&
+            rect->w == texture->w && rect->h == texture->h) {
+
+            const int pot_pitch = data->texture_w * texturebpp;
+            void *pot_pixels = SDL_calloc(1, (size_t)data->texture_h * pot_pitch);
+            int y;
+
+            if (!pot_pixels) {
+                SDL_free(converted_pixels);
+                return SDL_OutOfMemory();
+            }
+
+            for (y = 0; y < rect->h; ++y) {
+                SDL_memcpy((Uint8 *)pot_pixels + y * pot_pitch,
+                           (const Uint8 *)upload_pixels + y * upload_pitch,
+                           (size_t)rect->w * texturebpp);
+            }
+
+            if (converted_pixels) {
+                SDL_free(converted_pixels);
+            }
+            converted_pixels = pot_pixels;
+            upload_pixels = pot_pixels;
+            upload_pitch = pot_pitch;
+            upload_rect.x = 0;
+            upload_rect.y = 0;
+            upload_rect.w = data->texture_w;
+            upload_rect.h = data->texture_h;
+            rect = &upload_rect;
+        }
+
+        renderdata->glBindTexture(textype, data->texture);
+        renderdata->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, (upload_pitch / texturebpp));
+        renderdata->glTexSubImage2D(textype, 0, rect->x, rect->y, rect->w,
+                                    rect->h, data->format, data->formattype,
+                                    upload_pixels);
+        renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    }
 
     SDL_free(converted_pixels);
+
 #else
     renderdata->glBindTexture(textype, data->texture);
     renderdata->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -2382,9 +2531,11 @@ static bool GL_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, SDL_Pr
 
     renderer->name = GL_RenderDriver.name;
 #ifdef SDL_PLATFORM_DREAMCAST
-    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGB565);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB1555);
-    // SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB4444);
+    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGB565);
+    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB4444);
+    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_RGB24);
+    SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_BGR24);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_XRGB8888);
     SDL_AddSupportedTextureFormat(renderer, SDL_PIXELFORMAT_ARGB8888);
 #else
