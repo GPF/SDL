@@ -88,7 +88,7 @@ int main(int argc, char *argv[]) {
     }
     printf("Image surface format: %s\n", SDL_GetPixelFormatName(image_surface->format->format));
 
-    SDL_Surface *converted = SDL_ConvertSurfaceFormat(image_surface, SDL_PIXELFORMAT_RGB24, 0);
+    SDL_Surface *converted = SDL_ConvertSurfaceFormat(image_surface, SDL_PIXELFORMAT_RGB565, 0);
     SDL_FreeSurface(image_surface);
     if (!converted) {
         printf("Failed to convert surface: %s\n", SDL_GetError());

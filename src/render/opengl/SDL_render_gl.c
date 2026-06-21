@@ -736,7 +736,7 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 #ifdef __DREAMCAST__
     Uint32 dreamcast_original_format = texture->format;
     SDL_bool dreamcast_strided = SDL_FALSE;
-    SDL_Log("GL_CreateTexture: incoming format=%s", SDL_GetPixelFormatName(texture->format));
+    SDL_Log("GL_CreateTexture: incoming format=%s, texture w=%d, h=%d", SDL_GetPixelFormatName(texture->format), texture->w, texture->h);
 #endif
 
     GL_ActivateRenderer(renderer);
@@ -1270,16 +1270,6 @@ static int GL_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
 #else
     renderdata->glPixelStorei(GL_UNPACK_ROW_LENGTH, (pitch / texturebpp));
 #endif
-SDL_Log("GL_UpdateTexture: format=0x%X type=0x%X original_format=%s texture_format=%s upload_pitch=%d w=%d h=%d conversion_fired=%s",
-        data->format,
-        data->formattype,
-        SDL_GetPixelFormatName(data->original_format),
-        SDL_GetPixelFormatName(texture->format),
-        upload_pitch,
-        rect->w,
-        rect->h,
-        (data->original_format != texture->format) ? "YES" : "NO");
-        
     renderdata->glTexSubImage2D(textype, 0, rect->x, rect->y, rect->w,
                                 rect->h, data->format, data->formattype,
 #ifdef __DREAMCAST__
@@ -2613,10 +2603,10 @@ SDL_RenderDriver GL_RenderDriver = {
       4,
 #ifdef __DREAMCAST__
       {
-        SDL_PIXELFORMAT_ARGB1555,    // optimal - native PVR with alpha
-        // SDL_PIXELFORMAT_RGB565,   // native PVR, but should not be selected as the streaming texture fallback
-        // SDL_PIXELFORMAT_ARGB4444, // native PVR with alpha, but not used by SDL's Dreamcast texture fallback
-        SDL_PIXELFORMAT_RGB24,       // fallback - works but not optimal
+        SDL_PIXELFORMAT_RGB565,
+        SDL_PIXELFORMAT_ARGB1555,
+        SDL_PIXELFORMAT_ARGB4444,
+        SDL_PIXELFORMAT_RGB24,
         SDL_PIXELFORMAT_RGB888,
         SDL_PIXELFORMAT_ARGB8888,
         SDL_PIXELFORMAT_XRGB8888,
