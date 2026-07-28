@@ -659,10 +659,80 @@ The hardware framebuffer closely matches the Flycast reference. The ordinary
 non-capturing ELF was rebuilt afterward without
 `PVR_TEXTURE_HARDWARE_SCREENSHOT`.
 
-Remaining Phase 3 validation includes focused rotation/flip and source-rect
-coverage, a broader texture-dimension and edge-update matrix, repeated
-create/destroy/update/lock stress, and VRAM-exhaustion rollback. Other video
-modes and performance/capacity measurements remain Phase 7 hardening.
+Remaining Phase 3 validation includes a broader texture-dimension and
+edge-update matrix, repeated create/destroy/update/lock stress, and
+VRAM-exhaustion rollback. Other video modes and performance/capacity
+measurements remain Phase 7 hardening.
+
+### Phase 3.2: source rectangles, scaling, rotation, and flips — done
+
+- `SDL_RenderCopy`/`SDL_RenderCopyF` and the nontrivial
+  `SDL_RenderCopyEx`/`SDL_RenderCopyExF` path fall back through SDL geometry
+  because the backend leaves `QueueCopy` and `QueueCopyEx` unset. SDL supplies
+  four vertices and six 32-bit indices, with logical source-rectangle UVs,
+  destination-position scaling, flips applied to destination axes, and default
+  or destination-relative explicit centers. Positive SDL angles appear
+  clockwise in y-down render coordinates. Public geometry may additionally be
+  unindexed or use 8-, 16-, or 32-bit indices.
+- `QueueGeometry` now validates geometry pointers, counts, strides, triangle
+  divisibility, index size/range, scale/allocation arithmetic, and finite
+  position/UV results. It safely expands every supported index form into
+  renderer-owned independent triangles. Queue callbacks remain CPU-only and
+  only `RunCommandQueue` submits PVR commands.
+- Because the Dreamcast toolchain uses `-ffast-math`, compiler assumptions can
+  eliminate ordinary `isfinite()` checks. Bitwise IEEE-754 exponent tests now
+  protect queued geometry and the existing clipping/point/rect paths under the
+  actual KOS flags.
+- Independent Phase 3.2 source review confirmed two queue-validation gaps.
+  `QueueFillRects` can receive floating-point widths and heights directly from
+  `SDL_RenderFillRectsF`, so it now rejects non-finite dimensions with the
+  `-ffast-math`-safe helper while finite zero/negative dimensions remain empty
+  geometry. `SDL_RenderGeometryRaw` can also forward `indices == NULL` with a
+  positive `num_indices` (normalizing `size_indices` to zero), so
+  `QueueGeometry` now rejects that malformed combination without rejecting the
+  valid unindexed `NULL/0/0` form.
+- `test/dreamcast/test/pvr_copy_ex` provides three pages: source rectangles,
+  logical edges, one-pixel strips, scaling, and filtering; all flips and
+  0/90/180/270/45-degree rotations with default/explicit centers and cropped
+  combinations; and mirrored viewport panels for clipping, modulation/alpha,
+  and painter order. It also exercises unindexed and 8/16/32-bit public
+  geometry plus required invalid-input failures. Its API prechecks now also
+  cover non-finite rectangle width/height, continued success of finite empty
+  rectangles and valid unindexed geometry, and null indices with a positive
+  index count.
+- A fresh unified SDL build and a PVR-disabled build pass, and all existing
+  native-PVR tests rebuild with strict warnings against the explicit local
+  archive. Flycast reaches PASS; direct inspection of every page confirms
+  source boundaries, orientation, clockwise positive rotation, centers,
+  filtering, NPOT backing edges, clipping, modulation/alpha, and painter order
+  without seams, missing triangles, or padding leakage.
+
+**Physical-hardware validation (2026-07-28):** Passed on a real Dreamcast at
+640x480 VGA. The capture ELF was uploaded over BBA with
+`kos-tool -t 192.168.0.128 -x test/dreamcast/test/pvr_copy_ex/pvr_copy_ex.elf
+-m .`. It wrote three PPMs, printed PASS, returned zero, and returned control
+normally to `dc-load-ip`. Direct inspection matches the Flycast pages: page 1
+has correct source/scaling/filter behavior and clean logical backing edges;
+page 2 has all flip combinations, clockwise rotations, correct default/corner
+centers, and cropped combinations; page 3 has identical viewport panels,
+exact clip guards, modulation/alpha, and painter order. No boundary or padding
+leakage, cracks, seams, or missing triangles are visible. The 640x480 lasting
+references and SHA-256 values are:
+
+- `test/dreamcast/test/pvr_copy_ex/pvr_copy_ex-hardware-page1.ppm` —
+  `120aa843cd10c259f5c67ed852fab6eee08fd22a882bbba09edf1f9da3f56c93`
+- `test/dreamcast/test/pvr_copy_ex/pvr_copy_ex-hardware-page2.ppm` —
+  `c4580265159a1dc529fd45427a98d87a007ed6569530f37161cc229308b9d528`
+- `test/dreamcast/test/pvr_copy_ex/pvr_copy_ex-hardware-page3.ppm` —
+  `787660b80b92933242117868f327626a532639c40a9909cd69e812e6665dcb66`
+
+The ordinary ELF was rebuilt after capture. It contains no
+`vid_screen_shot` reference, hardware `/pc` path, or capture define.
+The later source-validation corrections are queue-time rejection only and do
+not change valid command storage or PVR submission. The unified archive build,
+focused strict-warning renderer/test builds, and Flycast API/runtime test were
+repeated; no physical-hardware rerun was needed, and the three existing
+hardware PPMs and SHA-256 values remain unchanged.
 
 ### Phase 3.1 code review (2026-07-28, independent audit)
 
@@ -756,8 +826,8 @@ The implementation copies the requested rectangle into staging, then calls
 `pvr_txr_load(data->pixels, data->vram, data->allocation_size)` — the full
 allocation — regardless of which rectangle was updated. A 1×1 partial update
 still transfers `backing_w × backing_h × 2` bytes. This is documented as
-Phase 0/3.1 intentional behavior. No fix required now; tracked for Phase 3.2
-partial uploads.
+Phase 0/3.1 intentional behavior. No fix required in the focused copy/copy-ex
+increment; partial uploads remain a later texture-optimization task.
 
 **MEDIUM — OpenGL diff should be separated**
 

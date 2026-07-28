@@ -288,10 +288,32 @@ static int DC_PVR_ClipTriangle(const DC_PVR_Vertex triangle[3],
     return count;
 }
 
+/* KOS release flags include -ffast-math, which permits the compiler to fold
+ * isfinite() to true. Check IEEE-754 exponent bits so malformed public
+ * geometry is still rejected in the actual Dreamcast build. */
+static SDL_bool DC_PVR_FloatIsFinite(float value)
+{
+    Uint32 bits;
+
+    SDL_memcpy(&bits, &value, sizeof(bits));
+    return (bits & 0x7f800000u) != 0x7f800000u ? SDL_TRUE : SDL_FALSE;
+}
+
+static SDL_bool DC_PVR_DoubleIsFinite(double value)
+{
+    Uint64 bits;
+
+    SDL_memcpy(&bits, &value, sizeof(bits));
+    return (bits & 0x7ff0000000000000ULL) != 0x7ff0000000000000ULL
+               ? SDL_TRUE : SDL_FALSE;
+}
+
 static SDL_bool DC_PVR_VertexIsFinite(const DC_PVR_Vertex *vertex)
 {
-    return (isfinite((double)vertex->x) && isfinite((double)vertex->y) &&
-            isfinite((double)vertex->u) && isfinite((double)vertex->v)) ? SDL_TRUE : SDL_FALSE;
+    return (DC_PVR_FloatIsFinite(vertex->x) &&
+            DC_PVR_FloatIsFinite(vertex->y) &&
+            DC_PVR_FloatIsFinite(vertex->u) &&
+            DC_PVR_FloatIsFinite(vertex->v)) ? SDL_TRUE : SDL_FALSE;
 }
 
 static int DC_PVR_EmitVertex(const DC_PVR_Vertex *source, Uint32 flags)
@@ -349,7 +371,8 @@ static int DC_PVR_EmitClippedTriangle(const DC_PVR_Vertex triangle[3],
                             ((double)b->y - a->y) * ((double)c->x - a->x);
 
         if (!DC_PVR_VertexIsFinite(a) || !DC_PVR_VertexIsFinite(b) ||
-            !DC_PVR_VertexIsFinite(c) || !isfinite(area) || area == 0.0) {
+            !DC_PVR_VertexIsFinite(c) || !DC_PVR_DoubleIsFinite(area) ||
+            area == 0.0) {
             continue;
         }
         if (DC_PVR_EmitVertex(a, PVR_CMD_VERTEX) < 0 ||
@@ -404,6 +427,14 @@ int DC_PVR_QueueFillRects(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
         (size_t)count > SDL_SIZE_MAX / sizeof(*vertices)) {
         return SDL_InvalidParamError("rects");
     }
+    for (i = 0; i < count; ++i) {
+        if (!DC_PVR_FloatIsFinite(rects[i].w)) {
+            return SDL_SetError("Dreamcast PVR rectangle has a non-finite width");
+        }
+        if (!DC_PVR_FloatIsFinite(rects[i].h)) {
+            return SDL_SetError("Dreamcast PVR rectangle has a non-finite height");
+        }
+    }
     vertices = (DC_PVR_Vertex *)SDL_AllocateRenderVertices(
         renderer, (size_t)count * sizeof(*vertices), 0, &cmd->data.draw.first);
     if (!vertices) {
@@ -418,6 +449,7 @@ int DC_PVR_QueueFillRects(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
     for (i = 0; i < count; ++i) {
         vertices[i].x = rects[i].x;
         vertices[i].y = rects[i].y;
+        /* Rectangle commands temporarily store width and height in u and v. */
         vertices[i].u = rects[i].w;
         vertices[i].v = rects[i].h;
         vertices[i].color = DC_PVR_PackColor(&color);
@@ -436,6 +468,40 @@ int DC_PVR_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Tex
     DC_PVR_Vertex *vertices;
     int i;
 
+    if (!indices && num_indices > 0) {
+        return SDL_SetError("Dreamcast PVR indexed geometry has a null index pointer");
+    }
+    if (num_vertices < 0 || num_indices < 0 || count < 0 ||
+        (count > 0 && (!xy || !color)) ||
+        (texture && (!texturedata || !uv))) {
+        return SDL_InvalidParamError("geometry");
+    }
+    if (xy_stride < (int)(2 * sizeof(float)) ||
+        (color_stride != 0 && color_stride < (int)sizeof(SDL_Color)) ||
+        (texture && uv_stride < (int)(2 * sizeof(float)))) {
+        return SDL_SetError("Dreamcast PVR geometry has an invalid vertex stride");
+    }
+    if (indices) {
+        if (size_indices != 1 && size_indices != 2 && size_indices != 4) {
+            return SDL_SetError("Dreamcast PVR geometry has an invalid index size");
+        }
+    } else if (size_indices != 0) {
+        return SDL_SetError("Dreamcast PVR unindexed geometry has an index size");
+    }
+    if ((count % 3) != 0) {
+        return SDL_SetError("Dreamcast PVR geometry is not an independent triangle list");
+    }
+    if (!DC_PVR_FloatIsFinite(scale_x) || !DC_PVR_FloatIsFinite(scale_y)) {
+        return SDL_SetError("Dreamcast PVR geometry has a non-finite scale");
+    }
+    if ((size_t)count > SDL_SIZE_MAX / sizeof(*vertices)) {
+        return SDL_SetError("Dreamcast PVR geometry vertex allocation overflow");
+    }
+    if (count == 0) {
+        cmd->data.draw.count = 0;
+        return 0;
+    }
+
     vertices = (DC_PVR_Vertex *)SDL_AllocateRenderVertices(renderer,
                                                            (size_t)count * sizeof(*vertices),
                                                            0, &cmd->data.draw.first);
@@ -445,33 +511,76 @@ int DC_PVR_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Tex
 
     cmd->data.draw.count = count;
     for (i = 0; i < count; ++i) {
-        int index = i;
-        const float *position;
-        const SDL_Color *vertex_color;
+        Uint32 source_index = (Uint32)i;
+        size_t xy_offset;
+        size_t color_offset;
+        size_t uv_offset = 0;
+        float position[2];
+        SDL_Color vertex_color;
 
         if (indices) {
             if (size_indices == 4) {
-                index = (int)((const Uint32 *)indices)[i];
+                SDL_memcpy(&source_index,
+                           (const Uint8 *)indices + (size_t)i * sizeof(Uint32),
+                           sizeof(source_index));
             } else if (size_indices == 2) {
-                index = (int)((const Uint16 *)indices)[i];
-            } else if (size_indices == 1) {
-                index = (int)((const Uint8 *)indices)[i];
+                Uint16 index16;
+
+                SDL_memcpy(&index16,
+                           (const Uint8 *)indices + (size_t)i * sizeof(Uint16),
+                           sizeof(index16));
+                source_index = index16;
+            } else {
+                source_index = ((const Uint8 *)indices)[i];
             }
         }
-
-        position = (const float *)((const Uint8 *)xy + (size_t)index * xy_stride);
-        vertex_color = (const SDL_Color *)((const Uint8 *)color + (size_t)index * color_stride);
+        if (source_index >= (Uint32)num_vertices) {
+            return SDL_SetError("Dreamcast PVR geometry index is out of range");
+        }
+        if ((size_t)source_index > SDL_SIZE_MAX / (size_t)xy_stride ||
+            (color_stride != 0 &&
+             (size_t)source_index > SDL_SIZE_MAX / (size_t)color_stride) ||
+            (texture &&
+             (size_t)source_index > SDL_SIZE_MAX / (size_t)uv_stride)) {
+            return SDL_SetError("Dreamcast PVR geometry vertex offset overflow");
+        }
+        xy_offset = (size_t)source_index * (size_t)xy_stride;
+        color_offset = (size_t)source_index * (size_t)color_stride;
+        if (texture) {
+            uv_offset = (size_t)source_index * (size_t)uv_stride;
+        }
+        SDL_memcpy(position, (const Uint8 *)xy + xy_offset, sizeof(position));
+        SDL_memcpy(&vertex_color, (const Uint8 *)color + color_offset,
+                   sizeof(vertex_color));
         vertices[i].x = position[0] * scale_x;
         vertices[i].y = position[1] * scale_y;
-        vertices[i].color = DC_PVR_PackColor(vertex_color);
+        if (!DC_PVR_FloatIsFinite(position[0]) ||
+            !DC_PVR_FloatIsFinite(position[1]) ||
+            !DC_PVR_FloatIsFinite(vertices[i].x) ||
+            !DC_PVR_FloatIsFinite(vertices[i].y)) {
+            return SDL_SetError("Dreamcast PVR geometry has a non-finite position");
+        }
+        vertices[i].color = DC_PVR_PackColor(&vertex_color);
         vertices[i].u = 0.0f;
         vertices[i].v = 0.0f;
 
         if (texturedata) {
-            const float *source_uv = (const float *)((const Uint8 *)uv + (size_t)index * uv_stride);
+            float source_uv[2];
 
+            if (texturedata->logical_w <= 0 || texturedata->logical_h <= 0 ||
+                texturedata->backing_w <= 0 || texturedata->backing_h <= 0) {
+                return SDL_SetError("Dreamcast PVR geometry has invalid texture dimensions");
+            }
+            SDL_memcpy(source_uv, (const Uint8 *)uv + uv_offset,
+                       sizeof(source_uv));
             vertices[i].u = (source_uv[0] * texturedata->logical_w) / texturedata->backing_w;
             vertices[i].v = (source_uv[1] * texturedata->logical_h) / texturedata->backing_h;
+            if (!DC_PVR_FloatIsFinite(source_uv[0]) ||
+                !DC_PVR_FloatIsFinite(source_uv[1]) ||
+                !DC_PVR_FloatIsFinite(vertices[i].u) ||
+                !DC_PVR_FloatIsFinite(vertices[i].v)) {
+                return SDL_SetError("Dreamcast PVR geometry has a non-finite texture coordinate");
+            }
         }
     }
     return 0;
@@ -596,8 +705,9 @@ int DC_PVR_RunGeometryCommand(SDL_Renderer *renderer,
             float y = queued[i].y;
             int vertex_index;
 
-            if (!isfinite((double)x) || !isfinite((double)y) ||
-                !isfinite((double)width) || !isfinite((double)height) ||
+            if (!DC_PVR_FloatIsFinite(x) || !DC_PVR_FloatIsFinite(y) ||
+                !DC_PVR_FloatIsFinite(width) ||
+                !DC_PVR_FloatIsFinite(height) ||
                 width <= 0.0f || height <= 0.0f) {
                 continue;
             }
@@ -605,9 +715,9 @@ int DC_PVR_RunGeometryCommand(SDL_Renderer *renderer,
                 x += (float)data->view_x;
                 y += (float)data->view_y;
             }
-            if (!isfinite((double)x) || !isfinite((double)y) ||
-                !isfinite((double)(x + width)) ||
-                !isfinite((double)(y + height))) {
+            if (!DC_PVR_FloatIsFinite(x) || !DC_PVR_FloatIsFinite(y) ||
+                !DC_PVR_FloatIsFinite(x + width) ||
+                !DC_PVR_FloatIsFinite(y + height)) {
                 continue;
             }
             for (vertex_index = 0; vertex_index < 4; ++vertex_index) {
