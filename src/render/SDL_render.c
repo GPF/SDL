@@ -39,6 +39,10 @@
 #include "../core/android/SDL_android.h"
 #endif
 
+#if SDL_VIDEO_RENDER_DREAMCAST_PVR
+#include "dreamcast/SDL_render_dreamcast_pvr.h"
+#endif
+
 /* as a courtesy to iOS apps, we don't try to draw when in the background, as
 that will crash the app. However, these apps _should_ have used
 SDL_AddEventWatch to catch SDL_APP_WILLENTERBACKGROUND events and stopped
@@ -136,7 +140,7 @@ static const SDL_RenderDriver *render_drivers[] = {
 #endif
 #if SDL_VIDEO_RENDER_DREAMCAST_PVR
     &DC_RenderDriver,
-#endif    
+#endif
 #if SDL_VIDEO_RENDER_VITA_GXM
     &VITA_GXM_RenderDriver,
 #endif
@@ -1267,12 +1271,27 @@ int SDL_GetRendererOutputSize(SDL_Renderer *renderer, int *w, int *h)
 static SDL_bool IsSupportedBlendMode(SDL_Renderer *renderer, SDL_BlendMode blendMode)
 {
     switch (blendMode) {
-    /* These are required to be supported by all renderers */
+    /* These are required to be supported by all renderers. The SDL contract
+     * guarantees NONE/BLEND/ADD/MOD/MUL; a backend may explicitly reject
+     * them, but only its own renderer identity should override this guarantee.
+     * Do not route required-mode checks through a callback installed on any
+     * renderer: that demotes the contract to a soft convention. */
     case SDL_BLENDMODE_NONE:
     case SDL_BLENDMODE_BLEND:
     case SDL_BLENDMODE_ADD:
     case SDL_BLENDMODE_MOD:
     case SDL_BLENDMODE_MUL:
+#if SDL_VIDEO_RENDER_DREAMCAST_PVR
+        /* The native PVR backend cannot implement ADD/MOD/MUL exactly; it
+         * rejects them through its own SupportsBlendMode callback. Only the
+         * PVR renderer's callback participates in the required-mode check;
+         * ordinary renderers keep the SDL guarantee. */
+        if (renderer->info.name &&
+            SDL_strcmp(renderer->info.name, DC_PVR_RENDERER_NAME) == 0 &&
+            renderer->SupportsBlendMode) {
+            return renderer->SupportsBlendMode(renderer, blendMode);
+        }
+#endif
         return SDL_TRUE;
 
     default:
@@ -1712,6 +1731,16 @@ int SDL_SetTextureScaleMode(SDL_Texture *texture, SDL_ScaleMode scaleMode)
     CHECK_TEXTURE_MAGIC(texture, -1);
 
     renderer = texture->renderer;
+#if SDL_VIDEO_RENDER_DREAMCAST_PVR
+    /* Gate the filter-mode rejection on the PVR renderer identity only.
+     * The constant DC_PVR_RENDERER_NAME lives in dreamcast/SDL_render_dreamcast_pvr.h;
+     * if the advertised renderer name changes, update that single definition. */
+    if (renderer->info.name &&
+        SDL_strcmp(renderer->info.name, DC_PVR_RENDERER_NAME) == 0 &&
+        scaleMode != SDL_ScaleModeNearest && scaleMode != SDL_ScaleModeLinear) {
+        return SDL_SetError("Dreamcast PVR supports only nearest and linear texture filtering");
+    }
+#endif
     texture->scaleMode = scaleMode;
     if (texture->native) {
         return SDL_SetTextureScaleMode(texture->native, scaleMode);

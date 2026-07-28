@@ -9,6 +9,7 @@ INSTALL_PREFIX="${KOS_BASE}/addons"
 INSTALL_LIBDIR="lib/dreamcast"
 INSTALL_INCLUDEDIR="include"
 ENABLE_OPENGL=ON
+ENABLE_PVR_RENDERER=ON
 ENABLE_SDL_TEST=OFF
 ENABLE_SDL_TESTS=OFF
 ENABLE_PTHREADS=ON
@@ -30,6 +31,9 @@ Install layout options:
 
 Feature options:
   --enable-opengl | --disable-opengl
+      Include or strip SDL OpenGL renderer/context support. Enabled by default.
+  --enable-pvr-renderer | --disable-pvr-renderer
+      Include or strip the native PVR renderer independently. Enabled by default.
   --enable-sdl-test | --disable-sdl-test
   --enable-sdl-tests | --disable-sdl-tests
   --enable-pthreads | --disable-pthreads
@@ -84,6 +88,8 @@ case $1 in
             ;;
         --enable-opengl) ENABLE_OPENGL=ON ;;
         --disable-opengl) ENABLE_OPENGL=OFF ;;
+        --enable-pvr-renderer) ENABLE_PVR_RENDERER=ON ;;
+        --disable-pvr-renderer) ENABLE_PVR_RENDERER=OFF ;;
         --enable-sdl-test) ENABLE_SDL_TEST=ON ;;
         --disable-sdl-test) ENABLE_SDL_TEST=OFF ;;
         --enable-sdl-tests) ENABLE_SDL_TEST=ON; ENABLE_SDL_TESTS=ON ;;
@@ -131,6 +137,7 @@ else
 CMAKE_OPTS="-DSDL_OPENGL=OFF"
 fi
 CMAKE_OPTS="$CMAKE_OPTS -DSDL_TEST=$ENABLE_SDL_TEST -DSDL_TESTS=$ENABLE_SDL_TESTS"
+CMAKE_OPTS="$CMAKE_OPTS -DSDL_VIDEO_RENDER_DREAMCAST_PVR=$ENABLE_PVR_RENDERER"
 if [ "$ENABLE_PTHREADS" == "ON" ]; then
     CMAKE_OPTS="$CMAKE_OPTS -DSDL_PTHREADS=ON"
 else

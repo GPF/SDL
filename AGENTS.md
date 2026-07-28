@@ -1,20 +1,1006 @@
-AI must not be used to generate code for contributions to this project.
+# Dreamcast Native PVR Renderer Plan
 
-"AI" in this case means a Large Language Model ("LLM"), such as ChatGPT,
-Claude, Copilot, Grok, etc.
+## Direction
 
-AI-generated code is based upon sources of unknown origins and may not be
-compatible with the Zlib license, or may introduce conflicting license terms
-if they include code from other projects.
+Build the Dreamcast renderer as a native KallistiOS/PVR backend. Use the SDL
+OpenGL renderer and GLdc as behavioral and algorithmic references, but do not
+route this backend through OpenGL or depend on GLdc private internals.
+Functionality and algorithms from the GLdc implementation may be adapted into
+the native PVR renderer when useful, provided the resulting code uses public
+KallistiOS/PVR interfaces and preserves the native backend's independent
+ownership and command architecture.
 
-AI can be used to identify issues with contributions to this project, but the
-solutions to those issues should be authored by humans.
+The native renderer should provide value through lower overhead, explicit VRAM
+management, and direct support for Dreamcast texture formats. If the objective
+is only to get accelerated `SDL_Renderer` support working quickly, improving
+the existing GLdc-backed OpenGL renderer remains the shorter path.
 
-We have found that AI will frequently hallucinate issues that are not actually
-problems in practice, report incorrect information, and describe problems that
-are actually not issues at all. If AI identifies a problem with this codebase,
-please make sure you understand what it is saying and have independently
-confirmed that the issue exists before submitting a bug report or pull request.
+Treat the current `src/render/dreamcast/SDL_render_dreamcast_pvr.c` as the
+validated Phase 0 baseline, not as a nearly complete driver. Preserve its
+queue and scene ownership rules while extending it in later phases.
 
-Any pull request to this project will ask you to confirm that you are the
-author and that you are contributing your changes under the Zlib license.
+**Runtime constraints:**
+- Only one video driver and one renderer exist per program.
+- No runtime switching between renderers or video drivers.
+- Video driver selected at window creation via `SDL_HINT_DC_VIDEO_MODE`.
+- Renderer selected at creation time, fixed for lifetime.
+- PVR ownership follows the renderer: if the native PVR renderer is created,
+it owns PVR init/shutdown. No shared state, no conflicts.
+
+**Build-time isolation:**
+- Any code that changes default SDL2 behavior must be protected by a Dreamcast
+  build-time guard. Dreamcast-specific behavior must not affect builds for
+  other platforms or configurations where the relevant Dreamcast feature is
+  disabled.
+
+### Unified Dreamcast library architecture
+
+The normal Dreamcast build enables both OpenGL and the native PVR renderer and
+produces one renderer-capable `libSDL2.a`. That archive contains the
+GLdc-backed SDL OpenGL renderer and the independent native Dreamcast PVR
+renderer. `SDL_HINT_DC_VIDEO_MODE` selects the video path before window
+creation, and SDL renderer selection chooses `opengl` or `Dreamcast PVR` when
+the renderer is created. Applications do not replace or switch SDL archives
+to select a renderer. `libSDL2main.a` is only SDL's normal entry-point helper,
+not a renderer-specific SDL library variant.
+
+Final Dreamcast applications intentionally link `-lGL` with the unified build.
+That link dependency does not route native renderer drawing through OpenGL:
+the native PVR renderer objects submit through public KallistiOS/PVR APIs and
+contain no unresolved `gl*` calls. Separate renderer archives such as
+`libSDL2_gl.a` are not part of the design.
+
+Configuring `SDL_OPENGL=OFF` is a supported feature-stripping choice that
+removes SDL OpenGL renderer and context functionality from the archive. It
+does not redefine the native renderer architecture; the normal unified build
+keeps `SDL_OPENGL=ON`.
+
+## Problems inherited from the original prototype
+
+The Phase 0 implementation corrects the lifecycle, command-submission,
+advertising, callback-signature, and baseline texture issues below. Keep this
+list as regression context for later work rather than as a description of the
+current Phase 0 code.
+
+- Several renderer callback signatures do not match the current
+  `SDL_sysrender.h`, including `QueueCopyEx`, `QueueGeometry`, and
+  `SetTextureScaleMode`.
+- Queue callbacks submit PVR commands immediately. SDL queue callbacks must
+  copy or convert their inputs into renderer-owned command data; GPU submission
+  belongs in `RunCommandQueue`.
+- PVR scenes and lists are begun from unrelated callbacks without a single
+  lifecycle owner.
+- Advertised pixel formats do not match the implemented texture conversions.
+- `UpdateTexture` ignores the requested rectangle and source pitch.
+- Streaming locks expose VRAM directly instead of using managed CPU staging
+  storage and an explicit upload operation.
+- Texture driver data contains only a VRAM pointer, so format, backing size,
+  filtering, pitch, access, and dirty state cannot be retained.
+- Texture destruction passes the same allocation to both `pvr_mem_free` and
+  `SDL_free`.
+- Clear, clipping, geometry, rotation, and render-target execution are stubs.
+- `SDL_RENDERER_TARGETTEXTURE` is advertised before target textures work.
+- The software framebuffer, GLdc, and native renderer can independently
+  initialize or shut down PVR. Ownership must be unified.
+
+## Architecture
+
+Organize the backend into three layers:
+
+1. **SDL command ingestion**
+
+   Queue callbacks convert SDL inputs into a compact native vertex format with
+   `SDL_AllocateRenderVertices`. Prefer implementing `QueueGeometry` and
+   leaving `QueueCopy` and `QueueCopyEx` unset, allowing SDL to translate copy,
+   rotation, and flip operations into geometry.
+
+2. **PVR state translation**
+
+   `RunCommandQueue` tracks the viewport, clip rectangle, texture, filtering,
+   modulation, and blend mode. It emits a compiled polygon header only when
+   relevant state changes.
+
+3. **PVR scene ownership**
+
+   One renderer-level scene manager owns scene begin/finish, polygon-list
+   begin/finish, render-target transitions, synchronization, and presentation.
+   Texture and queue callbacks must not independently begin scenes.
+
+The renderer data should track at least:
+
+- whether it owns PVR initialization;
+- whether a scene and polygon list are active;
+- the current screen or texture target;
+- output dimensions and current draw state;
+- vsync state; and
+- synchronization or upload state needed by pending textures.
+
+Each texture should track at least:
+
+- CPU staging and VRAM allocations;
+- SDL and PVR formats;
+- logical and backing dimensions;
+- CPU and VRAM pitch;
+- allocation and upload sizes;
+- UV scale;
+- nearest or linear filtering;
+- static, streaming, or target access;
+- dirty/upload state; and
+- twiddled, VQ, or strided layout flags.
+
+For the first correct implementation, evaluate submitting all SDL drawing
+through the transparent polygon list with autosorting disabled, including
+`SDL_BLENDMODE_NONE`. This is the simplest prospective way to retain SDL's
+strict painter order. Routing opaque and transparent commands through separate
+PVR lists is a later optimization because list processing order can conflict
+with SDL command order.
+
+## Phase 0: feasibility spike
+
+Implement the smallest native path necessary to demonstrate:
+
+- checked PVR initialization and teardown (renderer-owned);
+- one scene per presented frame (begin → lists → finish → sync);
+- clear (full-screen, unclipped);
+- solid rectangles (untextured fills);
+- one RGB565/ARGB1555 texture (static, POT backing, nearest filter);
+- nearest-neighbor textured copies; and
+- correct command ordering.
+
+**Validation test:** alternate opaque and alpha-blended overlapping rectangles,
+then draw a textured quad overlapping them. Confirm painter order matches SDL
+software renderer.
+
+**Build:** add `-DSDL_VIDEO_RENDER_DREAMCAST_PVR=ON` CMake option (disabled by default).
+
+Validate in Flycast and on real hardware. Measure TA/list capacity with a few
+thousand sprites.
+
+If correct ordering cannot be maintained or performance is unacceptable, stop
+the native implementation and focus on the GLdc-backed renderer.
+
+**Reference:** `src/render/dreamcast/PHASE0_SKETCH.md` retains its historical
+filename but now records the implemented Phase 0 contract and validation
+results.
+
+### Phase 0 validation status
+
+- The native renderer builds through the opt-in Dreamcast CMake configuration.
+- Flycast and physical Dreamcast hardware using 640x480 VGA both display the
+  stable validation scene: a blue rectangle with a red RGB565 textured
+  rectangle partially covering it.
+- The lifecycle test completes 32 renderer create/destroy iterations, including
+  rejected target-texture creation, fixed-vsync validation, presented frames,
+  and flushed-but-not-presented destruction. A renderer created after the
+  stress loop still renders the stable validation scene correctly.
+- Brief lines or blanking during the create/destroy stress loop are expected
+  because each iteration deliberately shuts PVR down and clears/reconfigures
+  video memory. They are not the visual correctness gate; the stable frame
+  displayed while the final renderer remains alive is the gate.
+- TA/list-capacity measurement with several thousand sprites remains pending.
+
+### Phase 2.1: viewport translation — done
+
+- Viewport offset is tracked in `DC_PVR_RenderData` (`view_x`, `view_y`,
+  `view_w`, `view_h`, `has_viewport`, plus `clip_rect` and `has_cliprect`
+  as captured state, clipping itself is later).
+- `RunCommandQueue` captures `SDL_RENDERCMD_SETVIEWPORT` and
+  `SDL_RENDERCMD_SETCLIPRECT` commands from the SDL command chain.
+- Geometry vertices are translated by the viewport offset at emit time in
+  `RunCommandQueue`. Queued vertex data is not mutated; each vertex is copied
+  into a local `DC_PVR_Vertex` before the offset is applied, preserving the
+  Phase 0 queue semantics.
+- `DC_PVR_EmitClear` fills the viewport rectangle when one is active,
+  otherwise the full output dimensions. Order is preserved: a clear appearing
+  after other draws still renders in submission order.
+- `QueueGeometry` is unchanged. `QueueSetViewport` and `QueueSetDrawColor`
+  remain no-ops; state is picked up from the command chain at execution time.
+- Pixel-exact clipping is not yet applied (tracked as captured state only).
+- Points, lines, untextured triangles, and blend-mode capability checks are
+  deferred.
+
+**Build:** SDL2 builds with `cd build-scripts && ./dreamcast.sh build` and
+installs to `kos/addons`. The viewport test builds with
+`cd test/dreamcast/test/pvr_viewport && make -f Makefile.dc`. No compiler
+warnings from the renderer source.
+
+**Hardware test:** passed on real DC (640x480 VGA). `pvr_viewport.bin` shows
+black outside the viewport, a green filled rectangle inside the 300x200 area
+at (50,30), a red filled rectangle at SDL-relative (60,50), and a green
+RGB565 textured quad at SDL-relative (200,100). Painter order and viewport
+offset are correct.
+
+**Remaining Phase 2 scope:** points as 1x1 quads and lines as
+quads/triangles. CPU-clipped arbitrary triangle geometry is implemented in the
+Phase 2.3 increment below.
+
+### Phase 2.2: vertex color and baseline blending — done
+
+- `QueueGeometry` copies every input `SDL_Color` into renderer-owned vertex
+  data as exact PVR packed ARGB (`0xAARRGGBB`). Both textured and untextured
+  geometry submit that command-owned color through `pvr_vertex_t.argb`, with
+  PVR Gouraud shading and vertex alpha explicitly enabled for RGB and alpha
+  interpolation.
+- Texture copies receive SDL texture color and alpha modulation through the
+  colors SDL places in their generated geometry. `SDL_RenderGeometry` follows
+  SDL's documented behavior and uses its per-vertex colors while ignoring
+  texture-level modulation. Textured headers explicitly select
+  `PVR_TXRENV_MODULATEALPHA`, whose KallistiOS definition multiplies sampled
+  and vertex ARGB; `PVR_TXRENV_MODULATE` is insufficient because it does not
+  multiply vertex alpha. The inverted KallistiOS texture-alpha disable flag is
+  explicitly kept false so texture alpha remains enabled.
+- Header-cache identity includes the texture pointer, SDL blend mode, and PVR
+  texture-environment mode. Texture environment is set explicitly rather than
+  inherited implicitly from the polygon-context constructor.
+- `SupportsBlendMode` accepts exactly `SDL_BLENDMODE_NONE` and
+  `SDL_BLENDMODE_BLEND`. In opt-in Dreamcast PVR builds, SDL's blend capability
+  check consults an installed backend callback even for predefined modes, so
+  unsupported standard modes fail at their public setter instead of reaching
+  `RunCommandQueue` and being approximated.
+- `NONE` maps to PVR source `ONE`, destination `ZERO`. `BLEND` maps to source
+  `SRCALPHA`, destination `INVSRCALPHA`. Both remain in the single
+  autosort-disabled transparent list with depth comparison `ALWAYS` and depth
+  writes disabled, preserving painter order.
+- `ADD`, `MOD`, `MUL`, and unsupported custom modes are rejected. `ADD` and
+  `MOD` remain deferred: SDL specifies separate color and alpha factors while
+  the current single-pass PVR context exposes one shared source/destination
+  pair, and no exact mapping has yet passed Flycast and physical-hardware
+  tests.
+- Queue callbacks remain CPU-only. Later renderer or texture state changes do
+  not alter colors or blend modes already captured by queued draw commands.
+  Only `RunCommandQueue` submits headers and vertices; `RenderPresent` remains
+  lifecycle-only. DMA, clipping, other polygon lists, and scene ownership are
+  unchanged.
+
+`test/dreamcast/test/pvr_vertex_color_blend` covers an RGB-interpolated
+triangle, alpha interpolation, textured per-vertex ARGB modulation, texture
+copy color/alpha modulation, alternating `NONE`/`BLEND` painter order, public
+rejection of unsupported draw and texture modes, and a duplicate of the visual
+cases inside the nonzero viewport `(320,0 320x480)`.
+
+**Build results:** The opt-in Dreamcast static library builds successfully.
+The lifecycle, viewport, and vertex-color/blend tests compile with
+`-Wall -Wextra -Werror` and link against that library. A separate opt-out
+Dreamcast configuration also builds successfully; it produces neither a
+native PVR renderer object nor the `DC_RenderDriver` archive symbol. The PVR
+test Makefiles name `$(SDL2_LIBDIR)/libSDL2.a` and `libSDL2main.a` explicitly:
+the KOS compiler wrapper prepends its installed addon-library directory ahead
+of user `-L` options, which otherwise makes an `SDL2_LIBDIR` override silently
+link the installed archive. A linker map confirms that the rebuilt test uses
+both renderer objects from the requested local archive.
+
+**Runtime results:** The previously validated Phase 0 lifecycle and viewport
+hardware results remain the baseline. An initial physical-hardware launch of
+the new test linked the older installed SDL archive because of the KOS library
+search ordering described above; its API precheck reported that `ADD` was
+accepted and exited before queuing a frame, so the blank display was expected
+and was not a renderer visual result.
+
+After rebuilding with the requested archive explicitly, the corrected test
+passes in Flycast and on physical Dreamcast hardware. Hardware matches the
+Flycast reference image: the full-output and `(320,0 320x480)` viewport panels
+are visually identical; RGB and alpha interpolate smoothly across their
+triangles; textured per-vertex ARGB and texture-copy color/alpha modulation are
+correct; and alternating `NONE`/`BLEND` overlaps retain painter order. Reaching
+the visual scene also confirms the API precheck accepted `NONE`/`BLEND` and
+rejected `ADD`, `MOD`, `MUL`, the custom subtract mode, and texture `ADD`.
+No Phase 2.2 cases remain pending Flycast or physical-hardware validation.
+
+### Phase 2.3: first CPU pixel-clipping increment — done
+
+- `RunCommandQueue` calculates geometry bounds from output bounds, the current
+  viewport, and (when enabled) the viewport-relative clip rectangle translated
+  into output coordinates. Disabled clipping still intersects geometry with
+  the effective viewport and output. Enabled empty clips, empty viewports, and
+  intersections outside the output reject the command's geometry without PVR
+  submission.
+- Every independent input triangle is clipped in CPU code against the four
+  half-open planes `x >= left`, `y >= top`, `x < right`, and `y < bottom`.
+  The implementation uses two seven-element stack buffers, has debug and
+  release bounds checks, and does not use heap scratch storage, an epsilon, or
+  PVR user clipping.
+- Intersection `t` is calculated in double precision and clamped only to
+  `[0,1]` for floating-point protection. Position and UV use the same `t`;
+  the clipped coordinate is then pinned to its integer-valued plane. A, R, G,
+  and B are unpacked, independently interpolated and rounded with
+  `floor(qC + 0.5)`, clamped to `[0,255]`, and repacked. Packed colors are never
+  interpolated as one integer.
+- The clipped convex polygon has at most seven vertices and is emitted as at
+  most five independent fan triangles. A deterministic topmost/leftmost fan
+  anchor is selected by cyclic rotation, which preserves signed input winding
+  while giving reversed input order the same diagonal partition. Each triangle
+  is three 32-byte `pvr_vertex_t` commands with EOL on the third command.
+- Each fan triangle is rejected when any position/UV or its double-precision
+  signed doubled area is non-finite, or when its area is exactly zero. There is
+  no area epsilon in this increment.
+- Clear was corrected from the earlier viewport-sized behavior to an ordered
+  full-target quad. It ignores viewport and clip state but remains at its exact
+  command-queue position.
+- The established invariants remain intact: queue callbacks are CPU-only,
+  queued vertices are immutable, viewport translation is applied to local
+  copies at emission, only `RunCommandQueue` submits commands, and the single
+  autosort-disabled transparent list and existing `NONE`/`BLEND` mappings are
+  unchanged.
+
+`test/dreamcast/test/pvr_clipping` is a three-page focused test for disabled,
+empty, changed, translated, partial, and outside clips; one-pixel dimensions;
+all four clip planes and the seven-vertex bound; UV/RGBA interpolation;
+opposite windings; outside and zero-area triangles; ordered blending; and
+clears before, between, and after clipped draws. Bright guard geometry exposes
+right/bottom leakage and contrasting gradients expose fan seams. The lifecycle,
+viewport, vertex-color/blend, and clipping tests all compile with
+`-Wall -Wextra -Werror` against explicit local archives. The clipping linker
+map resolves both `SDL_render.c.obj` and `SDL_render_dreamcast_pvr.c.obj` from
+the requested local `build-scripts/dcbuild/libSDL2.a`.
+
+**Automated validation (2026-07-27):** The opt-in static build succeeds. A
+separate opt-out build in `/tmp/sdl2-dc-optout` succeeds with the option OFF,
+no renderer object, and no `DC_RenderDriver` archive symbol. Flycast passes all
+four runtime tests. Its clipping frames show full-target ordered clears,
+included left/top boundaries, no visible right/bottom leakage, no gradient fan
+seams, matching opposite-winding output, and intact `NONE`/`BLEND` order.
+
+During Flycast validation, opposite windings initially produced different
+textured results because their cyclic polygon order selected different fan
+anchors and therefore different diagonal partitions. Selecting one
+deterministic geometric anchor fixed the discrepancy without reversing the
+polygon or changing its signed winding.
+
+**Physical-hardware validation (2026-07-27):** Passed on a real Dreamcast at
+640x480 VGA. All three clipping pages match the Flycast reference and the
+program returns zero. Page 1 retains the included left/top coverage and both
+one-pixel white strips; the magenta right/bottom leakage probe remains fully
+inside its dark guard; disabled, empty, changed, partial, and outside clips
+produce the expected blocks; and no orange remains after the final full-target
+clear. Page 2 shows all four edge-crossing triangles, the multi-edge and
+seven-vertex results, and smooth RGB/alpha gradients without visible cracks,
+fan seams, or double-blended shared edges. Page 3 shows matching checkerboard
+and modulation for both input windings, empty outside/zero-area guards, and the
+expected ordered `NONE`/`BLEND` overlaps. Thin and one-pixel cases agree with
+Flycast. No PVR-specific coordinate offset or clip epsilon was required.
+
+This completes the first pixel-exact clipping increment for the validated
+640x480 VGA path. The broader 320x240, PAL/NTSC, subpixel-position, and stress
+matrix remains Phase 7 hardening rather than a blocker for this increment.
+
+## Agent Flycast validation workflow
+
+Agents can execute Dreamcast ELF tests in Flycast, inspect their serial/log
+output, capture the rendered window, and evaluate the image directly. A user
+does not need to describe the frame if the agent has desktop capture access.
+This workflow supplements, but never replaces, the required physical-hardware
+test.
+
+### Build and launch an ELF
+
+Build the requested test first and resolve its exact path rather than relying
+on Flycast's working directory. For example:
+
+```sh
+cd test/dreamcast/test/pvr_vertex_color_blend
+make -f Makefile.dc
+flatpak run org.flycast.Flycast "$PWD/pvr_vertex_color_blend.elf"
+```
+
+From the repository root, the equivalent launch is:
+
+```sh
+flatpak run org.flycast.Flycast \
+  "$PWD/test/dreamcast/test/pvr_vertex_color_blend/pvr_vertex_color_blend.elf"
+```
+
+Keep Flycast attached to the launching terminal so its stdout/stderr remains
+available. A sandboxed agent must request desktop/GUI permission for the
+Flatpak launch and screenshot commands. Check the log for SDL errors, PVR/KOS
+warnings, crashes, and the test's own result line. For the vertex-color/blend
+test, this line confirms only its API/build assertions:
+
+```text
+PASS (API/build): visual result still requires real Dreamcast validation
+```
+
+The test holds its visual frame for 8,000 ms. Flycast may automatically reboot
+the ELF after it exits, so repeated KallistiOS banners and repeated PASS lines
+are expected. They are not multiple independent visual validations.
+
+### Capture and inspect the rendered frame
+
+Capture during the test's hold interval. On KDE, if Flycast is already active:
+
+```sh
+spectacle -b -n -a -o /tmp/flycast-test-window.png
+```
+
+An agent-driven GUI launch may leave Flycast minimized, on another virtual
+desktop, or behind the agent UI. The repository keeps a KWin helper for that
+case at `test/dreamcast/kwin-present-flycast.js`. Load it, run it, and then
+capture the full desktop while Flycast is kept above other windows:
+
+```sh
+qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
+  "$PWD/test/dreamcast/kwin-present-flycast.js" flycast-agent-capture
+qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.start
+spectacle -b -n -f -o /tmp/flycast-test-visible.png
+```
+
+The helper is a one-shot script. If it is already loaded from an earlier
+Flycast launch, unload and reload it before `start` so it sees the new window:
+
+```sh
+qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript \
+  flycast-agent-capture
+```
+
+The helper supports the KWin Plasma 5 `clientList` API used on the current
+development machine and the newer `windowList` API. It is needed only for
+window presentation; it does not affect emulation or renderer output. Close
+Flycast after capture to remove the temporary keep-above window state.
+
+Use an image-viewing tool to inspect the actual screenshot. Derive the visual
+expectations from the test source and its console message; do not infer visual
+success from a PASS line. For `pvr_vertex_color_blend`, verify:
+
+- the full-output left panel and nonzero-viewport right panel are visually
+  identical;
+- RGB vertex colors interpolate smoothly;
+- alpha gradients fade smoothly and equally in both panels;
+- the white textured triangle and purple modulated texture block match;
+- the bottom rectangles have the same colors, overlaps, and painter order; and
+- there are no missing primitives, seams, unexpected blank areas, or obvious
+  modulation artifacts.
+
+Screenshot pixels may not compare exactly when Flycast scales the 640x480
+framebuffer to a non-integer window size: resampling can place corresponding
+panel edges on different host pixels. Treat a desktop-screenshot pixel diff as
+diagnostic only unless Flycast is configured for an integer scale or a raw
+framebuffer capture is available. Record the screenshot path and the concrete
+visual observations.
+
+Stop a terminal-attached Flycast with Ctrl-C after capture. Exit status 130 is
+expected for that manual termination and is not a test failure. Preserve a
+reference image in the relevant test directory when it is part of a lasting
+validation record; `/tmp` is appropriate only for disposable inspection.
+
+## Phase 1: lifecycle and build integration
+
+- Add an explicit Dreamcast PVR CMake option (`SDL_VIDEO_RENDER_DREAMCAST_PVR`),
+  initially disabled by default.
+- Add the renderer source explicitly (`src/render/dreamcast/*.c`) instead of
+  broadening the video-source glob.
+- Correct every callback signature against the current SDL branch (add
+  `scale_x`/`scale_y` to `QueueCopyEx` and `QueueGeometry`).
+- Renderer owns PVR: checked `pvr_init()` with direct submission and DMA
+  disabled on create, then `pvr_shutdown()` on destroy only if initialization
+  succeeded. Do not call `pvr_dma_init()` or use PVR DMA before the texture
+  optimization phase.
+- Reject incompatible window or context combinations with useful SDL errors.
+- Check every PVR initialization result.
+- Implement `SetVSync`.
+- Advertise only tested capabilities (drop `SDL_RENDERER_TARGETTEXTURE` until
+  Phase 5).
+- Move from immediate PVR submission in queue callbacks to proper data queueing
+  for `RunCommandQueue`.
+
+Acceptance gate: the renderer can be created and destroyed repeatedly without
+double initialization, leaked VRAM, or breaking later software or GL renderer
+creation.
+
+## Phase 2: command queue and untextured primitives
+
+Implement:
+
+- viewport translation (implemented in Phase 2.0 increment);
+- exact clip rectangles (CPU triangle clipping implemented and validated at
+  640x480 VGA);
+- ordered clear operations (corrected to full-target SDL semantics);
+- fill rectangles;
+- points expanded to 1-by-1 quads;
+- lines expanded to quads or triangles;
+- arbitrary untextured triangle geometry;
+- vertex colors and alpha; and
+- blend-mode capability checks.
+
+PVR user clipping is tile-granular and is not sufficient by itself for SDL's
+pixel-exact clip rectangles. The correctness path uses full CPU polygon
+clipping. A tile-assisted hybrid remains a later measured optimization, and
+GLdc's scissor polygon clipping remains a useful reference.
+
+Treat clear as an ordered draw when it appears after another command.
+`pvr_set_bg_color` may optimize only a leading, unclipped, full-target clear.
+
+Acceptance gate: geometry, viewport, point/line edge cases, multiple clears,
+and overlapping draw-order tests render correctly.
+
+**Clipping research status (2026-07-27):** Research and the first CPU
+Sutherland–Hodgman implementation increment are complete. The hybrid
+tile-plus-boundary strategy is deferred as a Phase 6 optimization. See
+`src/render/dreamcast/PVR_CLIPPING_RESEARCH.md` for the design, bounds, and
+Flycast/physical-hardware validation results. The focused 640x480 VGA
+pixel-exact gate passes; other modes and the wider subpixel/stress matrix remain
+Phase 7 hardening.
+
+**Points/lines research status (2026-07-28, source-corrected):** Point and line
+semantics research complete. Full document at
+`src/render/dreamcast/PVR_POINTS_LINES_RESEARCH.md`. SDL behavior confirmed
+through source review: points queue as `SDL_FPoint` arrays; lines use the
+`SDL_RENDERLINEMETHOD_POINTS` default (set by `SDL_GetRenderLineMethod`, not
+overridden by installing backend callbacks), which rasterizes axis-aligned
+segments to rects and diagonals through Bresenham with shared-endpoint
+ownership (`draw_last`). Zero-length behavior is conditional: an independent
+zero-length line owns its final endpoint and queues a 1x1 rect at unit scale;
+an interior repeated segment is skipped; a final repeated point in a nonclosed
+strip may queue its endpoint once; and a zero-length closing segment in a
+closed strip has `draw_last == false` and remains an empty rect. SDL's
+`QueueCmdFillRects` falls back to geometry
+expansion (4 vertices, 6 indices per rect) when `QueueFillRects` is NULL,
+but implementing `QueueFillRects` directly is more efficient. Implementation
+recommendation: add `QueueDrawPoints` and `QueueFillRects` callbacks, expand
+each point to a 1×1 quad and each rect to a filled quad in `RunCommandQueue`
+as two independent triangles per quad (6 `pvr_vertex_t` commands, 192 bytes),
+reuse the existing clipped-triangle path, apply viewport translation only in
+emission, preserve floating-point rect extents, and never enlarge empty rects.
+SDL owns endpoint inclusion before backend queueing; no endpoint logic is
+needed in the backend. The focused test separately covers independent,
+interior-repeat, final-repeat, and closed-strip zero-length cases in `NONE` and
+`BLEND` against the SDL software renderer. TA/OPB capacity for point/line
+stress remains unmeasured. The implementation and validation status is
+recorded below.
+
+### Phase 2.4: points and default POINTS-method lines — done
+
+- Registered `QueueDrawPoints` and `QueueFillRects`; `QueueDrawLines` remains
+  unset. Both callbacks are CPU-only, allocate renderer-owned command data,
+  capture packed draw color, preserve floating-point inputs, and perform no
+  viewport translation, clipping, or PVR submission.
+- Added `SDL_RENDERCMD_DRAW_POINTS` and `SDL_RENDERCMD_FILL_RECTS` handling in
+  `RunCommandQueue`. It translates by the active viewport exactly once, expands
+  each point or positive rect to a half-open quad, and routes `(v0,v1,v2)` and
+  `(v0,v2,v3)` through the existing clipped-triangle path. Non-finite and empty
+  rects remain empty. Headers are emitted lazily for drawable commands.
+- Each unclipped point or rect submits two triangles, six 32-byte
+  `pvr_vertex_t` commands, and 192 bytes of vertex-command traffic. Clipping,
+  blend support, clear semantics, painter order, list routing, and header-cache
+  identity are unchanged.
+- `test/dreamcast/test/pvr_points_lines` provides three pages for points;
+  default public-API lines and exact zero-length endpoint ownership; and
+  viewport/clipping/ordered-clear behavior. It includes independent,
+  interior-repeat, final-repeat, and closed-strip cases with BLEND probes.
+- The opt-in SDL build and all five renderer tests pass strict-warning builds
+  against the explicit local archive. The new map resolves `SDL_render.c.obj`
+  and `SDL_render_dreamcast_pvr.c.obj` from that archive. The separate opt-out
+  archive has neither the renderer object nor `DC_RenderDriver`.
+- Lifecycle, viewport, vertex-color/blend, clipping, and points/lines tests pass
+  in Flycast. Direct inspection of all three new pages confirms one-pixel
+  points including `(0,0)` and `(639,479)`, continuous shallow/steep/diagonal
+  lines, matching reversed lines, no bright shared or closed endpoints, correct
+  viewport/clip/order behavior, no right/bottom guard leakage, and no visible
+  quad diagonal cracks.
+- **Physical-hardware validation (2026-07-27):** Passed on a real Dreamcast at
+  640x480 VGA. All three photographed pages match the Flycast reference and
+  the program returns zero. Page 1 shows the framebuffer-corner points,
+  isolated and adjacent points, the four included clip-edge points, excluded
+  right/bottom probes, the one-pixel clip, the expected `NONE`/`BLEND`
+  duplicate intensities, and the post-clear markers. Page 2 shows continuous
+  horizontal, vertical, 45-degree, shallow, steep, and reversed lines; the
+  independent zero-length markers; connected and repeated-point patterns; and
+  a closed strip without brighter shared endpoints or corners. Page 3 shows
+  correct nonzero-viewport translation, continuous multi-boundary clipped
+  lines, visible one-pixel clip results, exact cyan and magenta guards with no
+  right/bottom leakage, ordered clip changes, and no residual pre-clear orange.
+  No cracks are visible along either triangle diagonal. This completes the
+  focused points/default-lines increment for the validated 640x480 VGA path.
+  Wider video-mode and TA/OPB stress coverage remains Phase 7 hardening.
+
+## Phase 3: baseline texture support
+
+Initially advertise only native formats that are genuinely supported:
+
+- `SDL_PIXELFORMAT_RGB565`;
+- `SDL_PIXELFORMAT_ARGB1555`; and
+- `SDL_PIXELFORMAT_ARGB4444`.
+
+Allow SDL to create conversion/native textures for other normal input formats.
+Do not advertise RGB888, BGR888, or YUY2 until real implementations exist.
+
+Begin with non-twiddled 16-bit storage and implement:
+
+- power-of-two backing dimensions where necessary;
+- logical-to-backing UV scaling;
+- nearest and bilinear filtering stored per texture;
+- color and alpha modulation;
+- correct source-pitch and partial-rectangle updates;
+- CPU staging allocations for streaming textures; and
+- upload during `UpdateTexture` or `UnlockTexture`.
+
+Use synchronous `pvr_txr_load` first. Add DMA only after correctness, including
+its alignment, cache-flush, and transfer-size requirements.
+
+Acceptance gate: static and streaming textures, subrectangle updates, NPOT
+logical sizes, filtering, modulation, rotation, and flips all work.
+
+### Phase 3.1: baseline native textures — focused increment done
+
+- The renderer is split into lifecycle/dispatch, geometry, and texture
+  subsystems. The opt-in build contains all three native PVR objects; the
+  opt-out build contains none and exports no `DC_RenderDriver`.
+- The backend advertises exactly RGB565, ARGB1555, and ARGB4444. Static and
+  streaming textures use zero-initialized full-POT CPU staging with matching
+  nontwiddled 16-bit VRAM allocations. Target textures remain rejected.
+- Full and partial updates honor caller pitch and backing pitch, while full and
+  partial streaming locks return a pointer into staging with the full backing
+  pitch. Updates and unlocks synchronously upload the complete backing through
+  `pvr_txr_load`; DMA and partial VRAM uploads remain deferred.
+- Nearest and bilinear filtering are supported and included in polygon-header
+  cache identity. RGB565 disables sampled texture alpha while retaining vertex
+  alpha; ARGB1555 and ARGB4444 retain sampled alpha. Existing modulation,
+  `NONE`/`BLEND`, clipping, and painter-order behavior is preserved.
+- `test/dreamcast/test/pvr_textures` covers the three formats, static and
+  streaming paths, partial updates and locks, padded/invalid source pitch,
+  NPOT logical dimensions, filtering, modulation, RGB565 alpha behavior,
+  target/filter rejection, and painter order. It builds with
+  `-Wall -Wextra -Werror` against the explicit local archive and passes in
+  Flycast.
+
+**Physical-hardware validation (2026-07-27):** Passed on a real Dreamcast at
+640x480 VGA. The ELF was uploaded over the Broadband Adapter with
+`kos-tool -t 192.168.0.128 -x pvr_textures.elf -m .`. A temporary build with
+`PVR_TEXTURE_HARDWARE_SCREENSHOT` called
+`vid_screen_shot("/pc/pvr_textures-hardware.ppm")`; KOS successfully wrote the
+raw 640x480 framebuffer to
+`test/dreamcast/test/pvr_textures/pvr_textures-hardware.ppm` with SHA-256
+`96ac33fc4320a1f4e17556615f026848bc34fd589c9b587bb64126e5d1ed2c94`.
+The test reached its PASS line, returned zero, and reported no SDL, PVR, KOS,
+dc-load, or transfer errors. Direct inspection confirms the RGB565 NPOT border
+and partial update without POT-padding leakage; the streaming checker and
+partial yellow lock update; ARGB1555 transparent cutouts; the ARGB4444 alpha
+gradient; sharp nearest and smooth bilinear filtering; color/alpha modulation;
+opaque RGB565 red texels; and blue/translucent-texture/green painter order.
+The hardware framebuffer closely matches the Flycast reference. The ordinary
+non-capturing ELF was rebuilt afterward without
+`PVR_TEXTURE_HARDWARE_SCREENSHOT`.
+
+Remaining Phase 3 validation includes focused rotation/flip and source-rect
+coverage, a broader texture-dimension and edge-update matrix, repeated
+create/destroy/update/lock stress, and VRAM-exhaustion rollback. Other video
+modes and performance/capacity measurements remain Phase 7 hardening.
+
+### Phase 3.1 code review (2026-07-28, independent audit)
+
+An independent, non-modifying code review of the Phase 3.1 implementation
+followed AGENTS.md, PVR_TEXTURE_RESEARCH.md, and the test README as
+authoritative references. Eleven review priorities were evaluated: source
+split/linkage, SDL core changes, texture creation/ownership, pixel
+formats/PVR state, UpdateTexture, Lock/UnlockTexture, filtering/header cache,
+command architecture, build policy, test quality, and repository hygiene.
+
+**Verdict:** The Phase 3.1 implementation is architecturally sound and
+behaviorally correct for its documented scope. One HIGH defect requires a fix
+before merge; two MEDIUM items are tracked for later phases.
+
+**HIGH — `IsSupportedBlendMode` contract change in `src/render/SDL_render.c`**
+
+**Status: FIXED (2026-07-28).** See "Resolution" below.
+
+The SDL_render.c change routes ALL blend mode checks to the backend callback
+(`renderer->SupportsBlendMode`) whenever it is installed, inside an
+`#if SDL_VIDEO_RENDER_DREAMCAST_PVR` guard. The guard restricts execution to
+opt-in DC PVR builds. The guard does **not** restrict dispatch to the PVR
+renderer: on this SDL branch, GLES, GLES2, GL, D3D9, D3D11, D3D12, Metal, and
+VITA_GXM all install `SupportsBlendMode`. Those backends happen to return
+`SDL_TRUE` for the standard blend modes, so no regression exists today. But the
+change demotes SDL's documented "required blend modes" guarantee (NONE/BLEND/
+ADD/MOD/MUL) to a soft convention: a future backend that installs
+`SupportsBlendMode` but does not handle NONE/BLEND correctly will silently
+reject "required" modes.
+
+**Why the initially documented replacement was insufficient:** The proposed
+fix kept `#if SDL_VIDEO_RENDER_DREAMCAST_PVR` around the required-mode arm,
+which restricts the build, not the dispatch target. Every renderer with a
+callback still routed through its callback for NONE/BLEND/ADD/MOD/MUL in a DC
+PVR build. The contract-demotion problem persisted for the required modes; only the custom-mode arm was actually fixed.
+
+**Resolution:** Only consult the PVR callback when the renderer's identity
+matches the native PVR renderer. A centralized constant (`DC_PVR_RENDERER_NAME`
+in `src/render/dreamcast/SDL_render_dreamcast_pvr.h`) is the single source of
+truth for the advertised name. The fix compares `renderer->info.name` against
+that constant and routes the required-mode check through the callback only
+when they match. Non-PVR renderers keep the SDL guarantee for required modes.
+Custom modes continue to consult any installed callback regardless of renderer.
+
+```c
+static SDL_bool IsSupportedBlendMode(SDL_Renderer *renderer, SDL_BlendMode blendMode)
+{
+    switch (blendMode) {
+    case SDL_BLENDMODE_NONE:
+    case SDL_BLENDMODE_BLEND:
+    case SDL_BLENDMODE_ADD:
+    case SDL_BLENDMODE_MOD:
+    case SDL_BLENDMODE_MUL:
+#if SDL_VIDEO_RENDER_DREAMCAST_PVR
+        if (renderer->info.name &&
+            SDL_strcmp(renderer->info.name, DC_PVR_RENDERER_NAME) == 0 &&
+            renderer->SupportsBlendMode) {
+            return renderer->SupportsBlendMode(renderer, blendMode);
+        }
+#endif
+        return SDL_TRUE;
+
+    default:
+        return renderer->SupportsBlendMode && renderer->SupportsBlendMode(renderer, blendMode);
+    }
+}
+```
+
+**Files changed:**
+- `src/render/SDL_render.c` — `IsSupportedBlendMode` (required-mode arm now
+  identity-gated); `SDL_SetTextureScaleMode` guard now uses `DC_PVR_RENDERER_NAME`
+  instead of the raw literal.
+- `src/render/dreamcast/SDL_render_dreamcast_pvr.h` — added `DC_PVR_RENDERER_NAME`
+  constant and a comment documenting the name-dependency contract.
+- `src/render/dreamcast/SDL_render_dreamcast_pvr_texture.c` — removed unreachable
+  `!data` branch from `DC_PVR_SetTextureScaleMode`.
+
+**Validation:**
+- Opt-in Dreamcast SDL build: clean (no warnings from changed files).
+- Opt-out Dreamcast SDL build: clean (no `DC_RenderDriver` or `DC_PVR_*` symbols).
+- `pvr_vertex_color_blend` Flycast: PASS (NONE/BLEND accepted; ADD/MOD/MUL/custom rejected).
+- `pvr_textures` Flycast: PASS.
+- `pvr_viewport`, `pvr_clipping`, `pvr_points_lines` build: clean.
+- Physical hardware revalidation: unnecessary. The correction only changes the
+  blend-mode API precheck path; PVR header generation and drawing behavior
+  are unchanged.
+
+**MEDIUM — `DC_PVR_UpdateTexture` uploads full POT backing on every partial update**
+
+The implementation copies the requested rectangle into staging, then calls
+`pvr_txr_load(data->pixels, data->vram, data->allocation_size)` — the full
+allocation — regardless of which rectangle was updated. A 1×1 partial update
+still transfers `backing_w × backing_h × 2` bytes. This is documented as
+Phase 0/3.1 intentional behavior. No fix required now; tracked for Phase 3.2
+partial uploads.
+
+**MEDIUM — OpenGL diff should be separated**
+
+`src/render/opengl/SDL_render_gl.c`, `SDL_dreamcastopengl.c`, `SDL_dreamcastvideo.c`,
+and `test/testutils.c` changes are unrelated to Phase 3.1. Split them into a
+distinct commit (or revert) before PVR merge.
+
+**LOW — `DC_PVR_SetTextureScaleMode` error path is silent**
+
+`SDL_SetError` is called when `data` is NULL but the function is `void` and the
+caller reports success. The `!data` branch is unreachable (driverdata is set in
+`CreateTexture` and NULLed in `DestroyTexture`, which no-ops the scale mode
+callback). Drop the branch or convert the function to `int`.
+
+**LOW — `SDL_SetTextureScaleMode` guard uses string compare on `renderer->info.name`**
+
+The guard compares against the advertised renderer name "Dreamcast PVR". If
+the name string changes, the guard silently stops working. Add a comment noting
+the name dependency.
+
+**Test gaps (tracked, not blocking)**
+
+- No stress test of repeated create/destroy/update/lock cycles (Phase 7 hardening)
+- No VRAM exhaustion test (Phase 7 hardening)
+- No 320×240 or PAL/NTSC mode coverage (Phase 7 hardening)
+- No TA/OPB capacity measurement (Phase 6/7)
+- No bilinear-vs-nearest visual difference validation on hardware
+
+**Repository hygiene**
+
+- Rebuilt `.bin` / `.elf` / `.log` / `.img` files in `test/dreamcast/test/` are
+  build artifacts and should be gitignored or excluded from the PVR patch.
+- `AGENTS.md` grows by ~850 lines; consider moving detailed phase histories to
+  separate files under `src/render/dreamcast/`.
+
+**Unresolved questions**
+
+- `pvr_txr_load` alignment: KOS header says `count` must be a multiple of 32.
+  The implementation passes `backing_w × backing_h × 2`, which is always ≥ 128
+  and a multiple of 32 for POT dimensions ≥ 8. No action required.
+- `pvr_txr_load` cache flush: KOS synchronous load path does not require
+  explicit flushing. Verified by Flycast + hardware passes.
+- UV scaling for partial `RenderCopy`: SDL computes UVs normalized to
+  `texture->w`/`h` (logical). Backend rescales to `logical/backing`. For a
+  partial source rect `srcrect={5,3,4,3}` on a 17×9 logical texture backed
+  32×16: UVs become `{5/32, 3/16, 9/32, 6/16}` — correct sampling of the
+  logical partial within the POT backing.
+
+## Phase 4: geometry and blending completeness
+
+- Handle unindexed geometry and 8-, 16-, and 32-bit indices.
+- Convert triangle lists to valid PVR strips, ending each independent primitive
+  with `PVR_CMD_VERTEX_EOL`.
+- Interpolate position, UV, and vertex color when clipping polygons.
+- Map only blend modes representable by PVR source and destination factors.
+- Validate `NONE`, `BLEND`, `ADD`, and `MOD` independently.
+- Reject unsupported equations or separate-alpha combinations through
+  `SupportsBlendMode`; do not silently approximate them.
+
+Acceptance gate: `testgeometry`, `testscale`, `testrendercopyex`, and sprite
+stress tests closely match the OpenGL renderer.
+
+## Phase 5: render-to-texture
+
+Do not advertise `SDL_RENDERER_TARGETTEXTURE` before this phase passes.
+
+Use `pvr_scene_begin_rtt`, not deprecated `pvr_scene_begin_txr`. The current KOS
+implementation expects 16-bit targets, nonzero dimensions, a backing stride at
+least as wide as the render area, and a stride divisible by four pixels.
+
+A target switch must:
+
+1. flush and finish the active scene;
+2. begin a new screen or RTT scene;
+3. update target dimensions, viewport, and clipping state;
+4. handle target texture orientation consistently; and
+5. synchronize before sampling a texture that was just rendered.
+
+Use GLdc's framebuffer implementation as the local reference for RTT scene
+transitions, backing dimensions, and orientation.
+
+Acceptance gate: screen/target switching, sampling a completed target,
+non-screen-sized targets, target viewport/scissor, and repeated target
+recreation work in Flycast and on hardware.
+
+## Phase 6: Dreamcast-specific optimization
+
+After baseline SDL behavior is stable, add and benchmark:
+
+- direct `.dt` loading;
+- twiddled textures;
+- VQ-compressed textures;
+- mipmapped `.dt` assets where SDL semantics permit;
+- strided NPOT textures;
+- DMA uploads;
+- opaque and punch-through list routing; and
+- state-header and draw-call batching.
+
+Strided textures require special care because KOS exposes one global stride
+width for all strided textures used in a frame. Textures with different stride
+widths cannot be batched naively. Power-of-two padding should remain the safe
+default.
+
+## Phase 7: hardening and default enablement
+
+- Test VRAM exhaustion and allocation rollback.
+- Verify renderer creation failure leaves the video subsystem usable.
+- Stress repeated texture creation, destruction, locking, and updating.
+- Test 320x240 and 640x480 modes and PAL, NTSC, and VGA where available.
+- Record frame time, upload time, VRAM use, polygon count, and list overflow.
+- Compare the native renderer with GLdc using many small sprites, a full-screen
+  streaming texture, an alpha-heavy UI, geometry-heavy scenes, and RTT.
+- Enable the backend by default only after it is at least as reliable as the
+  software renderer and reports unsupported capabilities accurately.
+
+## Source file organization
+
+### Current layout (through Phase 2)
+
+The existing two-file implementation remains acceptable through the completed
+Phase 2 work:
+
+```
+src/render/dreamcast/
+├── SDL_render_dreamcast_pvr.c
+├── SDL_render_dreamcast_pvr_data.h
+```
+
+The main renderer file is approximately 38 KB and is not unreasonably large
+compared with other SDL hardware backends such as PSP. File size alone is not
+a reason to refactor.
+
+### Recommended future layout
+
+Phase 3 texture support introduces a distinct subsystem involving texture
+format mapping, CPU staging allocations, VRAM allocation and ownership, logical
+and backing dimensions, pitch calculations, partial updates, lock and unlock
+behavior, dirty/upload state, UV scaling, texture filtering, synchronous
+uploads, future DMA uploads, and future render-target texture state. The
+recommended future organization is:
+
+```
+src/render/dreamcast/
+├── SDL_render_dreamcast_pvr.c
+├── SDL_render_dreamcast_pvr.h
+├── SDL_render_dreamcast_pvr_geometry.c
+├── SDL_render_dreamcast_pvr_texture.c
+└── SDL_render_dreamcast_pvr_data.h
+```
+
+This layout is a direction, not an immediate mandatory rename. The exact
+private-header arrangement should be chosen when the refactor occurs.
+
+#### Intended responsibilities
+
+`SDL_render_dreamcast_pvr.c` should retain:
+
+- renderer creation and destruction;
+- callback registration;
+- high-level `RunCommandQueue` dispatch;
+- scene and polygon-list lifecycle;
+- `RenderPresent`;
+- blend capability reporting;
+- renderer-level PVR ownership;
+- transitions between major renderer states.
+
+`SDL_render_dreamcast_pvr_geometry.c` should eventually contain:
+
+- effective geometry bounds;
+- Sutherland–Hodgman clipping;
+- intersection and ARGB interpolation;
+- deterministic fan-anchor selection;
+- clipped polygon and triangle emission;
+- quad expansion;
+- point and rectangle emission helpers;
+- other geometry-specific helpers.
+
+`SDL_render_dreamcast_pvr_texture.c` should contain:
+
+- texture format translation;
+- texture creation and destruction;
+- logical and backing-size calculation;
+- CPU staging and VRAM allocation;
+- texture update;
+- texture lock and unlock;
+- synchronous upload;
+- pitch and subrectangle handling;
+- filtering state;
+- dirty state;
+- UV scaling;
+- future upload optimizations.
+
+A shared private header should eventually contain:
+
+- internal renderer structures;
+- texture structures;
+- queued vertex or rectangle structures;
+- geometry-bound structures;
+- internal constants;
+- declarations shared across implementation files.
+
+`SDL_render_dreamcast_pvr_data.h` may eventually be replaced or complemented
+by `SDL_render_dreamcast_pvr.h` when shared helper declarations are required.
+Do not rename it preemptively.
+
+#### Refactor timing
+
+The source split should occur when one or more of these conditions becomes true:
+
+- Phase 3 adds enough texture logic that lifecycle and geometry code become
+difficult to navigate;
+- the main C file approaches roughly 50–60 KB;
+- static helper ordering becomes awkward;
+- agents or maintainers repeatedly confuse texture, geometry, and lifecycle
+  responsibilities;
+- unrelated texture and geometry edits regularly conflict;
+- render-to-texture work requires a clearer texture subsystem boundary.
+
+Prefer splitting before or during Phase 3 implementation, but only after the
+Phase 3 design is settled.
+
+The refactor must be behavior-preserving and should not be mixed with
+unvalidated functional changes where avoidable.
+
+Do not imitate the software renderer's many-file rasterizer layout. The native
+PVR backend should be separated by major subsystem, not into one file per
+primitive.
+
+## Viable v1 definition
+
+A useful first release does not require RTT, YUV, VQ, or every custom blend
+mode. It should provide:
+
+- correct renderer and PVR lifecycle management (renderer-owns-PVR model);
+- clear, points, lines, rectangles, copies, copy-ex, and geometry;
+- viewport and pixel-exact clipping;
+- RGB565, ARGB1555, and ARGB4444 textures;
+- static and streaming texture access;
+- nearest and linear filtering;
+- standard color and alpha modulation;
+- correct `NONE`, `BLEND`, `ADD`, and `MOD` where hardware mappings validate;
+- stable Flycast and real-hardware behavior; and
+- no PVR ownership conflicts (single renderer, renderer-owns-PVR).
+
+Keep ordering and scene ownership as the earliest technical gates. Defer PVR
+format and batching optimizations until SDL rendering semantics are correct.

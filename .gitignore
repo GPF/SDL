@@ -191,4 +191,10 @@ debian/.debhelper/
 debian/files
 debian/libsdl*/
 debian/tmp/
+
+# Generated native Dreamcast PVR test outputs
+/test/dreamcast/test/pvr_*/*.elf
+/test/dreamcast/test/pvr_*/*.bin
+/test/dreamcast/test/pvr_*/*.log
+/test/dreamcast/test/pvr_*/*.img
 .gitignore

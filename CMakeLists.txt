@@ -482,6 +482,7 @@ set_option(SDL_XINPUT              "Use Xinput for Windows" ${WINDOWS})
 set_option(SDL_WASAPI              "Use the Windows WASAPI audio driver" ${WINDOWS})
 set_option(SDL_RENDER_D3D          "Enable the Direct3D render driver" ${WINDOWS})
 set_option(SDL_RENDER_METAL        "Enable the Metal render driver" ${APPLE})
+dep_option(SDL_VIDEO_RENDER_DREAMCAST_PVR "Enable the native Dreamcast PVR render driver" OFF "PLATFORM_DREAMCAST" OFF)
 set_option(SDL_VIVANTE             "Use Vivante EGL video driver" ${UNIX_SYS})
 dep_option(SDL_VULKAN              "Enable Vulkan support" ON "ANDROID OR APPLE OR LINUX OR WINDOWS" OFF)
 set_option(SDL_METAL               "Enable Metal support" ${APPLE})
@@ -548,6 +549,13 @@ file(GLOB SOURCE_FILES
   ${SDL2_SOURCE_DIR}/src/timer/*.c
   ${SDL2_SOURCE_DIR}/src/video/*.c
   ${SDL2_SOURCE_DIR}/src/video/yuv2rgb/*.c)
+
+# The native PVR renderer is opt-in and is added explicitly in the Dreamcast
+# platform block below.
+list(REMOVE_ITEM SOURCE_FILES
+  ${SDL2_SOURCE_DIR}/src/render/dreamcast/SDL_render_dreamcast_pvr.c
+  ${SDL2_SOURCE_DIR}/src/render/dreamcast/SDL_render_dreamcast_pvr_geometry.c
+  ${SDL2_SOURCE_DIR}/src/render/dreamcast/SDL_render_dreamcast_pvr_texture.c)
 
 if(USE_INTELCC)
   # warning #39: division by zero
@@ -2762,9 +2770,15 @@ endif()
 
   if(SDL_VIDEO)
     set(SDL_VIDEO_DRIVER_DREAMCAST 1)
-    #set(SDL_VIDEO_RENDER_DREAMCAST_PVR 1)
-    file(GLOB DREAMCAST_VIDEO_SOURCES ${SDL2_SOURCE_DIR}/src/video/dreamcast/*.c) # ${SDL2_SOURCE_DIR}/src/render/dreamcast/*.c)
+    file(GLOB DREAMCAST_VIDEO_SOURCES ${SDL2_SOURCE_DIR}/src/video/dreamcast/*.c)
     list(APPEND SOURCE_FILES ${DREAMCAST_VIDEO_SOURCES})
+    if(SDL_VIDEO_RENDER_DREAMCAST_PVR)
+      list(APPEND SOURCE_FILES
+        ${SDL2_SOURCE_DIR}/src/render/dreamcast/SDL_render_dreamcast_pvr.c
+        ${SDL2_SOURCE_DIR}/src/render/dreamcast/SDL_render_dreamcast_pvr_geometry.c
+        ${SDL2_SOURCE_DIR}/src/render/dreamcast/SDL_render_dreamcast_pvr_texture.c)
+      set(HAVE_SDL_VIDEO_RENDER_DREAMCAST_PVR TRUE)
+    endif()
     set(HAVE_SDL_VIDEO TRUE)
 
     if(SDL_OPENGL)

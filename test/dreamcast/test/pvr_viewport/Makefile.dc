@@ -1,0 +1,41 @@
+TARGET = pvr_viewport
+OBJS = pvr_viewport.o
+
+SDL2_PREFIX ?= $(KOS_BASE)/addons
+SDL2_INCLUDEDIR ?= $(SDL2_PREFIX)/include/SDL2
+SDL2_LIBDIR ?= $(SDL2_PREFIX)/lib/dreamcast
+
+KOS_CFLAGS += -I$(SDL2_INCLUDEDIR) -DDREAMCAST -D__DREAMCAST__
+
+all: check-sdl2 $(TARGET).bin
+
+include $(KOS_BASE)/Makefile.rules
+
+.PHONY: check-sdl2
+check-sdl2:
+	@test -f $(SDL2_INCLUDEDIR)/SDL.h || \
+		(echo "SDL2 headers are not installed in $(SDL2_INCLUDEDIR)"; exit 1)
+	@test -f $(SDL2_LIBDIR)/libSDL2.a || \
+		(echo "SDL2 is not installed in $(SDL2_LIBDIR)"; exit 1)
+	@sh-elf-nm $(SDL2_LIBDIR)/libSDL2.a | grep -q '[[:space:]]_DC_RenderDriver$$' || \
+		(echo "Installed SDL2 does not include the native Dreamcast PVR renderer."; \
+		 echo "Run: cd ../../../../build-scripts && ./dreamcast.sh --enable-pvr-renderer install"; \
+		 exit 1)
+
+clean:
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin
+
+pvr_viewport.o: pvr_viewport.c
+	kos-cc -I$(SDL2_INCLUDEDIR) -DDREAMCAST -D__DREAMCAST__ \
+		-Wall -Wextra -Werror -c $< -o $@
+
+$(TARGET).elf: $(OBJS)
+	kos-cc -o $(TARGET).elf $(OBJS) \
+		$(SDL2_LIBDIR)/libSDL2.a $(SDL2_LIBDIR)/libSDL2main.a \
+		-lGL -lm -lkosutils -lpthread
+
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin
+
+run: $(TARGET).bin
+	$(KOS_LOADER) $(TARGET).bin
