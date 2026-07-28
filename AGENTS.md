@@ -734,6 +734,54 @@ focused strict-warning renderer/test builds, and Flycast API/runtime test were
 repeated; no physical-hardware rerun was needed, and the three existing
 hardware PPMs and SHA-256 values remain unchanged.
 
+### Phase 3.3: texture lifecycle stress and VRAM recovery — done
+
+- Source and SDL-core revalidation confirmed the researched ownership model.
+  Driver data, CPU staging, and VRAM each have one cleanup path; failed create
+  leaves `texture->driverdata` unset; locked destruction clears state; active-
+  scene destruction defers cleanup until synchronization; the header cache is
+  invalidated before free; SDL destroys renderer-associated textures before
+  the backend renderer; and failed PVR initialization does not perform invalid
+  frees. No lifecycle or rollback defect was found, so normal ownership code
+  was not redesigned.
+- A test-only `DC_PVR_TEXTURE_FAILURE_INJECTION` guard adds private stage and
+  countdown selection through `SDL_DC_PVR_TEST_ALLOC_STAGE` and
+  `SDL_DC_PVR_TEST_ALLOC_COUNTDOWN`. It can fail the Nth driver-data, CPU-
+  staging, or VRAM allocation immediately before that native allocation.
+  Every injected `SDL_CreateTexture` failure identifies its stage and is
+  followed by successful normal create/update/draw/destroy use. Ordinary
+  builds compile out the state, branches, hints, and injected-error strings.
+- `test/dreamcast/test/pvr_texture_stress` runs 50 static cycles, 20 streaming
+  cycles, 12 simultaneous mixed-lifetime textures, four locked destroys,
+  a texture draw followed by SDL's pre-destruction queue flush and synchronized
+  cleanup, renderer teardown with five associated live textures, two renderer
+  recreations, deterministic failures at all three allocation stages, and
+  VRAM exhaustion/recovery. Final balanced accounting is 180 successful
+  creates/destroys, 5 expected failures, 192 updates, 115 draws, 84 locks, 80
+  unlocks, 4 locked destroys, and 20 unlock-without-lock no-ops.
+- Exhaustion uses uniform 256x256 RGB565 textures with 131,072 VRAM bytes per
+  allocation and a safety cap of 64. Flycast and physical hardware both
+  reached 45 initial allocations (5,898,240 represented bytes), freed 23,
+  recovered 23, and then reported the expected VRAM allocation failure again.
+  Three separately retained textures remained drawable, and normal texture
+  creation plus renderer recreation succeeded afterward. Exact allocator-byte
+  restoration was not measured because the standard KOS build lacks
+  `PVR_KM_DBG`; successful uniform reallocation is the recovery evidence.
+- Fresh unified, injection-enabled, and PVR-disabled builds pass. The changed
+  renderer unit and focused test pass `-Wall -Wextra -Werror`, all existing
+  native-PVR tests rebuild against the explicit ordinary local archive, and
+  the opt-out archive contains no native-PVR objects or symbols. The ordinary
+  archive and ELF contain no active injection or capture support.
+- Flycast and real 640x480 VGA hardware reach PASS with identical counts. KOS
+  prints its generic out-of-PVR-memory/heap-probably-corrupted diagnostic at
+  the two intentional exhaustion points; no other lifecycle warning appears.
+  Hardware returned zero to `dc-load-ip`. The final 640x480 framebuffer is
+  `test/dreamcast/test/pvr_texture_stress/pvr_texture_stress-hardware.ppm`,
+  SHA-256
+  `ea26ac35a8664399f01fb8e64bd505de16b013b783a3449717986eca26996c7a`.
+  It matches Flycast: the three format-specific gradient panels have intact
+  red/green/blue borders with no stale tiles, corruption, blanking, or seams.
+
 ### Phase 3.1 code review (2026-07-28, independent audit)
 
 An independent, non-modifying code review of the Phase 3.1 implementation
@@ -850,8 +898,7 @@ the name dependency.
 
 **Test gaps (tracked, not blocking)**
 
-- No stress test of repeated create/destroy/update/lock cycles (Phase 7 hardening)
-- No VRAM exhaustion test (Phase 7 hardening)
+- Wider texture-dimension and edge-update matrix (Phase 7 hardening)
 - No 320×240 or PAL/NTSC mode coverage (Phase 7 hardening)
 - No TA/OPB capacity measurement (Phase 6/7)
 - No bilinear-vs-nearest visual difference validation on hardware

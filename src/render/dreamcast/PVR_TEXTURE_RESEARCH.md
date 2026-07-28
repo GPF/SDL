@@ -6,6 +6,10 @@
 
 This document defines the smallest correct Phase 3 baseline texture subsystem for the native PVR renderer. It preserves all established Phase 0–2 behavior: renderer-owns-PVR lifecycle, SDL command-order submission, CPU-only queue callbacks, single autosort-disabled transparent list, pixel-exact CPU clipping, and nearest-neighbor baseline.
 
+**Related design:** `PVR_TEXTURE_STRESS_DESIGN.md` records the completed Phase
+3.3 texture lifecycle, VRAM exhaustion/recovery, and deterministic rollback
+increment.
+
 ## Implementation and validation update (2026-07-27)
 
 The first Phase 3 increment is implemented. The native renderer is split into
@@ -42,11 +46,11 @@ RGB565 red texels; and blue/translucent-texture/green painter order. Hardware
 closely matches the Flycast reference. The ordinary test ELF was rebuilt after
 capture without `PVR_TEXTURE_HARDWARE_SCREENSHOT`.
 
-The focused source-rectangle, scaling, rotation, and flip increment described
-below is also complete. Remaining Phase 3 validation is the wider
-texture-dimension and edge-update matrix, repeated texture
-lifecycle/update/lock stress, and VRAM-exhaustion rollback. Non-VGA video modes
-and performance/capacity measurements remain Phase 7 hardening.
+The focused source-rectangle/scaling/rotation/flip increment and the Phase 3.3
+lifecycle/exhaustion increment described below are also complete. Remaining
+Phase 3 validation is the wider texture-dimension and edge-update matrix.
+Non-VGA video modes and performance/capacity measurements remain Phase 7
+hardening.
 
 ## Phase 3.2 copy/copy-ex path and validation (2026-07-28)
 
@@ -144,6 +148,55 @@ viewport/clip/modulation/order panels. No POT-padding or clip-boundary leakage,
 triangle seam, or missing primitive is visible. The ordinary ELF was rebuilt
 after capture and contains neither `vid_screen_shot` nor the hardware path
 strings.
+
+## Phase 3.3 lifecycle stress and exhaustion validation (2026-07-28)
+
+Revalidation against the current renderer and SDL core confirmed the ownership
+research. Staging and VRAM allocations are each freed once; failed creation
+does not attach partial driver data; locked destruction clears state; texture
+destruction during an active scene is deferred until render synchronization;
+the polygon-header cache is invalidated before texture state is freed; SDL
+core destroys associated textures before the backend renderer; and PVR-init
+failure does not trigger invalid shutdown or VRAM operations. The one research
+wording discrepancy was the fatal `pvr_failed` path: it deliberately performs
+recovery `pvr_shutdown()` and then releases deferred CPU allocations without
+individual VRAM frees. No lifecycle defect was exposed and the working normal
+ownership paths were left unchanged.
+
+The only renderer addition is deterministic test support guarded by
+`DC_PVR_TEXTURE_FAILURE_INJECTION`. Private, unsupported stage/countdown hints
+select the Nth driver-data, staging, or VRAM allocation. Injection occurs
+immediately before the selected native allocation and produces a stage-
+specific SDL error. Changing the selector or countdown resets the state, so
+one SDL test archive covers every case. Ordinary builds compile out the state,
+branches, hint names, and errors; string/symbol checks of the ordinary archive
+and ELF confirmed their absence.
+
+The focused public-API test completed 50 static and 20 streaming cycles, 12
+simultaneous mixed-lifetime textures, four locked destroys, a texture draw
+followed by SDL's pre-destruction queue flush and synchronized cleanup,
+renderer teardown with five associated live textures, three injected failures
+and immediate recoveries, uniform VRAM exhaustion/reallocation, two renderer
+recreations, and a final RGB565/ARGB1555/ARGB4444 visual page. Both Flycast and
+physical hardware allocated 45 256x256 RGB565 exhaustion textures at 131,072
+VRAM bytes each, freed 23, and recovered 23 before the next expected VRAM
+allocation failure. Previously created and post-failure textures remained
+drawable. Because the standard KOS configuration lacks `PVR_KM_DBG`, allocator
+recovery is inferred from those uniform reallocations rather than an exact
+available-byte query.
+
+Flycast and a real 640x480 VGA Dreamcast printed PASS with identical final
+statistics. The two deliberate exhaustion points produce KOS's generic
+out-of-PVR-memory/heap-probably-corrupted warning; no other SDL, KOS, PVR, or
+allocator warning occurred. Hardware returned zero to `dc-load-ip`. The final
+PPM is
+`test/dreamcast/test/pvr_texture_stress/pvr_texture_stress-hardware.ppm`
+(640x480), SHA-256
+`ea26ac35a8664399f01fb8e64bd505de16b013b783a3449717986eca26996c7a`.
+Direct inspection matches Flycast: three intact format-specific gradient
+panels, clean red/green/blue borders, and no stale tiles, corruption, blanking,
+or seams. Partial uploads, DMA, twiddled/VQ storage, other video modes, and
+TA/OPB capacity remain later hardening work.
 
 ## 0. Pre-implementation texture baseline (source-confirmed at research time)
 
@@ -1743,8 +1796,7 @@ the name dependency.
 
 **Test gaps (tracked, not blocking)**
 
-- No stress test of repeated create/destroy/update/lock cycles (Phase 7 hardening)
-- No VRAM exhaustion test (Phase 7 hardening)
+- Wider texture-dimension and edge-update matrix (Phase 7 hardening)
 - No 320×240 or PAL/NTSC mode coverage (Phase 7 hardening)
 - No TA/OPB capacity measurement (Phase 6/7)
 - No bilinear-vs-nearest visual difference validation on hardware

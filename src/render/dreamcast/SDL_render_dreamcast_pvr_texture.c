@@ -11,6 +11,59 @@
 
 #include "SDL_render_dreamcast_pvr.h"
 
+#if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
+#include "SDL_hints.h"
+
+#define DC_PVR_TEST_ALLOC_STAGE_HINT "SDL_DC_PVR_TEST_ALLOC_STAGE"
+#define DC_PVR_TEST_ALLOC_COUNTDOWN_HINT "SDL_DC_PVR_TEST_ALLOC_COUNTDOWN"
+
+typedef enum DC_PVR_TestAllocStage
+{
+    DC_PVR_TEST_ALLOC_NONE,
+    DC_PVR_TEST_ALLOC_DRIVERDATA,
+    DC_PVR_TEST_ALLOC_STAGING,
+    DC_PVR_TEST_ALLOC_VRAM
+} DC_PVR_TestAllocStage;
+
+static DC_PVR_TestAllocStage DC_PVR_test_alloc_stage;
+static int DC_PVR_test_alloc_countdown = -1;
+static int DC_PVR_test_alloc_remaining;
+
+static DC_PVR_TestAllocStage DC_PVR_TestParseAllocStage(const char *value)
+{
+    if (value && SDL_strcmp(value, "driverdata") == 0) {
+        return DC_PVR_TEST_ALLOC_DRIVERDATA;
+    }
+    if (value && SDL_strcmp(value, "staging") == 0) {
+        return DC_PVR_TEST_ALLOC_STAGING;
+    }
+    if (value && SDL_strcmp(value, "vram") == 0) {
+        return DC_PVR_TEST_ALLOC_VRAM;
+    }
+    return DC_PVR_TEST_ALLOC_NONE;
+}
+
+static SDL_bool DC_PVR_TestShouldFailAllocation(DC_PVR_TestAllocStage stage)
+{
+    const char *stage_hint = SDL_GetHint(DC_PVR_TEST_ALLOC_STAGE_HINT);
+    const char *countdown_hint = SDL_GetHint(DC_PVR_TEST_ALLOC_COUNTDOWN_HINT);
+    const DC_PVR_TestAllocStage selected = DC_PVR_TestParseAllocStage(stage_hint);
+    const int countdown = countdown_hint ? SDL_atoi(countdown_hint) : 0;
+
+    if (selected != DC_PVR_test_alloc_stage ||
+        countdown != DC_PVR_test_alloc_countdown) {
+        DC_PVR_test_alloc_stage = selected;
+        DC_PVR_test_alloc_countdown = countdown;
+        DC_PVR_test_alloc_remaining = countdown > 0 ? countdown : 0;
+    }
+    if (selected != stage || DC_PVR_test_alloc_remaining <= 0) {
+        return SDL_FALSE;
+    }
+    --DC_PVR_test_alloc_remaining;
+    return DC_PVR_test_alloc_remaining == 0 ? SDL_TRUE : SDL_FALSE;
+}
+#endif
+
 static int DC_PVR_NextPowerOfTwo(int value)
 {
     int result = 8;
@@ -48,6 +101,11 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
         return SDL_SetError("Dreamcast PVR texture format is not supported");
     }
 
+#if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
+    if (DC_PVR_TestShouldFailAllocation(DC_PVR_TEST_ALLOC_DRIVERDATA)) {
+        return SDL_SetError("Injected Dreamcast PVR texture driver-data allocation failure");
+    }
+#endif
     data = (DC_PVR_TextureData *)SDL_calloc(1, sizeof(*data));
     if (!data) {
         return SDL_OutOfMemory();
@@ -65,11 +123,24 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     data->allocation_size = (size_t)data->vram_pitch * data->backing_h;
     data->filter = PVR_FILTER_NEAREST;
     data->dirty = SDL_TRUE;
+#if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
+    if (DC_PVR_TestShouldFailAllocation(DC_PVR_TEST_ALLOC_STAGING)) {
+        SDL_free(data);
+        return SDL_SetError("Injected Dreamcast PVR texture staging allocation failure");
+    }
+#endif
     data->pixels = SDL_calloc(1, data->allocation_size);
     if (!data->pixels) {
         SDL_free(data);
         return SDL_SetError("Could not allocate Dreamcast PVR texture staging memory");
     }
+#if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
+    if (DC_PVR_TestShouldFailAllocation(DC_PVR_TEST_ALLOC_VRAM)) {
+        SDL_free(data->pixels);
+        SDL_free(data);
+        return SDL_SetError("Injected Dreamcast PVR texture VRAM allocation failure");
+    }
+#endif
     data->vram = pvr_mem_malloc(data->allocation_size);
     if (!data->vram) {
         SDL_free(data->pixels);
