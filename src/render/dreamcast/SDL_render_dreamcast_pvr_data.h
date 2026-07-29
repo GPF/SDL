@@ -24,6 +24,8 @@ typedef struct DC_PVR_TextureData
     struct DC_PVR_TextureData *next_deferred;
     void *pixels;
     pvr_ptr_t vram;
+    pvr_ptr_t lock_replacement_vram;
+    struct DC_PVR_DeferredVRAM *lock_deferred_vram;
     size_t allocation_size;
     Uint32 sdl_format;
     int pvr_format;
@@ -37,9 +39,16 @@ typedef struct DC_PVR_TextureData
     pvr_filter_mode_t filter;
     SDL_bool uploaded;
     SDL_bool dirty;
+    SDL_bool referenced_in_scene;
     SDL_bool locked;
     SDL_Rect locked_rect;
 } DC_PVR_TextureData;
+
+typedef struct DC_PVR_DeferredVRAM
+{
+    struct DC_PVR_DeferredVRAM *next;
+    pvr_ptr_t vram;
+} DC_PVR_DeferredVRAM;
 
 typedef struct DC_PVR_RenderData
 {
@@ -64,6 +73,7 @@ typedef struct DC_PVR_RenderData
     pvr_txr_shading_mode_t header_texture_env;
     pvr_filter_mode_t header_filter;
     DC_PVR_TextureData *deferred_textures;
+    DC_PVR_DeferredVRAM *deferred_vram;
 } DC_PVR_RenderData;
 
 #endif /* SDL_render_dreamcast_pvr_data_h_ */

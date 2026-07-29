@@ -56,6 +56,36 @@ static void DC_PVR_ReleaseDeferredTextures(DC_PVR_RenderData *data, SDL_bool fre
     }
 }
 
+static void DC_PVR_ReleaseDeferredVRAM(DC_PVR_RenderData *data, SDL_bool free_vram)
+{
+    DC_PVR_DeferredVRAM *entry = data->deferred_vram;
+
+    data->deferred_vram = NULL;
+    while (entry) {
+        DC_PVR_DeferredVRAM *next = entry->next;
+
+        if (free_vram && entry->vram) {
+            pvr_mem_free(entry->vram);
+        }
+        SDL_free(entry);
+        entry = next;
+    }
+}
+
+static void DC_PVR_ClearTextureSceneReferences(SDL_Renderer *renderer)
+{
+    SDL_Texture *texture;
+
+    for (texture = renderer->textures; texture; texture = texture->next) {
+        DC_PVR_TextureData *texturedata =
+            (DC_PVR_TextureData *)texture->driverdata;
+
+        if (texturedata) {
+            texturedata->referenced_in_scene = SDL_FALSE;
+        }
+    }
+}
+
 static int DC_PVR_BeginFrame(SDL_Renderer *renderer)
 {
     DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
@@ -139,6 +169,9 @@ int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture, SDL_BlendMod
     data->header_filter = texture ? ((DC_PVR_TextureData *)texture->driverdata)->filter
                                   : PVR_FILTER_NEAREST;
     data->header_valid = SDL_TRUE;
+    if (texture) {
+        ((DC_PVR_TextureData *)texture->driverdata)->referenced_in_scene = SDL_TRUE;
+    }
     return 0;
 }
 
@@ -244,6 +277,8 @@ static int DC_PVR_RenderPresent(SDL_Renderer *renderer)
         return SDL_SetError("Timed out waiting for Dreamcast PVR rendering");
     }
     DC_PVR_ReleaseDeferredTextures(data, SDL_TRUE);
+    DC_PVR_ReleaseDeferredVRAM(data, SDL_TRUE);
+    DC_PVR_ClearTextureSceneReferences(renderer);
     return 0;
 }
 
@@ -295,8 +330,10 @@ static void DC_PVR_DestroyRenderer(SDL_Renderer *renderer)
             }
             data->pvr_owned = SDL_FALSE;
             DC_PVR_ReleaseDeferredTextures(data, SDL_FALSE);
+            DC_PVR_ReleaseDeferredVRAM(data, SDL_FALSE);
         } else {
             DC_PVR_ReleaseDeferredTextures(data, SDL_TRUE);
+            DC_PVR_ReleaseDeferredVRAM(data, SDL_TRUE);
             /* Render completion precedes the vblank handler's page flip. Keep
              * that handler installed through one vblank before PVR shutdown. */
             vid_waitvbl();
@@ -307,6 +344,7 @@ static void DC_PVR_DestroyRenderer(SDL_Renderer *renderer)
         }
     } else {
         DC_PVR_ReleaseDeferredTextures(data, SDL_FALSE);
+        DC_PVR_ReleaseDeferredVRAM(data, SDL_FALSE);
     }
     SDL_free(data);
     renderer->driverdata = NULL;

@@ -898,10 +898,8 @@ the name dependency.
 
 **Test gaps (tracked, not blocking)**
 
-- Wider texture-dimension and edge-update matrix (Phase 7 hardening)
 - No 320×240 or PAL/NTSC mode coverage (Phase 7 hardening)
 - No TA/OPB capacity measurement (Phase 6/7)
-- No bilinear-vs-nearest visual difference validation on hardware
 
 **Repository hygiene**
 
@@ -922,6 +920,46 @@ the name dependency.
   partial source rect `srcrect={5,3,4,3}` on a 17×9 logical texture backed
   32×16: UVs become `{5/32, 3/16, 9/32, 6/16}` — correct sampling of the
   logical partial within the POT backing.
+
+### Phase 3.4: wider texture dimensions and logical edges — done
+
+- Added `test/dreamcast/test/pvr_texture_matrix`, a four-page public-API test
+  with 28 sequential logical sizes covering representative axes from 1 through
+  513, POT transitions, one-pixel axes, asymmetric shapes, 320x240, 321x241,
+  and a 513x257 logical texture with 1024x512 backing. Every native format is
+  exercised across multiple transitions with static and streaming access.
+- The test verifies expected streaming backing pitch, tight/larger/odd source
+  pitch, corners, rows, columns, interior and logical-edge updates, partial
+  locks, repeated updates, invalid SDL/core and backend cases, filtering,
+  alpha, and update/draw ordering. Textures are sequentially destroyed so the
+  matrix does not duplicate the Phase 3.3 exhaustion test.
+- The matrix exposed a real renderer ordering defect: SDL's texture flush had
+  submitted earlier geometry into an active PVR scene, but an immediate update
+  overwrote the same VRAM before that scene consumed it. The renderer now marks
+  allocations referenced by submitted texture headers. Updating or locking a
+  referenced allocation synchronously uploads the complete POT backing to
+  replacement VRAM, invalidates the header cache, and defers the old allocation
+  until presentation synchronization. Unreferenced allocations upload in
+  place. This is not partial-upload support.
+- The unified SDL build and all eight prior native-PVR tests rebuild with
+  strict test warnings against the explicit local archive. Both
+  `GL_RenderDriver` and `DC_RenderDriver` are present; native renderer objects
+  have no unresolved `gl*` calls. A fresh opt-out archive has no native-PVR
+  object or symbol. Its warnings are pre-existing in excluded Dreamcast
+  video/GLdc files.
+- Flycast passes 28 cases, 57 creates, 47 updates, 41 locks, 16 invalid checks,
+  and all four pages. Direct inspection confirms correct logical corners,
+  one-pixel dimensions, right/bottom edges, NPOT padding isolation, pitch and
+  partial-lock behavior, old/new update ordering, nearest/bilinear filtering,
+  and ARGB1555/ARGB4444 alpha.
+- Physical 640x480 VGA hardware passes the same counts, captures four distinct
+  640x480 PPM pages, returns zero normally to `dc-load-ip`, and matches the
+  Flycast observations. Capture paths and SHA-256 values are recorded in the
+  focused README. The ordinary ELF was rebuilt without capture references.
+- Full-backing synchronous uploads remain intentional. Partial uploads, DMA,
+  custom store-queue row transfers, and read-modify-write logic remain
+  deferred. Non-VGA modes and broader capacity/performance profiling remain
+  later hardening.
 
 ## Phase 4: geometry and blending completeness
 

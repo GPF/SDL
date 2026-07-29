@@ -1825,3 +1825,36 @@ the name dependency.
   partial source rect `srcrect={5,3,4,3}` on a 17×9 logical texture backed
   32×16: UVs become `{5/32, 3/16, 9/32, 6/16}` — correct sampling of the
   logical partial within the POT backing.
+
+## Phase 3.4 wider dimension and logical-edge validation (2026-07-28)
+
+`test/dreamcast/test/pvr_texture_matrix` validates 28 sequential logical-size
+cases spanning every representative axis value from 1 through 513, POT
+transitions, one-pixel axes, asymmetric shapes, 320x240, 321x241, and a
+513x257 logical texture with 1024x512 backing. It covers RGB565, ARGB1555, and
+ARGB4444 with static and streaming access, exact backing pitches, tight and
+larger odd source pitches, corner/row/column/interior/edge updates, partial
+locks, invalid public API behavior, filtering, alpha, and update/draw order.
+
+The matrix exposed a real ordering defect. `SDL_UpdateTexture` flushes queued
+geometry, but a flush submits into the still-active PVR scene; overwriting the
+same VRAM allocation could therefore change an earlier submitted draw. The
+fix tracks whether the current texture allocation was referenced by a
+submitted polygon header. An update or lock of that allocation uploads the
+complete POT backing to replacement VRAM, invalidates the header cache, and
+defers the old allocation until `RenderPresent` has synchronized. An
+unreferenced allocation continues to upload in place. This is full-backing
+copy-on-write for command ordering, not a partial-upload implementation.
+
+Flycast and physical 640x480 VGA Dreamcast runs both pass 28 cases, 57 creates,
+47 updates, 41 locks, 16 invalid checks, and four visual pages. Hardware
+returned zero normally to `dc-load-ip`. Direct capture inspection confirms
+logical corners and one-pixel axes, right/bottom edge coverage, NPOT-padding
+isolation, odd source-pitch handling, partial locks, repeated-update order,
+nearest/bilinear behavior, and both alpha formats. The four lasting 640x480 PPM
+hashes are recorded in the focused test README.
+
+The full-POT-backing synchronous upload remains intentional. Partial uploads,
+DMA, custom store-queue row writes, and read-modify-write transfers remain
+deferred. Remaining texture hardening is non-VGA video modes and broader
+capacity/performance profiling.
