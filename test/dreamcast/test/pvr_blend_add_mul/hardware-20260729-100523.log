@@ -1,0 +1,73 @@
+Connecting to 192.168.0.128...
+dc-load-ip 3.0.1 using Broadband Adapter (HIT-0400)
+Console enabled
+Upload <pvr_blend_add_mul.elf>
+File format is ELF, start address is 0x8c010000
+Section .text, lma 0x8c010000, size 990856
+Section .init, lma 0x8c102000, size 54
+Section .fini, lma 0x8c102038, size 42
+Section .rodata, lma 0x8c102080, size 102140
+Section .eh_frame, lma 0x8c11af7c, size 360
+Section .ctors, lma 0x8c11b164, size 8
+Section .dtors, lma 0x8c11b16c, size 8
+Section .data, lma 0x8c11b174, size 13300
+Section .got, lma 0x8c11e568, size 12
+Transferred 1106780 bytes at 4252267 bytes / sec
+Executing at 0x8c010000
+Sending execute command (0xac010000, console=1, cdfsredir=0)...argv(1, argv0="pvr_blend_add_mul.elf")...executing
+
+--
+KallistiOS v2.3.0 [dreamcast/pristine]
+  Git revision: af085653-dirty
+  Mon Jul 27 01:41:26 PM MST 2026
+  gpf@gpf-B550-Phantom-Gaming-4-ac:/opt/toolchains/dc/kos
+  sh-elf-gcc (GCC) 15.3.1 20260705
+maple: active drivers:
+    Dreameye (Camera): Camera
+    Sound Input Peripheral: Microphone
+    PuruPuru (Vibration) Pack: JumpPack
+    VMU Driver: Clock, LCD, MemoryCard
+    Mouse Driver: Mouse
+    Keyboard Driver: Keyboard
+    Controller Driver: Controller
+    Lightgun: LightGun
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+dc-load console support enabled
+maple_irq: error EBADFUNC on C0 when sending command: 9
+maple: attached devices:
+  A0: Dreamcast Controller           (01000000: Controller)
+  A1: Visual Memory                  (0e000000: Clock, LCD, MemoryCard)
+  C0: Keyboard                       (40000000: Keyboard)
+  D0: Dreamcast Mouse                (00020000: Mouse)
+
+INFO: SDL2 Dreamcast video initialized: 640x480
+INFO: DREAMCAST_CreateWindow: window 640x480 created with framebuffer
+INFO: Display modes for Dreamcast retrieved successfully.
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+API: testing public blend-mode accept/reject
+Page 1: untextured ADD/MUL alpha endpoints, saturation, and guards
+  left column is CPU RGB565 reference; right column is native PVR
+vid_screen_shot: written to output file '/pc/pvr_blend_add_mul-hardware-page1.ppm'
+  captured /pc/pvr_blend_add_mul-hardware-page1.ppm
+Holding page 1/4 for 8000 ms
+Page 2: textured ADD/MUL with modulation and nearest/linear
+vid_screen_shot: written to output file '/pc/pvr_blend_add_mul-hardware-page2.ppm'
+  captured /pc/pvr_blend_add_mul-hardware-page2.ppm
+Holding page 2/4 for 8000 ms
+Page 3: alternating blend modes and state-cache transitions
+vid_screen_shot: written to output file '/pc/pvr_blend_add_mul-hardware-page3.ppm'
+  captured /pc/pvr_blend_add_mul-hardware-page3.ppm
+Holding page 3/4 for 8000 ms
+  CPU reference: ADD(red, dark, 255) = f801
+  CPU reference: ADD(red, dark, 0)   = 0001
+  CPU reference: MUL(white, mid, 0)  = 7646
+  CPU reference: MUL(white, mid, 255)= 3b23
+  CPU reference: ADD(30,63,30,255) over black = 19e3
+Page 4: SDL_RenderGeometry per-vertex ADD/MUL
+  CPU reference ADD(30,63,30,255) over (0,0,0) = (30,63,30) -> RGB565 19e3
+vid_screen_shot: written to output file '/pc/pvr_blend_add_mul-hardware-page4.ppm'
+  captured /pc/pvr_blend_add_mul-hardware-page4.ppm
+Holding page 4/4 for 8000 ms
+PASS (API/build): visual result still requires real Dreamcast validation
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+Program returned 0

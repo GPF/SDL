@@ -154,6 +154,22 @@ int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture, SDL_BlendMod
     } else if (blend == SDL_BLENDMODE_BLEND) {
         context.blend.src = PVR_BLEND_SRCALPHA;
         context.blend.dst = PVR_BLEND_INVSRCALPHA;
+    } else if (blend == SDL_BLENDMODE_ADD) {
+        /* SDL_ADD: dst = src*srcA + dst. PVR: dst = src*SRCALPHA + dst*ONE.
+         * Both factors are shared across color/alpha by the PVR hardware. For
+         * the current RGB565-only destination (screen and planned initial RTT),
+         * alpha is irrelevant, so SRCALPHA / ONE reproduces the SDL RGB
+         * equation exactly. */
+        context.blend.src = PVR_BLEND_SRCALPHA;
+        context.blend.dst = PVR_BLEND_ONE;
+    } else if (blend == SDL_BLENDMODE_MUL) {
+        /* SDL_MUL: dst = src*dstC + dst*(1-srcA). PVR: dst = src*DSTCOLOR +
+         * dst*INVSRCALPHA. Same-factor sharing matches both color and alpha
+         * for SDL's dstA = dst passthrough because srcA*dstA + dstA*(1-srcA)
+         * = dstA. Validated here for the current RGB565-only destination.
+         * Alpha-bearing PVR targets remain unvalidated for this mapping. */
+        context.blend.src = PVR_BLEND_DESTCOLOR;
+        context.blend.dst = PVR_BLEND_INVSRCALPHA;
     } else {
         return SDL_SetError("Unsupported Dreamcast PVR blend mode");
     }
@@ -178,7 +194,10 @@ int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture, SDL_BlendMod
 static SDL_bool DC_PVR_SupportsBlendMode(SDL_Renderer *renderer, SDL_BlendMode blendMode)
 {
     (void)renderer;
-    return (blendMode == SDL_BLENDMODE_NONE || blendMode == SDL_BLENDMODE_BLEND) ? SDL_TRUE : SDL_FALSE;
+    return (blendMode == SDL_BLENDMODE_NONE || blendMode == SDL_BLENDMODE_BLEND ||
+            blendMode == SDL_BLENDMODE_ADD || blendMode == SDL_BLENDMODE_MUL)
+               ? SDL_TRUE
+               : SDL_FALSE;
 }
 
 static int DC_PVR_GetOutputSize(SDL_Renderer *renderer, int *w, int *h)

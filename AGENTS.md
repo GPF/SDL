@@ -153,7 +153,8 @@ software renderer.
 
 **Build:** add `-DSDL_VIDEO_RENDER_DREAMCAST_PVR=ON` CMake option (disabled by default).
 
-Validate in Flycast and on real hardware. Measure TA/list capacity with a few
+Validate on physical Dreamcast hardware and retain a hardware screenshot for
+each visually distinct page or workload. Measure TA/list capacity with a few
 thousand sprites.
 
 If correct ordering cannot be maintained or performance is unacceptable, stop
@@ -166,9 +167,9 @@ results.
 ### Phase 0 validation status
 
 - The native renderer builds through the opt-in Dreamcast CMake configuration.
-- Flycast and physical Dreamcast hardware using 640x480 VGA both display the
-  stable validation scene: a blue rectangle with a red RGB565 textured
-  rectangle partially covering it.
+- Physical Dreamcast hardware using 640x480 VGA displays the stable validation
+  scene: a blue rectangle with a red RGB565 textured rectangle partially
+  covering it.
 - The lifecycle test completes 32 renderer create/destroy iterations, including
   rejected target-texture creation, fixed-vsync validation, presented frames,
   and flushed-but-not-presented destruction. A renderer created after the
@@ -244,8 +245,7 @@ Phase 2.3 increment below.
 - `ADD`, `MOD`, `MUL`, and unsupported custom modes are rejected. `ADD` and
   `MOD` remain deferred: SDL specifies separate color and alpha factors while
   the current single-pass PVR context exposes one shared source/destination
-  pair, and no exact mapping has yet passed Flycast and physical-hardware
-  tests.
+  pair, and no exact mapping has yet passed physical-hardware tests.
 - Queue callbacks remain CPU-only. Later renderer or texture state changes do
   not alter colors or blend modes already captured by queued draw commands.
   Only `RunCommandQueue` submits headers and vertices; `RenderPresent` remains
@@ -277,14 +277,13 @@ accepted and exited before queuing a frame, so the blank display was expected
 and was not a renderer visual result.
 
 After rebuilding with the requested archive explicitly, the corrected test
-passes in Flycast and on physical Dreamcast hardware. Hardware matches the
-Flycast reference image: the full-output and `(320,0 320x480)` viewport panels
-are visually identical; RGB and alpha interpolate smoothly across their
-triangles; textured per-vertex ARGB and texture-copy color/alpha modulation are
-correct; and alternating `NONE`/`BLEND` overlaps retain painter order. Reaching
-the visual scene also confirms the API precheck accepted `NONE`/`BLEND` and
+passes on physical Dreamcast hardware. The full-output and `(320,0 320x480)`
+viewport panels are visually identical; RGB and alpha interpolate smoothly
+across their triangles; textured per-vertex ARGB and texture-copy color/alpha
+modulation are correct; and alternating `NONE`/`BLEND` overlaps retain painter
+order. Reaching the visual scene also confirms the API precheck accepted `NONE`/`BLEND` and
 rejected `ADD`, `MOD`, `MUL`, the custom subtract mode, and texture `ADD`.
-No Phase 2.2 cases remain pending Flycast or physical-hardware validation.
+No Phase 2.2 cases remain pending physical-hardware validation.
 
 ### Phase 2.3: first CPU pixel-clipping increment — done
 
@@ -335,29 +334,26 @@ the requested local `build-scripts/dcbuild/libSDL2.a`.
 
 **Automated validation (2026-07-27):** The opt-in static build succeeds. A
 separate opt-out build in `/tmp/sdl2-dc-optout` succeeds with the option OFF,
-no renderer object, and no `DC_RenderDriver` archive symbol. Flycast passes all
-four runtime tests. Its clipping frames show full-target ordered clears,
-included left/top boundaries, no visible right/bottom leakage, no gradient fan
-seams, matching opposite-winding output, and intact `NONE`/`BLEND` order.
+no renderer object, and no `DC_RenderDriver` archive symbol.
 
-During Flycast validation, opposite windings initially produced different
-textured results because their cyclic polygon order selected different fan
-anchors and therefore different diagonal partitions. Selecting one
-deterministic geometric anchor fixed the discrepancy without reversing the
-polygon or changing its signed winding.
+Diagnostic inspection found that opposite windings initially produced
+different textured results because their cyclic polygon order selected
+different fan anchors and therefore different diagonal partitions. Selecting
+one deterministic geometric anchor fixed the discrepancy without reversing
+the polygon or changing its signed winding.
 
 **Physical-hardware validation (2026-07-27):** Passed on a real Dreamcast at
-640x480 VGA. All three clipping pages match the Flycast reference and the
-program returns zero. Page 1 retains the included left/top coverage and both
-one-pixel white strips; the magenta right/bottom leakage probe remains fully
+640x480 VGA. All three clipping pages match their documented expectations and
+the program returns zero. Page 1 retains the included left/top coverage and
+both one-pixel white strips; the magenta right/bottom leakage probe remains fully
 inside its dark guard; disabled, empty, changed, partial, and outside clips
 produce the expected blocks; and no orange remains after the final full-target
 clear. Page 2 shows all four edge-crossing triangles, the multi-edge and
 seven-vertex results, and smooth RGB/alpha gradients without visible cracks,
 fan seams, or double-blended shared edges. Page 3 shows matching checkerboard
 and modulation for both input windings, empty outside/zero-area guards, and the
-expected ordered `NONE`/`BLEND` overlaps. Thin and one-pixel cases agree with
-Flycast. No PVR-specific coordinate offset or clip epsilon was required.
+expected ordered `NONE`/`BLEND` overlaps. No PVR-specific coordinate offset or
+clip epsilon was required.
 
 This completes the first pixel-exact clipping increment for the validated
 640x480 VGA path. The broader 320x240, PAL/NTSC, subpixel-position, and stress
@@ -365,123 +361,23 @@ matrix remains Phase 7 hardening rather than a blocker for this increment.
 
 ## Agent physical-hardware validation workflow
 
-Every physical Dreamcast validation must include at least one captured image of
-the actual hardware output for each visually distinct test page or workload.
+All Dreamcast runtime validation must run on physical Dreamcast hardware. Every
+validation must include at least one captured image of the actual hardware
+output for each visually distinct test page or workload.
 Prefer a raw framebuffer capture written through the hardware `/pc` path (for
 example, with `vid_screen_shot`) when the test supports it. Otherwise ask the
-onsite operator to photograph the physical display and attach the image. An
-emulator screenshot is not a substitute for a hardware capture.
+onsite operator to photograph the physical display and attach the image.
 
 Inspect the hardware capture directly and compare it first with the visual
-expectations derived from the test source and its documented contract. Use a
-Flycast capture as a comparison reference only when the expected result is
-ambiguous or a hardware result needs diagnostic reproduction; this should be
-rare. Record the hardware image path, the concrete visual observations, and
-any comparison performed. Serial output, stage-completion messages, and a PASS
-line do not establish visual correctness by themselves.
+expectations derived from the test source and its documented contract. Do not
+run an emulator as a validation or diagnostic substitute. Record the hardware
+image path and the concrete visual observations. Serial output, stage-completion
+messages, and a PASS line do not establish visual correctness by themselves.
 
 If a test advances too quickly to capture or inspect, coordinate with the
 onsite operator before launch and use an existing pause or observation mode.
 When the task permits a test-only correction, extending display hold times is
 acceptable, but do not infer a visual pass from the brief output.
-
-## Agent Flycast validation workflow
-
-Agents can execute Dreamcast ELF tests in Flycast, inspect their serial/log
-output, capture the rendered window, and evaluate the image directly. A user
-does not need to describe the frame if the agent has desktop capture access.
-This workflow supplements, but never replaces, the required physical-hardware
-test.
-
-### Build and launch an ELF
-
-Build the requested test first and resolve its exact path rather than relying
-on Flycast's working directory. For example:
-
-```sh
-cd test/dreamcast/test/pvr_vertex_color_blend
-make -f Makefile.dc
-flatpak run org.flycast.Flycast "$PWD/pvr_vertex_color_blend.elf"
-```
-
-From the repository root, the equivalent launch is:
-
-```sh
-flatpak run org.flycast.Flycast \
-  "$PWD/test/dreamcast/test/pvr_vertex_color_blend/pvr_vertex_color_blend.elf"
-```
-
-Keep Flycast attached to the launching terminal so its stdout/stderr remains
-available. A sandboxed agent must request desktop/GUI permission for the
-Flatpak launch and screenshot commands. Check the log for SDL errors, PVR/KOS
-warnings, crashes, and the test's own result line. For the vertex-color/blend
-test, this line confirms only its API/build assertions:
-
-```text
-PASS (API/build): visual result still requires real Dreamcast validation
-```
-
-The test holds its visual frame for 8,000 ms. Flycast may automatically reboot
-the ELF after it exits, so repeated KallistiOS banners and repeated PASS lines
-are expected. They are not multiple independent visual validations.
-
-### Capture and inspect the rendered frame
-
-Capture during the test's hold interval. On KDE, if Flycast is already active:
-
-```sh
-spectacle -b -n -a -o /tmp/flycast-test-window.png
-```
-
-An agent-driven GUI launch may leave Flycast minimized, on another virtual
-desktop, or behind the agent UI. The repository keeps a KWin helper for that
-case at `test/dreamcast/kwin-present-flycast.js`. Load it, run it, and then
-capture the full desktop while Flycast is kept above other windows:
-
-```sh
-qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript \
-  "$PWD/test/dreamcast/kwin-present-flycast.js" flycast-agent-capture
-qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.start
-spectacle -b -n -f -o /tmp/flycast-test-visible.png
-```
-
-The helper is a one-shot script. If it is already loaded from an earlier
-Flycast launch, unload and reload it before `start` so it sees the new window:
-
-```sh
-qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript \
-  flycast-agent-capture
-```
-
-The helper supports the KWin Plasma 5 `clientList` API used on the current
-development machine and the newer `windowList` API. It is needed only for
-window presentation; it does not affect emulation or renderer output. Close
-Flycast after capture to remove the temporary keep-above window state.
-
-Use an image-viewing tool to inspect the actual screenshot. Derive the visual
-expectations from the test source and its console message; do not infer visual
-success from a PASS line. For `pvr_vertex_color_blend`, verify:
-
-- the full-output left panel and nonzero-viewport right panel are visually
-  identical;
-- RGB vertex colors interpolate smoothly;
-- alpha gradients fade smoothly and equally in both panels;
-- the white textured triangle and purple modulated texture block match;
-- the bottom rectangles have the same colors, overlaps, and painter order; and
-- there are no missing primitives, seams, unexpected blank areas, or obvious
-  modulation artifacts.
-
-Screenshot pixels may not compare exactly when Flycast scales the 640x480
-framebuffer to a non-integer window size: resampling can place corresponding
-panel edges on different host pixels. Treat a desktop-screenshot pixel diff as
-diagnostic only unless Flycast is configured for an integer scale or a raw
-framebuffer capture is available. Record the screenshot path and the concrete
-visual observations.
-
-Stop a terminal-attached Flycast with Ctrl-C after capture. Exit status 130 is
-expected for that manual termination and is not a test failure. Preserve a
-reference image in the relevant test directory when it is part of a lasting
-validation record; `/tmp` is appropriate only for disposable inspection.
 
 ## Phase 1: lifecycle and build integration
 
@@ -537,7 +433,7 @@ and overlapping draw-order tests render correctly.
 Sutherland–Hodgman implementation increment are complete. The hybrid
 tile-plus-boundary strategy is deferred as a Phase 6 optimization. See
 `src/render/dreamcast/PVR_CLIPPING_RESEARCH.md` for the design, bounds, and
-Flycast/physical-hardware validation results. The focused 640x480 VGA
+physical-hardware validation results. The focused 640x480 VGA
 pixel-exact gate passes; other modes and the wider subpixel/stress matrix remain
 Phase 7 hardening.
 
@@ -591,15 +487,9 @@ recorded below.
   against the explicit local archive. The new map resolves `SDL_render.c.obj`
   and `SDL_render_dreamcast_pvr.c.obj` from that archive. The separate opt-out
   archive has neither the renderer object nor `DC_RenderDriver`.
-- Lifecycle, viewport, vertex-color/blend, clipping, and points/lines tests pass
-  in Flycast. Direct inspection of all three new pages confirms one-pixel
-  points including `(0,0)` and `(639,479)`, continuous shallow/steep/diagonal
-  lines, matching reversed lines, no bright shared or closed endpoints, correct
-  viewport/clip/order behavior, no right/bottom guard leakage, and no visible
-  quad diagonal cracks.
 - **Physical-hardware validation (2026-07-27):** Passed on a real Dreamcast at
-  640x480 VGA. All three photographed pages match the Flycast reference and
-  the program returns zero. Page 1 shows the framebuffer-corner points,
+  640x480 VGA. All three photographed pages match their documented expectations
+  and the program returns zero. Page 1 shows the framebuffer-corner points,
   isolated and adjacent points, the four included clip-edge points, excluded
   right/bottom probes, the one-pixel clip, the expected `NONE`/`BLEND`
   duplicate intensities, and the post-clear markers. Page 2 shows continuous
@@ -660,8 +550,7 @@ logical sizes, filtering, modulation, rotation, and flips all work.
   streaming paths, partial updates and locks, padded/invalid source pitch,
   NPOT logical dimensions, filtering, modulation, RGB565 alpha behavior,
   target/filter rejection, and painter order. It builds with
-  `-Wall -Wextra -Werror` against the explicit local archive and passes in
-  Flycast.
+  `-Wall -Wextra -Werror` against the explicit local archive.
 
 **Physical-hardware validation (2026-07-27):** Passed on a real Dreamcast at
 640x480 VGA. The ELF was uploaded over the Broadband Adapter with
@@ -677,8 +566,8 @@ and partial update without POT-padding leakage; the streaming checker and
 partial yellow lock update; ARGB1555 transparent cutouts; the ARGB4444 alpha
 gradient; sharp nearest and smooth bilinear filtering; color/alpha modulation;
 opaque RGB565 red texels; and blue/translucent-texture/green painter order.
-The hardware framebuffer closely matches the Flycast reference. The ordinary
-non-capturing ELF was rebuilt afterward without
+The hardware framebuffer matches the documented visual expectations. The
+ordinary non-capturing ELF was rebuilt afterward without
 `PVR_TEXTURE_HARDWARE_SCREENSHOT`.
 
 Remaining Phase 3 validation includes a broader texture-dimension and
@@ -724,16 +613,13 @@ measurements remain Phase 7 hardening.
   index count.
 - A fresh unified SDL build and a PVR-disabled build pass, and all existing
   native-PVR tests rebuild with strict warnings against the explicit local
-  archive. Flycast reaches PASS; direct inspection of every page confirms
-  source boundaries, orientation, clockwise positive rotation, centers,
-  filtering, NPOT backing edges, clipping, modulation/alpha, and painter order
-  without seams, missing triangles, or padding leakage.
+  archive.
 
 **Physical-hardware validation (2026-07-28):** Passed on a real Dreamcast at
 640x480 VGA. The capture ELF was uploaded over BBA with
 `kos-tool -t 192.168.0.128 -x test/dreamcast/test/pvr_copy_ex/pvr_copy_ex.elf
 -m .`. It wrote three PPMs, printed PASS, returned zero, and returned control
-normally to `dc-load-ip`. Direct inspection matches the Flycast pages: page 1
+normally to `dc-load-ip`. Direct inspection shows page 1
 has correct source/scaling/filter behavior and clean logical backing edges;
 page 2 has all flip combinations, clockwise rotations, correct default/corner
 centers, and cropped combinations; page 3 has identical viewport panels,
@@ -751,10 +637,10 @@ references and SHA-256 values are:
 The ordinary ELF was rebuilt after capture. It contains no
 `vid_screen_shot` reference, hardware `/pc` path, or capture define.
 The later source-validation corrections are queue-time rejection only and do
-not change valid command storage or PVR submission. The unified archive build,
-focused strict-warning renderer/test builds, and Flycast API/runtime test were
-repeated; no physical-hardware rerun was needed, and the three existing
-hardware PPMs and SHA-256 values remain unchanged.
+not change valid command storage or PVR submission. The unified archive and
+focused strict-warning renderer/test builds were repeated; no physical-hardware
+rerun was needed, and the three existing hardware PPMs and SHA-256 values
+remain unchanged.
 
 ### Phase 3.3: texture lifecycle stress and VRAM recovery — done
 
@@ -782,9 +668,9 @@ hardware PPMs and SHA-256 values remain unchanged.
   creates/destroys, 5 expected failures, 192 updates, 115 draws, 84 locks, 80
   unlocks, 4 locked destroys, and 20 unlock-without-lock no-ops.
 - Exhaustion uses uniform 256x256 RGB565 textures with 131,072 VRAM bytes per
-  allocation and a safety cap of 64. Flycast and physical hardware both
-  reached 45 initial allocations (5,898,240 represented bytes), freed 23,
-  recovered 23, and then reported the expected VRAM allocation failure again.
+  allocation and a safety cap of 64. Physical hardware reached 45 initial
+  allocations (5,898,240 represented bytes), freed 23, recovered 23, and then
+  reported the expected VRAM allocation failure again.
   Three separately retained textures remained drawable, and normal texture
   creation plus renderer recreation succeeded afterward. Exact allocator-byte
   restoration was not measured because the standard KOS build lacks
@@ -794,15 +680,15 @@ hardware PPMs and SHA-256 values remain unchanged.
   native-PVR tests rebuild against the explicit ordinary local archive, and
   the opt-out archive contains no native-PVR objects or symbols. The ordinary
   archive and ELF contain no active injection or capture support.
-- Flycast and real 640x480 VGA hardware reach PASS with identical counts. KOS
-  prints its generic out-of-PVR-memory/heap-probably-corrupted diagnostic at
+- Real 640x480 VGA hardware reaches PASS with the expected counts. KOS prints
+  its generic out-of-PVR-memory/heap-probably-corrupted diagnostic at
   the two intentional exhaustion points; no other lifecycle warning appears.
   Hardware returned zero to `dc-load-ip`. The final 640x480 framebuffer is
   `test/dreamcast/test/pvr_texture_stress/pvr_texture_stress-hardware.ppm`,
   SHA-256
   `ea26ac35a8664399f01fb8e64bd505de16b013b783a3449717986eca26996c7a`.
-  It matches Flycast: the three format-specific gradient panels have intact
-  red/green/blue borders with no stale tiles, corruption, blanking, or seams.
+  The three format-specific gradient panels have intact red/green/blue borders
+  with no stale tiles, corruption, blanking, or seams.
 
 ### Phase 3.1 code review (2026-07-28, independent audit)
 
@@ -883,8 +769,6 @@ static SDL_bool IsSupportedBlendMode(SDL_Renderer *renderer, SDL_BlendMode blend
 **Validation:**
 - Opt-in Dreamcast SDL build: clean (no warnings from changed files).
 - Opt-out Dreamcast SDL build: clean (no `DC_RenderDriver` or `DC_PVR_*` symbols).
-- `pvr_vertex_color_blend` Flycast: PASS (NONE/BLEND accepted; ADD/MOD/MUL/custom rejected).
-- `pvr_textures` Flycast: PASS.
 - `pvr_viewport`, `pvr_clipping`, `pvr_points_lines` build: clean.
 - Physical hardware revalidation: unnecessary. The correction only changes the
   blend-mode API precheck path; PVR header generation and drawing behavior
@@ -938,7 +822,7 @@ the name dependency.
   The implementation passes `backing_w × backing_h × 2`, which is always ≥ 128
   and a multiple of 32 for POT dimensions ≥ 8. No action required.
 - `pvr_txr_load` cache flush: KOS synchronous load path does not require
-  explicit flushing. Verified by Flycast + hardware passes.
+  explicit flushing. Verified by physical-hardware passes.
 - UV scaling for partial `RenderCopy`: SDL computes UVs normalized to
   `texture->w`/`h` (logical). Backend rescales to `logical/backing`. For a
   partial source rect `srcrect={5,3,4,3}` on a 17×9 logical texture backed
@@ -971,15 +855,13 @@ the name dependency.
   have no unresolved `gl*` calls. A fresh opt-out archive has no native-PVR
   object or symbol. Its warnings are pre-existing in excluded Dreamcast
   video/GLdc files.
-- Flycast passes 28 cases, 57 creates, 47 updates, 41 locks, 16 invalid checks,
-  and all four pages. Direct inspection confirms correct logical corners,
-  one-pixel dimensions, right/bottom edges, NPOT padding isolation, pitch and
-  partial-lock behavior, old/new update ordering, nearest/bilinear filtering,
-  and ARGB1555/ARGB4444 alpha.
 - Physical 640x480 VGA hardware passes the same counts, captures four distinct
-  640x480 PPM pages, returns zero normally to `dc-load-ip`, and matches the
-  Flycast observations. Capture paths and SHA-256 values are recorded in the
-  focused README. The ordinary ELF was rebuilt without capture references.
+  640x480 PPM pages, and returns zero normally to `dc-load-ip`. Direct
+  inspection confirms correct logical corners, one-pixel dimensions,
+  right/bottom edges, NPOT padding isolation, pitch and partial-lock behavior,
+  old/new update ordering, nearest/bilinear filtering, and ARGB1555/ARGB4444
+  alpha. Capture paths and SHA-256 values are recorded in the focused README.
+  The ordinary ELF was rebuilt without capture references.
 - Full-backing synchronous uploads remain intentional. Partial uploads, DMA,
   custom store-queue row transfers, and read-modify-write logic remain
   deferred. Non-VGA modes and broader capacity/performance profiling remain
@@ -992,12 +874,37 @@ the name dependency.
   with `PVR_CMD_VERTEX_EOL`.
 - Interpolate position, UV, and vertex color when clipping polygons.
 - Map only blend modes representable by PVR source and destination factors.
-- Validate `NONE`, `BLEND`, `ADD`, and `MOD` independently.
+- Validate `NONE`, `BLEND`, `ADD`, and `MUL` independently; keep `MOD`
+  rejected until an exact implementation exists.
 - Reject unsupported equations or separate-alpha combinations through
   `SupportsBlendMode`; do not silently approximate them.
 
 Acceptance gate: `testgeometry`, `testscale`, `testrendercopyex`, and sprite
 stress tests closely match the OpenGL renderer.
+
+### Phase 4.1: RGB565 screen ADD/MUL blending — done
+
+- `SDL_BLENDMODE_ADD` maps to `PVR_BLEND_SRCALPHA / PVR_BLEND_ONE` and
+  `SDL_BLENDMODE_MUL` maps to
+  `PVR_BLEND_DESTCOLOR / PVR_BLEND_INVSRCALPHA`. `SupportsBlendMode` accepts
+  both alongside `NONE` and `BLEND`; `MOD` and unsupported custom equations
+  remain rejected.
+- The mappings are validated only for the current RGB565 screen destination.
+  ADD is not exact for stored alpha, and neither result extends to render
+  targets until Phase 5 supplies a focused target test.
+- `test/dreamcast/test/pvr_blend_add_mul` presents and captures four independent
+  pages covering CPU RGB565 reference pairs, alpha endpoints and saturation,
+  textured modulation/filtering, blend-state cache transitions, nonzero
+  viewport translation, genuine overlapping painter order, and per-vertex
+  textured/untextured geometry.
+- **Physical-hardware validation (2026-07-29):** Passed on a real Dreamcast at
+  640x480 VGA. All four raw framebuffer captures were directly inspected; CPU
+  and native reference samples agreed exactly or within one RGB565 channel
+  step. Geometry, guards, viewport placement, filtering, modulation, gradients,
+  and overlap order were intact with no corruption, missing primitive, seam,
+  freeze, reset, failed capture, or stale state. The program printed `PASS`,
+  returned zero, and returned control to `dc-load-ip`. Capture paths, hashes,
+  and the serial log are recorded in the focused README.
 
 ## Phase 5: render-to-texture
 
@@ -1020,7 +927,7 @@ transitions, backing dimensions, and orientation.
 
 Acceptance gate: screen/target switching, sampling a completed target,
 non-screen-sized targets, target viewport/scissor, and repeated target
-recreation work in Flycast and on hardware.
+recreation work on physical hardware with retained screenshots.
 
 ## Phase 6: Dreamcast-specific optimization
 
@@ -1177,8 +1084,8 @@ mode. It should provide:
 - static and streaming texture access;
 - nearest and linear filtering;
 - standard color and alpha modulation;
-- correct `NONE`, `BLEND`, `ADD`, and `MOD` where hardware mappings validate;
-- stable Flycast and real-hardware behavior; and
+- correct `NONE`, `BLEND`, `ADD`, and `MUL` where hardware mappings validate;
+- stable physical-hardware behavior with retained screenshots; and
 - no PVR ownership conflicts (single renderer, renderer-owns-PVR).
 
 Keep ordering and scene ownership as the earliest technical gates. Defer PVR
