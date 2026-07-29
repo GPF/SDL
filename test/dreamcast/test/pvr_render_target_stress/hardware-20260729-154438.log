@@ -1,0 +1,277 @@
+Connecting to 192.168.0.128...
+dc-load-ip 3.0.1 using Broadband Adapter (HIT-0400)
+Console enabled
+Upload <test/dreamcast/test/pvr_render_target_stress/pvr_render_target_stress.elf>
+File format is ELF, start address is 0x8c010000
+Section .text, lma 0x8c010000, size 952508
+Section .init, lma 0x8c0fa000, size 54
+Section .fini, lma 0x8c0fa038, size 42
+Section .rodata, lma 0x8c0fa080, size 89900
+Section .eh_frame, lma 0x8c10ffac, size 360
+Section .ctors, lma 0x8c110194, size 8
+Section .dtors, lma 0x8c11019c, size 8
+Section .data, lma 0x8c1101a4, size 13176
+Section .got, lma 0x8c11351c, size 12
+Transferred 1056068 bytes at 4131560 bytes / sec
+Executing at 0x8c010000
+Sending execute command (0xac010000, console=1, cdfsredir=0)...argv(1, argv0="pvr_render_target_stress.elf")...executing
+
+--
+KallistiOS v2.3.0 [dreamcast/pristine]
+  Git revision: af085653-dirty
+  Mon Jul 27 01:41:26 PM MST 2026
+  gpf@gpf-B550-Phantom-Gaming-4-ac:/opt/toolchains/dc/kos
+  sh-elf-gcc (GCC) 15.3.1 20260705
+maple: active drivers:
+    Dreameye (Camera): Camera
+    Sound Input Peripheral: Microphone
+    PuruPuru (Vibration) Pack: JumpPack
+    VMU Driver: Clock, LCD, MemoryCard
+    Mouse Driver: Mouse
+    Keyboard Driver: Keyboard
+    Controller Driver: Controller
+    Lightgun: LightGun
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+dc-load console support enabled
+maple: attached devices:
+  A0: Dreamcast Controller           (01000000: Controller)
+  A1: Visual Memory                  (0e000000: Clock, LCD, MemoryCard)
+  B0: Dreamcast Controller           (01000000: Controller)
+  B1: Visual Memory                  (0e000000: Clock, LCD, MemoryCard)
+  C0: Keyboard                       (40000000: Keyboard)
+  D0: Dreamcast Mouse                (00020000: Mouse)
+
+INFO: SDL2 Dreamcast video initialized: 640x480
+INFO: DREAMCAST_CreateWindow: window 640x480 created with framebuffer
+INFO: Display modes for Dreamcast retrieved successfully.
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+
+=== PHASE 1: BASELINE VRAM AND RENDERER INFO ===
+  Initial pvr_mem_available(): 3845800 bytes
+  Renderer: Dreamcast PVR
+  Flags:    0x0000000e
+  Output:   640 x 480
+  CHECK PASS: renderer is Dreamcast PVR
+  CHECK PASS: renderer advertises TARGETTEXTURE
+  Per-target allocation cost (dual RGB565 256x256): 262144 bytes
+  Max targets in exhaustion phase: 32
+
+=== PHASE 2: BOUNDED VRAM EXHAUSTION ===
+  Creating up to 32 256x256 RGB565 target textures...
+  VRAM before exhaustion phase: 3845800 bytes
+  Allocation 1/32 SUCCESS: error cleared
+  Allocation 2/32 SUCCESS: error cleared
+  Allocation 3/32 SUCCESS: error cleared
+  Allocation 4/32 SUCCESS: error cleared
+  Allocation 5/32 SUCCESS: error cleared
+  Allocation 6/32 SUCCESS: error cleared
+  Allocation 7/32 SUCCESS: error cleared
+  Allocation 8/32 SUCCESS: error cleared
+  Allocation 9/32 SUCCESS: error cleared
+  Allocation 10/32 SUCCESS: error cleared
+  Allocation 11/32 SUCCESS: error cleared
+  Allocation 12/32 SUCCESS: error cleared
+  Allocation 13/32 SUCCESS: error cleared
+  Allocation 14/32 SUCCESS: error cleared
+pvr_mem: ERROR -- out of PVR memory; texture heap probably corrupted
+  Allocation 15 FAILED: Could not allocate Dreamcast PVR texture VRAM
+  VRAM before failed create: 174888 bytes
+  VRAM after failed create:  174888 bytes
+  Failed create rollback: exact
+  VRAM after exhaustion phase: 174888 bytes
+  VRAM consumed by phase: 3670912 bytes
+  CLEAN EXHAUSTION confirmed: SDL_CreateTexture returned NULL.
+  Expected consumption: ~3670016 bytes (14 targets x 262144 dual)
+
+  Phase 2a: exercising 14 successfully created targets...
+
+  Phase 2b: freeing 14 targets and checking rollback...
+  VRAM before free: 174888 bytes
+  VRAM after free:  3845800 bytes
+  VRAM recovered:   3670912 bytes
+  VRAM fully recovered to the exact phase baseline.
+
+=== PHASE 3: KNOWN-GOOD RECOVERY ===
+  VRAM before recovery create: 3845800 bytes
+  Recovery create SUCCESS: 128x128 RGB565 target created.
+  CHECK PASS: recovery target pointer is non-NULL
+  VRAM before destroy: 3780200 bytes
+  VRAM after destroy:  3845800 bytes
+  VRAM delta:          65600 bytes
+  Final recovery frame:
+  Recovery frame presented.
+
+=== PHASE 4: REPEATED ROLLBACK CYCLES ===
+  Fixed cycle baseline: 3845800 bytes
+
+  Cycle 1/10:
+    Baseline VRAM: 3845800 bytes
+    Pre-create VRAM: 3845800 bytes
+pvr_mem: ERROR -- out of PVR memory; texture heap probably corrupted
+    Allocation 15 FAILED: Could not allocate Dreamcast PVR texture VRAM
+    Post-create VRAM: 174888 bytes
+    VRAM consumed:    3670912 bytes
+    Targets created:  14
+    Post-free VRAM:   3845800 bytes
+    VRAM recovered:   3670016 bytes
+    Post-cycle sanity create: OK
+
+  Cycle 2/10:
+    Baseline VRAM: 3845800 bytes
+    Pre-create VRAM: 3845800 bytes
+pvr_mem: ERROR -- out of PVR memory; texture heap probably corrupted
+    Allocation 15 FAILED: Could not allocate Dreamcast PVR texture VRAM
+    Post-create VRAM: 174888 bytes
+    VRAM consumed:    3670912 bytes
+    Targets created:  14
+    Post-free VRAM:   3845800 bytes
+    VRAM recovered:   3670016 bytes
+    Post-cycle sanity create: OK
+
+  Cycle 3/10:
+    Baseline VRAM: 3845800 bytes
+    Pre-create VRAM: 3845800 bytes
+pvr_mem: ERROR -- out of PVR memory; texture heap probably corrupted
+    Allocation 15 FAILED: Could not allocate Dreamcast PVR texture VRAM
+    Post-create VRAM: 174888 bytes
+    VRAM consumed:    3670912 bytes
+    Targets created:  14
+    Post-free VRAM:   3845800 bytes
+    VRAM recovered:   3670016 bytes
+    Post-cycle sanity create: OK
+
+  Cycle 4/10:
+    Baseline VRAM: 3845800 bytes
+    Pre-create VRAM: 3845800 bytes
+pvr_mem: ERROR -- out of PVR memory; texture heap probably corrupted
+    Allocation 15 FAILED: Could not allocate Dreamcast PVR texture VRAM
+    Post-create VRAM: 174888 bytes
+    VRAM consumed:    3670912 bytes
+    Targets created:  14
+    Post-free VRAM:   3845800 bytes
+    VRAM recovered:   3670016 bytes
+    Post-cycle sanity create: OK
+
+  Cycle 5/10:
+    Baseline VRAM: 3845800 bytes
+    Pre-create VRAM: 3845800 bytes
+pvr_mem: ERROR -- out of PVR memory; texture heap probably corrupted
+    Allocation 15 FAILED: Could not allocate Dreamcast PVR texture VRAM
+    Post-create VRAM: 174888 bytes
+    VRAM consumed:    3670912 bytes
+    Targets created:  14
+    Post-free VRAM:   3845800 bytes
+    VRAM recovered:   3670016 bytes
+    Post-cycle sanity create: OK
+
+  Cycle 6/10:
+    Baseline VRAM: 3845800 bytes
+    Pre-create VRAM: 3845800 bytes
+pvr_mem: ERROR -- out of PVR memory; texture heap probably corrupted
+    Allocation 15 FAILED: Could not allocate Dreamcast PVR texture VRAM
+    Post-create VRAM: 174888 bytes
+    VRAM consumed:    3670912 bytes
+    Targets created:  14
+    Post-free VRAM:   3845800 bytes
+    VRAM recovered:   3670016 bytes
+    Post-cycle sanity create: OK
+
+  Cycle 7/10:
+    Baseline VRAM: 3845800 bytes
+    Pre-create VRAM: 3845800 bytes
+pvr_mem: ERROR -- out of PVR memory; texture heap probably corrupted
+    Allocation 15 FAILED: Could not allocate Dreamcast PVR texture VRAM
+    Post-create VRAM: 174888 bytes
+    VRAM consumed:    3670912 bytes
+    Targets created:  14
+    Post-free VRAM:   3845800 bytes
+    VRAM recovered:   3670016 bytes
+    Post-cycle sanity create: OK
+
+  Cycle 8/10:
+    Baseline VRAM: 3845800 bytes
+    Pre-create VRAM: 3845800 bytes
+pvr_mem: ERROR -- out of PVR memory; texture heap probably corrupted
+    Allocation 15 FAILED: Could not allocate Dreamcast PVR texture VRAM
+    Post-create VRAM: 174888 bytes
+    VRAM consumed:    3670912 bytes
+    Targets created:  14
+    Post-free VRAM:   3845800 bytes
+    VRAM recovered:   3670016 bytes
+    Post-cycle sanity create: OK
+
+  Cycle 9/10:
+    Baseline VRAM: 3845800 bytes
+    Pre-create VRAM: 3845800 bytes
+pvr_mem: ERROR -- out of PVR memory; texture heap probably corrupted
+    Allocation 15 FAILED: Could not allocate Dreamcast PVR texture VRAM
+    Post-create VRAM: 174888 bytes
+    VRAM consumed:    3670912 bytes
+    Targets created:  14
+    Post-free VRAM:   3845800 bytes
+    VRAM recovered:   3670016 bytes
+    Post-cycle sanity create: OK
+
+  Cycle 10/10:
+    Baseline VRAM: 3845800 bytes
+    Pre-create VRAM: 3845800 bytes
+pvr_mem: ERROR -- out of PVR memory; texture heap probably corrupted
+    Allocation 15 FAILED: Could not allocate Dreamcast PVR texture VRAM
+    Post-create VRAM: 174888 bytes
+    VRAM consumed:    3670912 bytes
+    Targets created:  14
+    Post-free VRAM:   3845800 bytes
+    VRAM recovered:   3670016 bytes
+    Post-cycle sanity create: OK
+
+  Initial baseline VRAM: 3845800 bytes
+  Final baseline VRAM:   3845800 bytes
+
+=== PHASE 5: MIXED-SIZE FRAGMENTATION PROBE ===
+  Pre-creation VRAM: 3845800 bytes
+  Mixed create 1 (256x256): OK
+  Mixed create 2 (64x64): OK
+  Mixed create 3 (128x128): OK
+  Mixed create 4 (256x256): OK
+  Mixed create 5 (64x64): OK
+  Mixed create 6 (128x128): OK
+  Mixed create 7 (256x256): OK
+  Mixed create 8 (64x64): OK
+  Mixed create 9 (128x128): OK
+  Mixed create 10 (256x256): OK
+  Mixed create 11 (64x64): OK
+  Mixed create 12 (128x128): OK
+  Mixed create 13 (256x256): OK
+  Mixed create 14 (64x64): OK
+  Mixed create 15 (128x128): OK
+  Mixed create 16 (256x256): OK
+  Mixed create 17 (64x64): OK
+  Mixed create 18 (128x128): OK
+  Mixed create 19 (256x256): OK
+  Mixed create 20 (64x64): OK
+  Mixed create 21 (128x128): OK
+  Mixed create 22 (256x256): OK
+  Mixed create 23 (64x64): OK
+  Mixed create 24 (128x128): OK
+  Mixed-size successful creates: 24 / 24
+  Destroying in reverse order...
+  Post-mixed VRAM: 3845800 bytes
+  VRAM delta:      0 bytes
+  Post-mixed 256x256 create: OK
+  Post-mixed 256x256 draw and destroy: OK
+  CHECK PASS: post-mixed 256x256 create succeeded
+
+=== PHASE 6: FINAL RECOVERY SCREENSHOT ===
+  Final recovery target (128x128): OK
+vid_screen_shot: written to output file '/pc/pvr_render_target_stress-hardware.ppm'
+  CAPTURE OK: /pc/pvr_render_target_stress-hardware.ppm
+  Final recovery frame presented and captured.
+  Expected visual: sampled 128x128 target (upper-left),
+    green status bar (bottom), white corner markers.
+    No missing geometry or corruption.
+
+=== ALL PHASES COMPLETE ===
+Total checks: 4, failures: 0
+PASS
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+Program returned 0

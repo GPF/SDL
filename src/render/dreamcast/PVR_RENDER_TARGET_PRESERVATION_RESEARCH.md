@@ -808,6 +808,34 @@ guarded preservation design on the tested 640x480 VGA hardware path. Ordinary
 builds remain isolated and continue to omit target-texture capability pending
 an explicit promotion decision.
 
+### 12.10 Bounded VRAM-pressure follow-up
+
+The focused test under `test/dreamcast/test/pvr_render_target_stress/` passed
+on the same physical 640x480 VGA Dreamcast. Its authoritative serial log is
+`hardware-20260729-154438.log` and its raw recovery framebuffer is
+`pvr_render_target_stress-hardware-final.ppm`. The earlier `154230` run's
+final framebuffer is byte-identical and remains retained without the `-final`
+suffix.
+
+After the renderer's paired logical-screen allocation, the texture heap had
+3,845,800 bytes available. Fourteen paired 256x256 RGB565 targets succeeded.
+Target 15 failed during its second allocation with exactly 174,888 bytes both
+before and after the failed creation, proving exact partial-allocation
+rollback. Freeing all 14 targets restored exactly 3,845,800 bytes.
+
+Ten repeated exhaustion cycles produced the same 14-success/15-failure result
+and exact baseline recovery without accumulation. A mixed sequence of 24
+64x64, 128x128, and 256x256 targets survived reverse-order destruction,
+returned to the exact baseline, and permitted a later 256x256 target to render
+successfully. The final sampled target, target-corner markers, center marker,
+screen-corner markers, and recovery bar are intact. The program reported four
+checks, zero failures, `PASS`, and returned zero normally.
+
+This closes the bounded VRAM exhaustion, partial-allocation rollback,
+fragmentation, and post-exhaustion recovery gates for the guarded prototype.
+Wider video-mode and performance-policy decisions remain separate promotion
+questions rather than failures of this tested allocation path.
+
 ---
 
 **End of document.**

@@ -1012,6 +1012,15 @@ corrections are recorded in `src/render/dreamcast/PVR_RENDER_TARGET_RESEARCH.md`
 - This validates the guarded prototype design. Keep ordinary-build capability
   isolation until the project explicitly chooses promotion and completes any
   desired wider VRAM-pressure, video-mode, and performance gates.
+- The bounded VRAM-pressure follow-up also passes on physical hardware. With
+  the paired logical screen already allocated, `pvr_mem_available()` reports
+  3,845,800 bytes. Fourteen paired 256x256 targets succeed; allocation 15
+  fails cleanly with an exact partial-allocation rollback. Freeing all targets
+  restores the exact baseline. Ten repeated exhaust/free cycles show no
+  accumulating loss, 24 mixed-size allocations survive reverse destruction,
+  and a subsequent target renders normally. The final recovery screenshot is
+  intact and the program returns zero. Evidence is under
+  `test/dreamcast/test/pvr_render_target_stress/`.
 
 ## Phase 6: Dreamcast-specific optimization
 

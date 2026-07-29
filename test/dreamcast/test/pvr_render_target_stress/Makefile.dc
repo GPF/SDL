@@ -1,0 +1,41 @@
+TARGET = pvr_render_target_stress
+OBJS = pvr_render_target_stress.o
+
+# Explicit guarded prototype archive (as specified in requirements).
+SDL2_LIBDIR ?= /home/gpf/code/dreamcast/SDL2/build-scripts/dcbuild_prototype
+HARDWARE_SCREENSHOTS ?= 0
+
+ifeq ($(HARDWARE_SCREENSHOTS),1)
+SCREENSHOT_CFLAGS = -DDC_PVR_RENDER_TARGET_PROTOTYPE_HARDWARE_SCREENSHOT
+endif
+
+all: check-sdl2 $(TARGET).bin
+
+include $(KOS_BASE)/Makefile.rules
+
+.PHONY: check-sdl2
+check-sdl2:
+	@test -f $(KOS_BASE)/addons/include/SDL2/SDL.h || \
+		(echo "SDL2 headers not found in $(KOS_BASE)/addons/include/SDL2"; exit 1)
+	@test -f $(SDL2_LIBDIR)/libSDL2.a || \
+		(echo "Prototype SDL2 not found in $(SDL2_LIBDIR)"; exit 1)
+	@sh-elf-nm $(SDL2_LIBDIR)/libSDL2.a | grep -q '[[:space:]]_DC_RenderDriver$$' || \
+		(echo "Requested SDL2 does not include the native Dreamcast PVR renderer."; exit 1)
+	@sh-elf-nm $(SDL2_LIBDIR)/libSDL2.a | grep -q '[[:space:]]_DC_PVR_SetRenderTarget$$' || \
+		(echo "Requested SDL2 is not the guarded render-target prototype archive."; exit 1)
+
+clean:
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin $(TARGET).map
+
+pvr_render_target_stress.o: pvr_render_target_stress.c
+	kos-cc -I$(KOS_BASE)/addons/include/SDL2 -DDREAMCAST -D__DREAMCAST__ \
+		-Wall -Wextra -Werror -DDC_PVR_RENDER_TARGET_PROTOTYPE \
+		$(SCREENSHOT_CFLAGS) -c $< -o $@
+
+$(TARGET).elf: $(OBJS)
+	kos-cc -o $(TARGET).elf $(OBJS) -Wl,-Map,$(TARGET).map \
+		$(SDL2_LIBDIR)/libSDL2.a $(KOS_BASE)/addons/lib/dreamcast/libSDL2main.a \
+		-lGL -lm -lkosutils -lpthread
+
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin
