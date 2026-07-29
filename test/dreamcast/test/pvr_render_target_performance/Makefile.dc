@@ -1,0 +1,108 @@
+# Performance comparison: ordinary native Dreamcast PVR renderer
+# versus guarded render-target prototype.
+#
+# Two separate ELFs are built from the same source:
+#   ordinary  — no DC_PVR_RENDER_TARGET_PROTOTYPE
+#   prototype — DC_PVR_RENDER_TARGET_PROTOTYPE defined
+#
+# Each build links against its own SDL2 archive and is verified via
+# linker-map symbol checks.
+
+TARGET_SRC = pvr_render_target_performance.c
+
+# ------------------------------------------------------------------
+# Archive paths
+# ------------------------------------------------------------------
+SDL2_ROOT ?= $(abspath ../../../..)
+SDL2_ORDINARY_LIBDIR ?= $(SDL2_ROOT)/build-scripts/dcbuild
+SDL2_PROTOTYPE_LIBDIR ?= $(SDL2_ROOT)/build-scripts/dcbuild_prototype
+
+# ------------------------------------------------------------------
+# Screenshot support
+# ------------------------------------------------------------------
+HARDWARE_SCREENSHOTS ?= 0
+SCREENSHOT_CFLAGS =
+ifeq ($(HARDWARE_SCREENSHOTS),1)
+SCREENSHOT_CFLAGS += -DDC_PVR_RENDER_TARGET_PERFORMANCE_HARDWARE_SCREENSHOT
+endif
+
+# ------------------------------------------------------------------
+# Common flags
+# ------------------------------------------------------------------
+COMMON_CFLAGS = -I$(KOS_BASE)/addons/include/SDL2 -DDREAMCAST -D__DREAMCAST__ \
+		-Wall -Wextra -Werror
+
+all: check-ordinary check-prototype \
+	ordinary.elf ordinary.bin \
+	prototype.elf prototype.bin
+
+# ------------------------------------------------------------------
+# Ordinary build
+# ------------------------------------------------------------------
+ordinary.o: $(TARGET_SRC)
+	kos-cc $(COMMON_CFLAGS) $(SCREENSHOT_CFLAGS) -c $< -o $@
+
+ordinary.elf: ordinary.o
+	kos-cc -o ordinary.elf ordinary.o -Wl,-Map,ordinary.map \
+		$(SDL2_ORDINARY_LIBDIR)/libSDL2.a \
+		$(SDL2_ORDINARY_LIBDIR)/libSDL2main.a \
+		-lGL -lm -lkosutils -lpthread
+
+ordinary.bin: ordinary.elf
+	$(KOS_OBJCOPY) -O binary ordinary.elf ordinary.bin
+
+# ------------------------------------------------------------------
+# Prototype build
+# ------------------------------------------------------------------
+prototype.o: $(TARGET_SRC)
+	kos-cc $(COMMON_CFLAGS) $(SCREENSHOT_CFLAGS) \
+		-DDC_PVR_RENDER_TARGET_PROTOTYPE -c $< -o $@
+
+prototype.elf: prototype.o
+	kos-cc -o prototype.elf prototype.o -Wl,-Map,prototype.map \
+		$(SDL2_PROTOTYPE_LIBDIR)/libSDL2.a \
+		$(SDL2_PROTOTYPE_LIBDIR)/libSDL2main.a \
+		-lGL -lm -lkosutils -lpthread
+
+prototype.bin: prototype.elf
+	$(KOS_OBJCOPY) -O binary prototype.elf prototype.bin
+
+# ------------------------------------------------------------------
+# Linker-map symbol checks (via sh-elf-nm on the ELF)
+# ------------------------------------------------------------------
+check-ordinary: ordinary.elf
+	@echo "=== ORDINARY ELF SYMBOL CHECK ==="
+	@sh-elf-nm ordinary.elf | grep -q '_DC_RenderDriver' && \
+		echo "  PASS: _DC_RenderDriver found" || \
+		(echo "  FAIL: _DC_RenderDriver NOT found"; exit 1)
+	@sh-elf-nm ordinary.elf | grep -q '_DC_PVR_SetRenderTarget' && \
+		(echo "  FAIL: _DC_PVR_SetRenderTarget unexpectedly found"; exit 1) || \
+		echo "  PASS: _DC_PVR_SetRenderTarget absent"
+
+check-prototype: prototype.elf
+	@echo "=== PROTOTYPE ELF SYMBOL CHECK ==="
+	@sh-elf-nm prototype.elf | grep -q '_DC_RenderDriver' && \
+		echo "  PASS: _DC_RenderDriver found" || \
+		(echo "  FAIL: _DC_RenderDriver NOT found"; exit 1)
+	@sh-elf-nm prototype.elf | grep -q '_DC_PVR_SetRenderTarget' && \
+		echo "  PASS: _DC_PVR_SetRenderTarget found" || \
+		(echo "  FAIL: _DC_PVR_SetRenderTarget NOT found"; exit 1)
+
+# ------------------------------------------------------------------
+# Hardware launch commands
+# ------------------------------------------------------------------
+.PHONY: run-ordinary run-prototype
+run-ordinary: ordinary.bin
+	@echo "Upload and run: ordinary.elf"
+	@echo "  kos-tool -t <DC_IP> -x ordinary.elf -m ."
+run-prototype: prototype.bin
+	@echo "Upload and run: prototype.elf"
+	@echo "  kos-tool -t <DC_IP> -x prototype.elf -m ."
+
+# ------------------------------------------------------------------
+# Clean
+# ------------------------------------------------------------------
+.PHONY: clean
+clean:
+	rm -f ordinary.o ordinary.elf ordinary.bin ordinary.map \
+		prototype.o prototype.elf prototype.bin prototype.map

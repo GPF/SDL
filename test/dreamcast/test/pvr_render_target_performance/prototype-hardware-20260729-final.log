@@ -1,0 +1,179 @@
+Connecting to 192.168.0.128...
+dc-load-ip 3.0.1 using Broadband Adapter (HIT-0400)
+Console enabled
+Upload <test/dreamcast/test/pvr_render_target_performance/prototype.elf>
+File format is ELF, start address is 0x8c010000
+Section .text, lma 0x8c010000, size 965020
+Section .init, lma 0x8c0fc000, size 54
+Section .fini, lma 0x8c0fc038, size 42
+Section .rodata, lma 0x8c0fc080, size 89172
+Section .eh_frame, lma 0x8c111cd4, size 360
+Section .ctors, lma 0x8c111ebc, size 8
+Section .dtors, lma 0x8c111ec4, size 8
+Section .data, lma 0x8c111ecc, size 13176
+Section .got, lma 0x8c115244, size 12
+Transferred 1067852 bytes at 4160716 bytes / sec
+Executing at 0x8c010000
+Sending execute command (0xac010000, console=1, cdfsredir=0)...argv(1, argv0="prototype.elf")...executing
+
+--
+KallistiOS v2.3.0 [dreamcast/pristine]
+  Git revision: af085653-dirty
+  Mon Jul 27 01:41:26 PM MST 2026
+  gpf@gpf-B550-Phantom-Gaming-4-ac:/opt/toolchains/dc/kos
+  sh-elf-gcc (GCC) 15.3.1 20260705
+maple: active drivers:
+    Dreameye (Camera): Camera
+    Sound Input Peripheral: Microphone
+    PuruPuru (Vibration) Pack: JumpPack
+    VMU Driver: Clock, LCD, MemoryCard
+    Mouse Driver: Mouse
+    Keyboard Driver: Keyboard
+    Controller Driver: Controller
+    Lightgun: LightGun
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+dc-load console support enabled
+maple: attached devices:
+  A0: Dreamcast Controller           (01000000: Controller)
+  A1: Visual Memory                  (0e000000: Clock, LCD, MemoryCard)
+  B0: Dreamcast Controller           (01000000: Controller)
+  B1: Visual Memory                  (0e000000: Clock, LCD, MemoryCard)
+  C0: Keyboard                       (40000000: Keyboard)
+  D0: Dreamcast Mouse                (00020000: Mouse)
+
+PVR RTT PERFORMANCE COMPARISON
+  build:       prototype
+  timer API:   timer_us_gettime64() from kos/timer.h
+  timer unit:  microseconds (uint64_t since KOS boot)
+  timer description: microseconds via timer_us_gettime64()
+  timer scope: measured interval covers SDL command ingestion,
+               command execution, RTT scene finish (if any),
+               physical presentation scene, pvr_wait_render_done(),
+               and one explicit vid_waitvbl().
+  warmup frames:    60
+  measured frames:  300
+  timer resolution: 1 us
+INFO: SDL2 Dreamcast video initialized: 640x480
+INFO: DREAMCAST_CreateWindow: window 640x480 created with framebuffer
+INFO: Display modes for Dreamcast retrieved successfully.
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+
+  renderer name:   Dreamcast PVR
+  renderer flags:  0x0000000e
+  output size:     640 x 480
+  vsync:           enabled
+  CHECK PASS: renderer is Dreamcast PVR
+  CHECK PASS: prototype: SDL_RENDERER_TARGETTEXTURE present
+  VRAM build=prototype available=3845800
+
+========== SCREEN-ONLY WORKLOADS (A-D) ==========
+
+=== WORKLOAD A: clear-only ===
+  warmup frames:       60
+  measured frames:     300
+  timer API:           timer_us_gettime64() (kos/timer.h)
+  min_us:              16632
+  max_us:              19136
+  mean_us:             16675
+  median_us:           16633
+  p95_us:              16634
+  p99_us:              19135
+  total_us:            5002506
+  over_16667_us:      5
+  over_20000_us:      0
+  fps_x1000:           59969
+PERF build=prototype workload=A frames=300 min_us=16632 max_us=19136 mean_us=16675 median_us=16633 p95_us=16634 p99_us=19135 over_16667=5 over_20000=0 fps_x1000=59969 total_us=5002506
+
+=== WORKLOAD B: moderate untextured geometry ===
+  warmup frames:       60
+  measured frames:     300
+  timer API:           timer_us_gettime64() (kos/timer.h)
+  min_us:              16630
+  max_us:              35363
+  mean_us:             22236
+  median_us:           17044
+  p95_us:              32861
+  p99_us:              35363
+  total_us:            6671062
+  over_16667_us:      200
+  over_20000_us:      100
+  fps_x1000:           44970
+PERF build=prototype workload=B frames=300 min_us=16630 max_us=35363 mean_us=22236 median_us=17044 p95_us=32861 p99_us=35363 over_16667=200 over_20000=100 fps_x1000=44970 total_us=6671062
+
+=== WORKLOAD C: moderate textured geometry ===
+  warmup frames:       60
+  measured frames:     300
+  timer API:           timer_us_gettime64() (kos/timer.h)
+  min_us:              33272
+  max_us:              35776
+  mean_us:             33356
+  median_us:           33273
+  p95_us:              33274
+  p99_us:              35776
+  total_us:            10007052
+  over_16667_us:      300
+  over_20000_us:      300
+  fps_x1000:           29978
+PERF build=prototype workload=C frames=300 min_us=33272 max_us=35776 mean_us=33356 median_us=33273 p95_us=33274 p99_us=35776 over_16667=300 over_20000=300 fps_x1000=29978 total_us=10007052
+
+=== WORKLOAD D: higher command load ===
+  warmup frames:       60
+  measured frames:     300
+  timer API:           timer_us_gettime64() (kos/timer.h)
+  min_us:              49913
+  max_us:              52417
+  mean_us:             50039
+  median_us:           49914
+  p95_us:              49922
+  p99_us:              52417
+  total_us:            15011790
+  over_16667_us:      300
+  over_20000_us:      300
+  fps_x1000:           19984
+PERF build=prototype workload=D frames=300 min_us=49913 max_us=52417 mean_us=50039 median_us=49914 p95_us=49922 p99_us=52417 over_16667=300 over_20000=300 fps_x1000=19984 total_us=15011790
+
+========== PROTOTYPE-ONLY TARGET WORKLOADS (E-F) ==========
+
+=== WORKLOAD E: 256x256 target update ===
+  warmup frames:       60
+  measured frames:     300
+  timer API:           timer_us_gettime64() (kos/timer.h)
+  min_us:              33273
+  max_us:              35777
+  mean_us:             33357
+  median_us:           33274
+  p95_us:              33275
+  p99_us:              35777
+  total_us:            10007279
+  over_16667_us:      300
+  over_20000_us:      300
+  fps_x1000:           29978
+PERF build=prototype workload=E frames=300 min_us=33273 max_us=35777 mean_us=33357 median_us=33274 p95_us=33275 p99_us=35777 over_16667=300 over_20000=300 fps_x1000=29978 total_us=10007279
+
+=== WORKLOAD F: target preservation ===
+  warmup frames:       60
+  measured frames:     300
+  timer API:           timer_us_gettime64() (kos/timer.h)
+  min_us:              17044
+  max_us:              35365
+  mean_us:             25012
+  median_us:           24956
+  p95_us:              32863
+  p99_us:              35365
+  total_us:            7503684
+  over_16667_us:      300
+  over_20000_us:      150
+  fps_x1000:           39980
+PERF build=prototype workload=F frames=300 min_us=17044 max_us=35365 mean_us=25012 median_us=24956 p95_us=32863 p99_us=35365 over_16667=300 over_20000=150 fps_x1000=39980 total_us=7503684
+
+========== DRAWING REFERENCE SCREEN ==========
+vid_screen_shot: written to output file '/pc/pvr_render_target_performance-prototype.ppm'
+  CAPTURE OK: /pc/pvr_render_target_performance-prototype.ppm
+
+========== SUMMARY ==========
+  checks:      2
+  failures:    0
+  PASS: YES
+  Holding frame for 12000 ms, then returning to dc-load-ip...
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+Program returned 0

@@ -836,6 +836,51 @@ fragmentation, and post-exhaustion recovery gates for the guarded prototype.
 Wider video-mode and performance-policy decisions remain separate promotion
 questions rather than failures of this tested allocation path.
 
+### 12.11 Physical performance gate and promotion decision
+
+The focused comparison under
+`test/dreamcast/test/pvr_render_target_performance/` built ordinary and guarded
+prototype ELFs from one workload source, using explicit local archives and
+strict warnings. Both final ELFs passed symbol isolation checks, ran on the
+same physical 640x480 VGA Dreamcast, wrote raw framebuffer captures, reported
+zero failures, returned zero, and returned normally to `dc-load-ip`.
+
+The full measured interval covers SDL command ingestion, command execution,
+scene completion, physical presentation, `pvr_wait_render_done()`, and one
+explicit vertical-blank wait. Each workload uses 60 warmup frames and 300
+measured frames.
+
+| Workload | Ordinary mean | Prototype mean | Delta | Ordinary FPS | Prototype FPS |
+|---|---:|---:|---:|---:|---:|
+| A: clear | 16,679 us | 16,675 us | -4 us | 59.954 | 59.969 |
+| B: 100 rectangles | 16,678 us | 22,236 us | +5,558 us | 59.956 | 44.970 |
+| C: 200 texture copies | 16,678 us | 33,356 us | +16,678 us | 59.956 | 29.978 |
+| D: 400 mixed draws | 33,361 us | 50,039 us | +16,678 us | 29.974 | 19.984 |
+
+Prototype-only target update E averages 33,357 us (29.978 FPS), and repeated
+preservation F averages 25,012 us (39.980 FPS). These are reported separately
+and are not used as ordinary/prototype screen-only deltas.
+
+Available texture VRAM after renderer creation is 5,943,040 bytes for the
+ordinary build and 3,845,800 bytes for the prototype, a 2,097,240-byte
+reduction. Direct inspection of both final raw captures passes: the shared
+reference scene and all four corner probes are intact, and the prototype's
+sampled preservation target retains both markers.
+
+Authoritative evidence:
+
+- `ordinary-hardware-20260729-final.log`
+- `prototype-hardware-20260729-final.log`
+- `pvr_render_target_performance-ordinary-final.ppm`
+- `pvr_render_target_performance-prototype-final.ppm`
+
+The current design is functionally validated but fails the promotion policy
+gate. Its always-on paired logical-screen RTT path materially slows ordinary
+screen-only workloads B-D and reserves about 2 MiB even when no target texture
+is created. Keep `DC_PVR_RENDER_TARGET_PROTOTYPE` and do not advertise target
+textures in the ordinary renderer. Future promotion must avoid the unconditional
+logical-screen cost or adopt a deliberate opt-in policy.
+
 ---
 
 **End of document.**

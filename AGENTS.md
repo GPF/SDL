@@ -1021,6 +1021,22 @@ corrections are recorded in `src/render/dreamcast/PVR_RENDER_TARGET_RESEARCH.md`
   and a subsequent target renders normally. The final recovery screenshot is
   intact and the program returns zero. Evidence is under
   `test/dreamcast/test/pvr_render_target_stress/`.
+- The focused performance comparison also completed on physical 640x480 VGA
+  hardware. Against the ordinary renderer, the guarded prototype changes
+  screen-only mean frame time from 16,678 to 22,236 us for 100 rectangles,
+  16,678 to 33,356 us for 200 texture copies, and 33,361 to 50,039 us for the
+  400-draw workload. Effective rates fall from 59.956 to 44.970 FPS, 59.956
+  to 29.978 FPS, and 29.974 to 19.984 FPS respectively. Clear-only remains
+  effectively unchanged. Available VRAM falls from 5,943,040 to 3,845,800
+  bytes, a 2,097,240-byte reduction. Both reference captures are visually
+  correct and both programs return zero normally.
+- This performance gate rejects promotion of the current always-on
+  logical-screen preservation architecture. Keep
+  `DC_PVR_RENDER_TARGET_PROTOTYPE` and ordinary capability isolation. A future
+  design must avoid imposing the paired logical-screen RTT cost on ordinary
+  screen-only rendering, or define an explicit opt-in policy. Authoritative
+  logs, captures, workload definitions, and limitations are under
+  `test/dreamcast/test/pvr_render_target_performance/`.
 
 ## Phase 6: Dreamcast-specific optimization
 
