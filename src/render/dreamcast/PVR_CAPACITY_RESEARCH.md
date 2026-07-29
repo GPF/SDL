@@ -1,7 +1,7 @@
 # Dreamcast Native PVR Renderer: TA/OPB Capacity and Command-Load Stress Research
 
-**Status:** Research and architecture design complete.
-**Date:** 2026-07-28
+**Status:** Research, stress-test implementation, and focused 640x480 VGA physical-hardware validation complete.
+**Date:** 2026-07-29
 **Scope:** PVR capacity definitions, KOS overflow behavior, command-to-PVR expansion estimates, header-cache impact, SDL queue versus PVR capacity analysis, scene-splitting feasibility, capacity observability, stress-workload design, hardware-first validation policy, failure-and-recovery policy, renderer-safeguard options, and scope boundaries.
 
 **Related design:** `PVR_RENDERER_RESEARCH.md` records the established renderer architecture and lifecycle contract. `PVR_CLIPPING_RESEARCH.md` records the validated CPU clipping contract. `PVR_POINTS_LINES_RESEARCH.md` records the points/lines expansion contract. `PVR_TEXTURE_RESEARCH.md` records the texture subsystem contract. `PVR_PARTIAL_UPLOAD_RESEARCH.md` audits the KOS transfer APIs.
@@ -364,10 +364,30 @@ For `S` sprites and `O` overlays, the exact load is `3763 + 6S + 7O`: `O + 3` he
 1. Strict build and static checks (`-Wall -Wextra -Werror`, explicit local archive, linker map).
 2. Physical Dreamcast hardware via BBA (`kos-tool -t 192.168.0.128 -x <elf> -m .`).
 3. Serial-output review.
-4. Hardware screenshot only when visual confirmation is needed.
+4. Capture and directly inspect the actual hardware framebuffer for every visually distinct workload.
 5. Flycast only as an optional diagnostic aid.
 
 Hardware is first and authoritative. Flycast is secondary.
+
+### 10.1 Focused physical-hardware result (2026-07-29)
+
+The ordinary A-E test passes on a real Dreamcast at 640x480 VGA. Every stage
+reaches presentation and its known-good recovery frame with the exact expected
+command accounting. Final totals are 6,901 units for A, 6,930 for B, 6,901 for
+C, 6,901 for D, and 6,688 for E. Workload F is absent, the program prints PASS,
+and it returns zero.
+
+Fourteen raw hardware framebuffer captures from a test-only
+`DC_PVR_CAPACITY_HARDWARE_SCREENSHOTS` build cover the final A-D stress frames,
+one recovery frame per workload, and all five E stages. Workload F remains
+excluded. The capture helper waits three vblanks after presentation before
+reading the displayed page; this is required by the PVR presentation-buffer
+lifecycle. The ordinary build compiles out the capture helper, hardware paths,
+and `vid_screen_shot`. Direct inspection shows complete geometry and textures,
+stable recovery frames, progressive E load, and correct E translucency without
+corruption, missing geometry, freeze, reset, tearing, or failed recovery. The
+authoritative serial-log path, capture paths, and SHA-256 values are recorded in
+`test/dreamcast/test/pvr_capacity_stress/README.md`.
 
 ---
 

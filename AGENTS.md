@@ -363,6 +363,28 @@ This completes the first pixel-exact clipping increment for the validated
 640x480 VGA path. The broader 320x240, PAL/NTSC, subpixel-position, and stress
 matrix remains Phase 7 hardening rather than a blocker for this increment.
 
+## Agent physical-hardware validation workflow
+
+Every physical Dreamcast validation must include at least one captured image of
+the actual hardware output for each visually distinct test page or workload.
+Prefer a raw framebuffer capture written through the hardware `/pc` path (for
+example, with `vid_screen_shot`) when the test supports it. Otherwise ask the
+onsite operator to photograph the physical display and attach the image. An
+emulator screenshot is not a substitute for a hardware capture.
+
+Inspect the hardware capture directly and compare it first with the visual
+expectations derived from the test source and its documented contract. Use a
+Flycast capture as a comparison reference only when the expected result is
+ambiguous or a hardware result needs diagnostic reproduction; this should be
+rare. Record the hardware image path, the concrete visual observations, and
+any comparison performed. Serial output, stage-completion messages, and a PASS
+line do not establish visual correctness by themselves.
+
+If a test advances too quickly to capture or inspect, coordinate with the
+onsite operator before launch and use an existing pause or observation mode.
+When the task permits a test-only correction, extending display hold times is
+acceptable, but do not infer a visual pass from the brief output.
+
 ## Agent Flycast validation workflow
 
 Agents can execute Dreamcast ELF tests in Flycast, inspect their serial/log
@@ -899,7 +921,9 @@ the name dependency.
 **Test gaps (tracked, not blocking)**
 
 - No 320×240 or PAL/NTSC mode coverage (Phase 7 hardening)
-- No TA/OPB capacity measurement (Phase 6/7)
+- Safe below-boundary TA command-capacity stress now passes at 81.6-84.6% on
+  640x480 VGA hardware with retained framebuffer captures. Deliberate boundary
+  probing and non-VGA TA/OPB characterization remain Phase 7 hardening.
 
 **Repository hygiene**
 
