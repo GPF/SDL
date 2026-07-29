@@ -916,11 +916,14 @@ least as wide as the render area, and a stride divisible by four pixels.
 
 A target switch must:
 
-1. flush and finish the active scene;
-2. begin a new screen or RTT scene;
-3. update target dimensions, viewport, and clipping state;
-4. handle target texture orientation consistently; and
-5. synchronize before sampling a texture that was just rendered.
+1. prevalidate the new target before changing usable backend state;
+2. flush and finish the active scene;
+3. record the new destination without beginning an empty scene;
+4. begin the next screen or RTT scene lazily from command execution;
+5. consume SDL's restored target dimensions, viewport, and clipping state;
+6. handle target texture orientation consistently; and
+7. synchronize at presentation/resource-release boundaries, adding a target
+   switch stall only if physical evidence requires one.
 
 Use GLdc's framebuffer implementation as the local reference for RTT scene
 transitions, backing dimensions, and orientation.
@@ -928,6 +931,35 @@ transitions, backing dimensions, and orientation.
 Acceptance gate: screen/target switching, sampling a completed target,
 non-screen-sized targets, target viewport/scissor, and repeated target
 recreation work on physical hardware with retained screenshots.
+
+### Phase 5.1: guarded RTT prototype — rejected on hardware
+
+- A private `DC_PVR_RENDER_TARGET_PROTOTYPE` build implements RGB565 target
+  allocation, lazy target-aware scene ownership, target sampling, feedback
+  rejection, and prototype-only capability advertisement. The ordinary build
+  remains isolated and does not advertise target textures.
+- The corrected ten-page test passes 10 API checks and returns zero on a real
+  Dreamcast at 640x480 VGA, but raw hardware captures reject the simple scene
+  design. Screen S1 is lost across screen -> RTT -> screen, target T1 is lost
+  after target reselection, and target T1 is also lost when
+  `SDL_RenderPresent` finishes a scene while that target remains selected.
+  Page 9 independently shows earlier screen content disappearing after later
+  RTT lifecycle transitions.
+- The NPOT guard capture also shows periodic holes along the sampled target's
+  extreme bottom/right edges. Diagnose this separately from destination
+  persistence; possible sources include exact UV endpoints, wrap behavior,
+  RTT padding/stride, or raster edge ownership.
+- There was no freeze, reset, timeout, crash, or failed API recovery. The
+  authoritative failure is missing prior destination contents and incomplete
+  extreme-edge presentation in the physical framebuffer captures.
+- Do not promote or commit the prototype as completed Phase 5 functionality.
+  Next research must define an exact destination-preservation architecture for
+  both screen and target scenes, quantify VRAM/TA costs, preserve SDL painter
+  order, and retain ordinary capability isolation.
+
+The serial log and all ten raw captures are under
+`test/dreamcast/test/pvr_render_target/`. Full evidence and reviewed prototype
+corrections are recorded in `src/render/dreamcast/PVR_RENDER_TARGET_RESEARCH.md`.
 
 ## Phase 6: Dreamcast-specific optimization
 

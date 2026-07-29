@@ -86,8 +86,128 @@ static void DC_PVR_ClearTextureSceneReferences(SDL_Renderer *renderer)
     }
 }
 
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+static int DC_PVR_FinishActiveScene(SDL_Renderer *renderer)
+{
+    DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
+
+    if (!data->scene_active) {
+        return 0;
+    }
+    if (data->list_active) {
+        if (pvr_list_finish() < 0) {
+            data->pvr_failed = SDL_TRUE;
+            return SDL_SetError("Could not finish the Dreamcast PVR translucent list");
+        }
+        data->list_active = SDL_FALSE;
+    }
+    if (pvr_scene_finish() < 0) {
+        data->pvr_failed = SDL_TRUE;
+        return SDL_SetError("Could not finish the Dreamcast PVR scene");
+    }
+    data->scene_active = SDL_FALSE;
+    if (data->scene_target) {
+        DC_PVR_TextureData *texturedata =
+            (DC_PVR_TextureData *)data->scene_target->driverdata;
+
+        if (texturedata) {
+            texturedata->rtt_completed = SDL_TRUE;
+        }
+        data->scene_target = NULL;
+    }
+    data->header_valid = SDL_FALSE;
+    return 0;
+}
+#endif
+
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+static int DC_PVR_BeginSceneForCurrentTarget(SDL_Renderer *renderer)
+{
+    DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
+
+    if (data->pvr_failed) {
+        return SDL_SetError("Dreamcast PVR renderer is unavailable after a scene failure");
+    }
+    if (!data->scene_active) {
+        if (data->current_target) {
+            DC_PVR_TextureData *texturedata =
+                (DC_PVR_TextureData *)data->current_target->driverdata;
+
+            if (!texturedata) {
+                data->pvr_failed = SDL_TRUE;
+                return SDL_SetError("Dreamcast PVR target texture has no driver data");
+            }
+            if (pvr_scene_begin_rtt(texturedata->vram, texturedata->rtt_render_w,
+                                    texturedata->rtt_render_h,
+                                    texturedata->rtt_stride_px) < 0) {
+                data->pvr_failed = SDL_TRUE;
+                return SDL_SetError("Could not begin the Dreamcast PVR render target scene");
+            }
+            data->scene_target = data->current_target;
+        } else {
+            pvr_scene_begin();
+        }
+        data->scene_active = SDL_TRUE;
+        data->header_valid = SDL_FALSE;
+    }
+    if (!data->list_active) {
+        if (pvr_list_begin(PVR_LIST_TR_POLY) < 0) {
+            data->pvr_failed = SDL_TRUE;
+            return SDL_SetError("Could not begin the Dreamcast PVR translucent list");
+        }
+        data->list_active = SDL_TRUE;
+    }
+    return 0;
+}
+#endif
+
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+static int DC_PVR_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
+{
+    DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
+
+    if (texture == data->current_target) {
+        return 0;
+    }
+    if (texture) {
+        DC_PVR_TextureData *texturedata = (DC_PVR_TextureData *)texture->driverdata;
+
+        if (!texturedata) {
+            return SDL_SetError("Dreamcast PVR target texture has no driver data");
+        }
+        if (texturedata->access != SDL_TEXTUREACCESS_TARGET) {
+            return SDL_SetError("Texture is not a render target");
+        }
+        if (texturedata->sdl_format != SDL_PIXELFORMAT_RGB565) {
+            return SDL_SetError("Dreamcast PVR target textures require RGB565 format");
+        }
+        if (texturedata->rtt_render_w <= 0 || texturedata->rtt_render_h <= 0) {
+            return SDL_SetError("Dreamcast PVR target texture has invalid dimensions");
+        }
+        if (texturedata->rtt_stride_px < texturedata->rtt_render_w) {
+            return SDL_SetError("Dreamcast PVR target stride is smaller than render width");
+        }
+        if (texturedata->rtt_stride_px % 4 != 0) {
+            return SDL_SetError("Dreamcast PVR target stride must be a multiple of 4 pixels");
+        }
+        if (!texturedata->vram) {
+            return SDL_SetError("Dreamcast PVR target texture has no VRAM allocation");
+        }
+    }
+    if (DC_PVR_FinishActiveScene(renderer) < 0) {
+        return -1;
+    }
+    data->current_target = texture;
+    data->header_valid = SDL_FALSE;
+    return 0;
+}
+#endif
+
 static int DC_PVR_BeginFrame(SDL_Renderer *renderer)
 {
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+    return DC_PVR_BeginSceneForCurrentTarget(renderer);
+#else
     DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
 
     if (!data->scene_active) {
@@ -103,6 +223,7 @@ static int DC_PVR_BeginFrame(SDL_Renderer *renderer)
         data->list_active = SDL_TRUE;
     }
     return 0;
+#endif
 }
 
 int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture, SDL_BlendMode blend)
@@ -115,8 +236,20 @@ int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture, SDL_BlendMod
     if (texture) {
         DC_PVR_TextureData *texturedata = (DC_PVR_TextureData *)texture->driverdata;
 
-        if (!texturedata || !texturedata->uploaded) {
-            return SDL_SetError("Dreamcast PVR texture has not been uploaded");
+        if (!texturedata) {
+            return SDL_SetError("Dreamcast PVR texture has no driver data");
+        }
+        if (!texturedata->uploaded) {
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+            if (texturedata->access == SDL_TEXTUREACCESS_TARGET) {
+                if (!texturedata->rtt_completed) {
+                    return SDL_SetError("Dreamcast PVR target texture has not been completed");
+                }
+            } else
+#endif
+            {
+                return SDL_SetError("Dreamcast PVR texture has not been uploaded");
+            }
         }
         if (data->header_valid && data->header_texture == texture &&
             data->header_blend == blend &&
@@ -277,6 +410,15 @@ static int DC_PVR_RenderPresent(SDL_Renderer *renderer)
 {
     DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
 
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+    if (!data->current_target && !data->scene_active &&
+        DC_PVR_BeginSceneForCurrentTarget(renderer) < 0) {
+        return -1;
+    }
+    if (DC_PVR_FinishActiveScene(renderer) < 0) {
+        return -1;
+    }
+#else
     if (DC_PVR_BeginFrame(renderer) < 0) {
         return -1;
     }
@@ -291,6 +433,7 @@ static int DC_PVR_RenderPresent(SDL_Renderer *renderer)
     }
     data->scene_active = SDL_FALSE;
     data->header_valid = SDL_FALSE;
+#endif
     if (pvr_wait_render_done() < 0) {
         data->pvr_failed = SDL_TRUE;
         return SDL_SetError("Timed out waiting for Dreamcast PVR rendering");
@@ -336,6 +479,9 @@ static void DC_PVR_DestroyRenderer(SDL_Renderer *renderer)
             SDL_LogError(SDL_LOG_CATEGORY_RENDER, "Dreamcast PVR scene cleanup failed");
         } else {
             data->scene_active = SDL_FALSE;
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+            data->scene_target = NULL;
+#endif
             if (pvr_wait_render_done() < 0) {
                 synchronized = SDL_FALSE;
                 SDL_LogError(SDL_LOG_CATEGORY_RENDER, "Dreamcast PVR cleanup synchronization failed");
@@ -365,6 +511,11 @@ static void DC_PVR_DestroyRenderer(SDL_Renderer *renderer)
         DC_PVR_ReleaseDeferredTextures(data, SDL_FALSE);
         DC_PVR_ReleaseDeferredVRAM(data, SDL_FALSE);
     }
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+    data->current_target = NULL;
+    data->scene_target = NULL;
+    data->header_valid = SDL_FALSE;
+#endif
     SDL_free(data);
     renderer->driverdata = NULL;
 }
@@ -388,9 +539,11 @@ static int DC_PVR_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, Uin
     if (flags & SDL_RENDERER_SOFTWARE) {
         return SDL_SetError("Dreamcast PVR is not a software renderer");
     }
+#if !defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
     if (flags & SDL_RENDERER_TARGETTEXTURE) {
         return SDL_SetError("Dreamcast PVR Phase 0 does not support render targets");
     }
+#endif
     video_mode = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
     if (!video_mode || SDL_strcmp(video_mode, "SDL_DC_DIRECT_VIDEO") != 0) {
         return SDL_SetError("Dreamcast PVR requires SDL_HINT_DC_VIDEO_MODE=SDL_DC_DIRECT_VIDEO before window creation");
@@ -441,6 +594,10 @@ static int DC_PVR_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, Uin
     renderer->DestroyTexture = DC_PVR_DestroyTexture;
     renderer->DestroyRenderer = DC_PVR_DestroyRenderer;
     renderer->SetVSync = DC_PVR_SetVSync;
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+    renderer->SetRenderTarget = DC_PVR_SetRenderTarget;
+    renderer->info.flags |= SDL_RENDERER_TARGETTEXTURE;
+#endif
     return 0;
 }
 

@@ -54,6 +54,19 @@ static DC_PVR_GeometryBoundsState DC_PVR_CalcEffectiveGeometryBounds(
     Sint64 viewport_x = 0;
     Sint64 viewport_y = 0;
 
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+    if (data->current_target) {
+        DC_PVR_TextureData *texturedata =
+            (DC_PVR_TextureData *)data->current_target->driverdata;
+
+        if (!texturedata) {
+            return DC_PVR_GEOMETRY_BOUNDS_EMPTY;
+        }
+        right = texturedata->rtt_render_w;
+        bottom = texturedata->rtt_render_h;
+    }
+#endif
+
     if (data->viewport_set) {
         Sint64 viewport_right;
         Sint64 viewport_bottom;
@@ -468,6 +481,11 @@ int DC_PVR_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Tex
     DC_PVR_Vertex *vertices;
     int i;
 
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+    if (texture && renderer->target && texture == renderer->target) {
+        return SDL_SetError("Dreamcast PVR cannot sample the active render target");
+    }
+#endif
     if (!indices && num_indices > 0) {
         return SDL_SetError("Dreamcast PVR indexed geometry has a null index pointer");
     }
@@ -592,7 +610,22 @@ int DC_PVR_EmitFullTargetClear(SDL_Renderer *renderer,
     DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
     DC_PVR_Vertex vertices[4];
     SDL_Color color;
+    int output_w = data->output_w;
+    int output_h = data->output_h;
     int i;
+
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+    if (data->current_target) {
+        DC_PVR_TextureData *texturedata =
+            (DC_PVR_TextureData *)data->current_target->driverdata;
+
+        if (!texturedata) {
+            return SDL_SetError("Dreamcast PVR target texture has no driver data");
+        }
+        output_w = texturedata->rtt_render_w;
+        output_h = texturedata->rtt_render_h;
+    }
+#endif
 
     color.r = cmd->data.color.r;
     color.g = cmd->data.color.g;
@@ -604,12 +637,12 @@ int DC_PVR_EmitFullTargetClear(SDL_Renderer *renderer,
     }
     vertices[0].x = 0.0f;
     vertices[0].y = 0.0f;
-    vertices[1].x = (float)data->output_w;
+    vertices[1].x = (float)output_w;
     vertices[1].y = 0.0f;
     vertices[2].x = 0.0f;
-    vertices[2].y = (float)data->output_h;
-    vertices[3].x = (float)data->output_w;
-    vertices[3].y = (float)data->output_h;
+    vertices[2].y = (float)output_h;
+    vertices[3].x = (float)output_w;
+    vertices[3].y = (float)output_h;
 
     if (DC_PVR_EmitHeader(renderer, NULL, SDL_BLENDMODE_NONE) < 0) {
         return -1;

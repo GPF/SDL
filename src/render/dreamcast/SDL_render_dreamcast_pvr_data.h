@@ -42,6 +42,12 @@ typedef struct DC_PVR_TextureData
     SDL_bool referenced_in_scene;
     SDL_bool locked;
     SDL_Rect locked_rect;
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+    int rtt_render_w;
+    int rtt_render_h;
+    int rtt_stride_px;
+    SDL_bool rtt_completed;
+#endif
 } DC_PVR_TextureData;
 
 typedef struct DC_PVR_DeferredVRAM
@@ -74,6 +80,10 @@ typedef struct DC_PVR_RenderData
     pvr_filter_mode_t header_filter;
     DC_PVR_TextureData *deferred_textures;
     DC_PVR_DeferredVRAM *deferred_vram;
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+    SDL_Texture *current_target;
+    SDL_Texture *scene_target;
+#endif
 } DC_PVR_RenderData;
 
 #endif /* SDL_render_dreamcast_pvr_data_h_ */

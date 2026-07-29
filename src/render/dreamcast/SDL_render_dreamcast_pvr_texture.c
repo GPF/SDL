@@ -117,24 +117,32 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 
     (void)renderer;
     if (texture->access == SDL_TEXTUREACCESS_TARGET) {
+#if !defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
         return SDL_SetError("Dreamcast PVR does not support render targets");
-    }
-    if (texture->access != SDL_TEXTUREACCESS_STATIC &&
-        texture->access != SDL_TEXTUREACCESS_STREAMING) {
-        return SDL_SetError("Dreamcast PVR texture access mode is not supported");
-    }
-    switch (texture->format) {
-    case SDL_PIXELFORMAT_RGB565:
+#else
+        if (texture->format != SDL_PIXELFORMAT_RGB565) {
+            return SDL_SetError("Dreamcast PVR target textures require RGB565 format");
+        }
         pvr_format = PVR_TXRFMT_RGB565;
-        break;
-    case SDL_PIXELFORMAT_ARGB1555:
-        pvr_format = PVR_TXRFMT_ARGB1555;
-        break;
-    case SDL_PIXELFORMAT_ARGB4444:
-        pvr_format = PVR_TXRFMT_ARGB4444;
-        break;
-    default:
-        return SDL_SetError("Dreamcast PVR texture format is not supported");
+#endif
+    } else {
+        if (texture->access != SDL_TEXTUREACCESS_STATIC &&
+            texture->access != SDL_TEXTUREACCESS_STREAMING) {
+            return SDL_SetError("Dreamcast PVR texture access mode is not supported");
+        }
+        switch (texture->format) {
+        case SDL_PIXELFORMAT_RGB565:
+            pvr_format = PVR_TXRFMT_RGB565;
+            break;
+        case SDL_PIXELFORMAT_ARGB1555:
+            pvr_format = PVR_TXRFMT_ARGB1555;
+            break;
+        case SDL_PIXELFORMAT_ARGB4444:
+            pvr_format = PVR_TXRFMT_ARGB4444;
+            break;
+        default:
+            return SDL_SetError("Dreamcast PVR texture format is not supported");
+        }
     }
 
 #if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
@@ -159,27 +167,41 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     data->allocation_size = (size_t)data->vram_pitch * data->backing_h;
     data->filter = PVR_FILTER_NEAREST;
     data->dirty = SDL_TRUE;
-#if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
-    if (DC_PVR_TestShouldFailAllocation(DC_PVR_TEST_ALLOC_STAGING)) {
-        SDL_free(data);
-        return SDL_SetError("Injected Dreamcast PVR texture staging allocation failure");
-    }
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+    data->rtt_render_w = texture->w;
+    data->rtt_render_h = texture->h;
+    data->rtt_stride_px = data->backing_w;
+    data->rtt_completed = SDL_FALSE;
 #endif
-    data->pixels = SDL_calloc(1, data->allocation_size);
-    if (!data->pixels) {
-        SDL_free(data);
-        return SDL_SetError("Could not allocate Dreamcast PVR texture staging memory");
+    if (texture->access == SDL_TEXTUREACCESS_TARGET) {
+        data->pixels = NULL;
+    } else {
+#if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
+        if (DC_PVR_TestShouldFailAllocation(DC_PVR_TEST_ALLOC_STAGING)) {
+            SDL_free(data);
+            return SDL_SetError("Injected Dreamcast PVR texture staging allocation failure");
+        }
+#endif
+        data->pixels = SDL_calloc(1, data->allocation_size);
+        if (!data->pixels) {
+            SDL_free(data);
+            return SDL_SetError("Could not allocate Dreamcast PVR texture staging memory");
+        }
     }
 #if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
     if (DC_PVR_TestShouldFailAllocation(DC_PVR_TEST_ALLOC_VRAM)) {
-        SDL_free(data->pixels);
+        if (data->pixels) {
+            SDL_free(data->pixels);
+        }
         SDL_free(data);
         return SDL_SetError("Injected Dreamcast PVR texture VRAM allocation failure");
     }
 #endif
     data->vram = pvr_mem_malloc(data->allocation_size);
     if (!data->vram) {
-        SDL_free(data->pixels);
+        if (data->pixels) {
+            SDL_free(data->pixels);
+        }
         SDL_free(data);
         return SDL_SetError("Could not allocate Dreamcast PVR texture VRAM");
     }
@@ -201,6 +223,11 @@ int DC_PVR_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
     size_t row_bytes;
     int row;
 
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+    if (data && data->access == SDL_TEXTUREACCESS_TARGET) {
+        return SDL_SetError("Dreamcast PVR target textures cannot be CPU-updated");
+    }
+#endif
     if (!data || !data->pixels || !data->vram) {
         return SDL_SetError("Dreamcast PVR texture update has invalid backend state");
     }
