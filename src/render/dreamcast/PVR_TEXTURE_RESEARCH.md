@@ -10,6 +10,11 @@ This document defines the smallest correct Phase 3 baseline texture subsystem fo
 3.3 texture lifecycle, VRAM exhaustion/recovery, and deterministic rollback
 increment.
 
+**Related research:** `PVR_PARTIAL_UPLOAD_RESEARCH.md` audits the KOS transfer
+APIs, analyzes VRAM alignment constraints, compares partial-upload strategies,
+evaluates DMA, and recommends deferring partial uploads to a later optimization
+phase.
+
 ## Implementation and validation update (2026-07-27)
 
 The first Phase 3 increment is implemented. The native renderer is split into
