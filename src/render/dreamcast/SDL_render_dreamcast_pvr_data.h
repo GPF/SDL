@@ -46,7 +46,8 @@ typedef struct DC_PVR_TextureData
     int rtt_render_w;
     int rtt_render_h;
     int rtt_stride_px;
-    SDL_bool rtt_completed;
+    pvr_ptr_t vram_next;
+    SDL_bool current_valid;
 #endif
 } DC_PVR_TextureData;
 
@@ -83,6 +84,14 @@ typedef struct DC_PVR_RenderData
 #if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
     SDL_Texture *current_target;
     SDL_Texture *scene_target;
+    pvr_ptr_t screen_vram_current;
+    pvr_ptr_t screen_vram_next;
+    int screen_alloc_size;
+    int screen_stride_px;
+    int screen_backing_w;
+    int screen_backing_h;
+    SDL_bool screen_current_valid;
+    int scene_kind;
 #endif
 } DC_PVR_RenderData;
 

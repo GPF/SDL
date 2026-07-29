@@ -114,6 +114,9 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 {
     DC_PVR_TextureData *data;
     int pvr_format;
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+    pvr_ptr_t vram_next;
+#endif
 
     (void)renderer;
     if (texture->access == SDL_TEXTUREACCESS_TARGET) {
@@ -171,10 +174,21 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     data->rtt_render_w = texture->w;
     data->rtt_render_h = texture->h;
     data->rtt_stride_px = data->backing_w;
-    data->rtt_completed = SDL_FALSE;
+    data->current_valid = SDL_FALSE;
 #endif
     if (texture->access == SDL_TEXTUREACCESS_TARGET) {
         data->pixels = NULL;
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+        vram_next = pvr_mem_malloc(data->allocation_size);
+        if (!vram_next) {
+            if (data->pixels) {
+                SDL_free(data->pixels);
+            }
+            SDL_free(data);
+            return SDL_SetError("Could not allocate target VRAM (next)");
+        }
+        data->vram_next = vram_next;
+#endif
     } else {
 #if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
         if (DC_PVR_TestShouldFailAllocation(DC_PVR_TEST_ALLOC_STAGING)) {
@@ -190,6 +204,12 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     }
 #if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
     if (DC_PVR_TestShouldFailAllocation(DC_PVR_TEST_ALLOC_VRAM)) {
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+        if (data->vram_next) {
+            pvr_mem_free(data->vram_next);
+            data->vram_next = NULL;
+        }
+#endif
         if (data->pixels) {
             SDL_free(data->pixels);
         }
@@ -199,6 +219,12 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 #endif
     data->vram = pvr_mem_malloc(data->allocation_size);
     if (!data->vram) {
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+        if (data->vram_next) {
+            pvr_mem_free(data->vram_next);
+            data->vram_next = NULL;
+        }
+#endif
         if (data->pixels) {
             SDL_free(data->pixels);
         }
@@ -382,6 +408,12 @@ void DC_PVR_DestroyTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     data->lock_deferred_vram = NULL;
     data->locked = SDL_FALSE;
     SDL_zero(data->locked_rect);
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+    if (data->vram_next) {
+        pvr_mem_free(data->vram_next);
+        data->vram_next = NULL;
+    }
+#endif
     if (renderdata->header_texture == texture) {
         renderdata->header_valid = SDL_FALSE;
         renderdata->header_texture = NULL;

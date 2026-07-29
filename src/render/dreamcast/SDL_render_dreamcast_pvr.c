@@ -16,6 +16,26 @@
 
 #include <dc/video.h>
 
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+typedef enum DC_PVR_SceneKind
+{
+    DC_PVR_SCENE_NONE = 0,
+    DC_PVR_SCENE_LOGICAL_SCREEN,
+    DC_PVR_SCENE_TARGET,
+    DC_PVR_SCENE_PHYSICAL
+} DC_PVR_SceneKind;
+
+static int DC_PVR_NextPowerOfTwo(int value)
+{
+    int result = 8;
+
+    while (result < value) {
+        result <<= 1;
+    }
+    return result;
+}
+#endif
+
 static int DC_PVR_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window,
                                  Uint32 flags);
 
@@ -106,21 +126,127 @@ static int DC_PVR_FinishActiveScene(SDL_Renderer *renderer)
         return SDL_SetError("Could not finish the Dreamcast PVR scene");
     }
     data->scene_active = SDL_FALSE;
-    if (data->scene_target) {
-        DC_PVR_TextureData *texturedata =
-            (DC_PVR_TextureData *)data->scene_target->driverdata;
 
-        if (texturedata) {
-            texturedata->rtt_completed = SDL_TRUE;
+    /* Central commit: after successful finish, swap current/next for both
+     * target and logical-screen destinations, then mark the new current
+     * valid. A failed scene must not replace current state. */
+    switch (data->scene_kind) {
+    case DC_PVR_SCENE_TARGET:
+        if (data->scene_target) {
+            DC_PVR_TextureData *texturedata =
+                (DC_PVR_TextureData *)data->scene_target->driverdata;
+
+            if (texturedata) {
+                pvr_ptr_t temp = texturedata->vram;
+
+                texturedata->vram = texturedata->vram_next;
+                texturedata->vram_next = temp;
+                texturedata->current_valid = SDL_TRUE;
+            }
+            data->scene_target = NULL;
         }
-        data->scene_target = NULL;
+        break;
+    case DC_PVR_SCENE_LOGICAL_SCREEN:
+        {
+            pvr_ptr_t temp = data->screen_vram_current;
+
+            data->screen_vram_current = data->screen_vram_next;
+            data->screen_vram_next = temp;
+        }
+        data->screen_current_valid = SDL_TRUE;
+        break;
+    case DC_PVR_SCENE_PHYSICAL:
+    case DC_PVR_SCENE_NONE:
+        break;
     }
+
     data->header_valid = SDL_FALSE;
     return 0;
 }
 #endif
 
 #if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+static int DC_PVR_EmitPreservationSeed(SDL_Renderer *renderer,
+                                       pvr_ptr_t src_vram,
+                                       int src_logical_w,
+                                       int src_logical_h,
+                                       int src_backing_w,
+                                       int src_backing_h,
+                                       int dest_render_w,
+                                       int dest_render_h)
+{
+    pvr_poly_cxt_t context;
+    pvr_poly_hdr_t header;
+    DC_PVR_Vertex vertices[4];
+    float u_max;
+    float v_max;
+    int i;
+
+    /* Edge-safe UV endpoint validated by physical microprobe. */
+    u_max = (src_logical_w <= 1) ? 0.0f :
+            (float)(src_logical_w - 1) / (float)src_backing_w;
+    v_max = (src_logical_h <= 1) ? 0.0f :
+            (float)(src_logical_h - 1) / (float)src_backing_h;
+
+    pvr_poly_cxt_txr(&context, PVR_LIST_TR_POLY,
+                     PVR_TXRFMT_RGB565 | PVR_TXRFMT_NONTWIDDLED,
+                     src_backing_w, src_backing_h, src_vram,
+                     PVR_FILTER_NEAREST);
+    context.txr.env = PVR_TXRENV_MODULATEALPHA;
+    context.gen.culling = PVR_CULLING_NONE;
+    context.gen.shading = true;
+    context.gen.alpha = true;
+    context.depth.comparison = PVR_DEPTHCMP_ALWAYS;
+    context.depth.write = PVR_DEPTHWRITE_DISABLE;
+    /* RGB565 has no sampled alpha; keep vertex alpha available. */
+    context.txr.alpha = SDL_TRUE;
+    context.blend.src = PVR_BLEND_ONE;
+    context.blend.dst = PVR_BLEND_ZERO;
+
+    pvr_poly_compile(&header, &context);
+    if (DC_PVR_Submit(&header, sizeof(header)) < 0) {
+        return -1;
+    }
+
+    SDL_zeroa(vertices);
+    for (i = 0; i < 4; ++i) {
+        vertices[i].color = 0xffffffff;
+    }
+    vertices[0].x = 0.0f;
+    vertices[0].y = 0.0f;
+    vertices[0].u = 0.0f;
+    vertices[0].v = 0.0f;
+    vertices[1].x = (float)dest_render_w;
+    vertices[1].y = 0.0f;
+    vertices[1].u = u_max;
+    vertices[1].v = 0.0f;
+    vertices[2].x = 0.0f;
+    vertices[2].y = (float)dest_render_h;
+    vertices[2].u = 0.0f;
+    vertices[2].v = v_max;
+    vertices[3].x = (float)dest_render_w;
+    vertices[3].y = (float)dest_render_h;
+    vertices[3].u = u_max;
+    vertices[3].v = v_max;
+
+    for (i = 0; i < 4; ++i) {
+        pvr_vertex_t vertex;
+
+        SDL_zero(vertex);
+        vertex.flags = (i == 3) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
+        vertex.x = vertices[i].x;
+        vertex.y = vertices[i].y;
+        vertex.z = 1.0f;
+        vertex.u = vertices[i].u;
+        vertex.v = vertices[i].v;
+        vertex.argb = vertices[i].color;
+        if (DC_PVR_Submit(&vertex, sizeof(vertex)) < 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
 static int DC_PVR_BeginSceneForCurrentTarget(SDL_Renderer *renderer)
 {
     DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
@@ -132,20 +258,39 @@ static int DC_PVR_BeginSceneForCurrentTarget(SDL_Renderer *renderer)
         if (data->current_target) {
             DC_PVR_TextureData *texturedata =
                 (DC_PVR_TextureData *)data->current_target->driverdata;
+            pvr_ptr_t next_vram;
 
             if (!texturedata) {
                 data->pvr_failed = SDL_TRUE;
                 return SDL_SetError("Dreamcast PVR target texture has no driver data");
             }
-            if (pvr_scene_begin_rtt(texturedata->vram, texturedata->rtt_render_w,
+            next_vram = texturedata->vram_next;
+            if (!next_vram) {
+                data->pvr_failed = SDL_TRUE;
+                return SDL_SetError("Dreamcast PVR target has no next allocation");
+            }
+            if (pvr_scene_begin_rtt(next_vram, texturedata->rtt_render_w,
                                     texturedata->rtt_render_h,
                                     texturedata->rtt_stride_px) < 0) {
                 data->pvr_failed = SDL_TRUE;
                 return SDL_SetError("Could not begin the Dreamcast PVR render target scene");
             }
             data->scene_target = data->current_target;
+            data->scene_kind = DC_PVR_SCENE_TARGET;
         } else {
-            pvr_scene_begin();
+            pvr_ptr_t next_vram = data->screen_vram_next;
+
+            if (!next_vram) {
+                data->pvr_failed = SDL_TRUE;
+                return SDL_SetError("Logical screen has no next allocation");
+            }
+            if (pvr_scene_begin_rtt(next_vram, data->output_w,
+                                    data->output_h,
+                                    data->screen_stride_px) < 0) {
+                data->pvr_failed = SDL_TRUE;
+                return SDL_SetError("Could not begin the Dreamcast PVR logical screen scene");
+            }
+            data->scene_kind = DC_PVR_SCENE_LOGICAL_SCREEN;
         }
         data->scene_active = SDL_TRUE;
         data->header_valid = SDL_FALSE;
@@ -156,6 +301,45 @@ static int DC_PVR_BeginSceneForCurrentTarget(SDL_Renderer *renderer)
             return SDL_SetError("Could not begin the Dreamcast PVR translucent list");
         }
         data->list_active = SDL_TRUE;
+
+        /* Emit preservation seed only after list begin. Skip if current is
+         * undefined or if the destination is already the current allocation. */
+        if (data->scene_kind == DC_PVR_SCENE_TARGET && data->scene_target) {
+            DC_PVR_TextureData *texturedata =
+                (DC_PVR_TextureData *)data->scene_target->driverdata;
+
+            if (texturedata && texturedata->current_valid &&
+                texturedata->vram != texturedata->vram_next) {
+                if (DC_PVR_EmitPreservationSeed(
+                    renderer,
+                    texturedata->vram,
+                    texturedata->logical_w,
+                    texturedata->logical_h,
+                    texturedata->backing_w,
+                    texturedata->backing_h,
+                    texturedata->rtt_render_w,
+                    texturedata->rtt_render_h) < 0) {
+                    data->pvr_failed = SDL_TRUE;
+                    return -1;
+                }
+            }
+        } else if (data->scene_kind == DC_PVR_SCENE_LOGICAL_SCREEN) {
+            if (data->screen_current_valid &&
+                data->screen_vram_current != data->screen_vram_next) {
+                if (DC_PVR_EmitPreservationSeed(
+                    renderer,
+                    data->screen_vram_current,
+                    data->output_w,
+                    data->output_h,
+                    data->screen_backing_w,
+                    data->screen_backing_h,
+                    data->output_w,
+                    data->output_h) < 0) {
+                    data->pvr_failed = SDL_TRUE;
+                    return -1;
+                }
+            }
+        }
     }
     return 0;
 }
@@ -192,6 +376,9 @@ static int DC_PVR_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
         }
         if (!texturedata->vram) {
             return SDL_SetError("Dreamcast PVR target texture has no VRAM allocation");
+        }
+        if (!texturedata->vram_next) {
+            return SDL_SetError("Dreamcast PVR target texture has no next allocation");
         }
     }
     if (DC_PVR_FinishActiveScene(renderer) < 0) {
@@ -242,8 +429,8 @@ int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture, SDL_BlendMod
         if (!texturedata->uploaded) {
 #if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
             if (texturedata->access == SDL_TEXTUREACCESS_TARGET) {
-                if (!texturedata->rtt_completed) {
-                    return SDL_SetError("Dreamcast PVR target texture has not been completed");
+                if (!texturedata->current_valid) {
+                    return SDL_SetError("Dreamcast PVR target texture has no valid contents");
                 }
             } else
 #endif
@@ -411,12 +598,45 @@ static int DC_PVR_RenderPresent(SDL_Renderer *renderer)
     DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
 
 #if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
-    if (!data->current_target && !data->scene_active &&
-        DC_PVR_BeginSceneForCurrentTarget(renderer) < 0) {
+    /* Finish the active destination scene if one is open. Commit/swap
+     * is handled centrally in DC_PVR_FinishActiveScene. */
+    if (data->scene_active && DC_PVR_FinishActiveScene(renderer) < 0) {
         return -1;
     }
-    if (DC_PVR_FinishActiveScene(renderer) < 0) {
-        return -1;
+
+    if (!data->current_target) {
+        /* Screen selected: begin physical screen scene and present the
+         * completed logical screen. */
+        if (!data->screen_current_valid) {
+            return SDL_SetError("Logical screen has no valid completed contents");
+        }
+        pvr_scene_begin();
+        data->scene_active = SDL_TRUE;
+        data->scene_kind = DC_PVR_SCENE_PHYSICAL;
+        data->header_valid = SDL_FALSE;
+        if (pvr_list_begin(PVR_LIST_TR_POLY) < 0) {
+            data->pvr_failed = SDL_TRUE;
+            return SDL_SetError("Could not begin the Dreamcast PVR translucent list");
+        }
+        data->list_active = SDL_TRUE;
+        if (DC_PVR_EmitPreservationSeed(
+            renderer,
+            data->screen_vram_current,
+            data->output_w,
+            data->output_h,
+            data->screen_backing_w,
+            data->screen_backing_h,
+            data->output_w,
+            data->output_h) < 0) {
+            data->pvr_failed = SDL_TRUE;
+            return -1;
+        }
+        if (DC_PVR_FinishActiveScene(renderer) < 0) {
+            return -1;
+        }
+        /* Physical presentation does not swap logical-screen allocations.
+         * Keep screen_current_valid true so the next logical RTT begins with
+         * a preserved seed from the physical presentation source. */
     }
 #else
     if (DC_PVR_BeginFrame(renderer) < 0) {
@@ -481,6 +701,7 @@ static void DC_PVR_DestroyRenderer(SDL_Renderer *renderer)
             data->scene_active = SDL_FALSE;
 #if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
             data->scene_target = NULL;
+            data->scene_kind = DC_PVR_SCENE_NONE;
 #endif
             if (pvr_wait_render_done() < 0) {
                 synchronized = SDL_FALSE;
@@ -494,11 +715,28 @@ static void DC_PVR_DestroyRenderer(SDL_Renderer *renderer)
                 SDL_LogError(SDL_LOG_CATEGORY_RENDER, "Dreamcast PVR recovery shutdown failed");
             }
             data->pvr_owned = SDL_FALSE;
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+            /* pvr_shutdown() discarded the allocator after failed
+             * synchronization, so these allocations must not be passed to
+             * pvr_mem_free(). */
+            data->screen_vram_next = NULL;
+            data->screen_vram_current = NULL;
+#endif
             DC_PVR_ReleaseDeferredTextures(data, SDL_FALSE);
             DC_PVR_ReleaseDeferredVRAM(data, SDL_FALSE);
         } else {
             DC_PVR_ReleaseDeferredTextures(data, SDL_TRUE);
             DC_PVR_ReleaseDeferredVRAM(data, SDL_TRUE);
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+            if (data->screen_vram_next) {
+                pvr_mem_free(data->screen_vram_next);
+                data->screen_vram_next = NULL;
+            }
+            if (data->screen_vram_current) {
+                pvr_mem_free(data->screen_vram_current);
+                data->screen_vram_current = NULL;
+            }
+#endif
             /* Render completion precedes the vblank handler's page flip. Keep
              * that handler installed through one vblank before PVR shutdown. */
             vid_waitvbl();
@@ -514,6 +752,7 @@ static void DC_PVR_DestroyRenderer(SDL_Renderer *renderer)
 #if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
     data->current_target = NULL;
     data->scene_target = NULL;
+    data->scene_kind = DC_PVR_SCENE_NONE;
     data->header_valid = SDL_FALSE;
 #endif
     SDL_free(data);
@@ -572,6 +811,38 @@ static int DC_PVR_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, Uin
     data->vsync = SDL_TRUE;
     data->output_w = output_w;
     data->output_h = output_h;
+
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+    data->screen_backing_w = DC_PVR_NextPowerOfTwo(output_w);
+    data->screen_backing_h = DC_PVR_NextPowerOfTwo(output_h);
+    if (data->screen_backing_w < output_w || data->screen_backing_h < output_h) {
+        pvr_shutdown();
+        data->pvr_owned = SDL_FALSE;
+        SDL_free(data);
+        return SDL_SetError("Screen dimensions exceed POT backing capacity");
+    }
+    data->screen_stride_px = data->screen_backing_w;
+    data->screen_alloc_size = (size_t)data->screen_stride_px *
+                              (size_t)data->screen_backing_h * 2;
+    data->screen_current_valid = SDL_FALSE;
+
+    data->screen_vram_current = pvr_mem_malloc(data->screen_alloc_size);
+    if (!data->screen_vram_current) {
+        pvr_shutdown();
+        data->pvr_owned = SDL_FALSE;
+        SDL_free(data);
+        return SDL_SetError("Could not allocate first logical-screen VRAM surface");
+    }
+    data->screen_vram_next = pvr_mem_malloc(data->screen_alloc_size);
+    if (!data->screen_vram_next) {
+        pvr_mem_free(data->screen_vram_current);
+        data->screen_vram_current = NULL;
+        pvr_shutdown();
+        data->pvr_owned = SDL_FALSE;
+        SDL_free(data);
+        return SDL_SetError("Could not allocate second logical-screen VRAM surface");
+    }
+#endif
 
     renderer->driverdata = data;
     renderer->info = DC_RenderDriver.info;

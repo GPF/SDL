@@ -1,0 +1,70 @@
+Connecting to 192.168.0.128...
+dc-load-ip 3.0.1 using Broadband Adapter (HIT-0400)
+Console enabled
+Upload <test/dreamcast/test/pvr_render_target/pvr_render_target.elf>
+File format is ELF, start address is 0x8c010000
+Section .text, lma 0x8c010000, size 956476
+Section .init, lma 0x8c0fa000, size 54
+Section .fini, lma 0x8c0fa038, size 42
+Section .rodata, lma 0x8c0fa080, size 91372
+Section .eh_frame, lma 0x8c11056c, size 360
+Section .ctors, lma 0x8c110754, size 8
+Section .dtors, lma 0x8c11075c, size 8
+Section .data, lma 0x8c110764, size 13176
+Section .got, lma 0x8c113adc, size 12
+Transferred 1061508 bytes at 4140774 bytes / sec
+Executing at 0x8c010000
+Sending execute command (0xac010000, console=1, cdfsredir=0)...argv(1, argv0="pvr_render_target.elf")...executing
+
+--
+KallistiOS v2.3.0 [dreamcast/pristine]
+  Git revision: af085653-dirty
+  Mon Jul 27 01:41:26 PM MST 2026
+  gpf@gpf-B550-Phantom-Gaming-4-ac:/opt/toolchains/dc/kos
+  sh-elf-gcc (GCC) 15.3.1 20260705
+maple: active drivers:
+    Dreameye (Camera): Camera
+    Sound Input Peripheral: Microphone
+    PuruPuru (Vibration) Pack: JumpPack
+    VMU Driver: Clock, LCD, MemoryCard
+    Mouse Driver: Mouse
+    Keyboard Driver: Keyboard
+    Controller Driver: Controller
+    Lightgun: LightGun
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+dc-load console support enabled
+maple: attached devices:
+  A0: Dreamcast Controller           (01000000: Controller)
+  A1: Visual Memory                  (0e000000: Clock, LCD, MemoryCard)
+  B0: Dreamcast Controller           (01000000: Controller)
+  B1: Visual Memory                  (0e000000: Clock, LCD, MemoryCard)
+  C0: Keyboard                       (40000000: Keyboard)
+  D0: Dreamcast Mouse                (00020000: Mouse)
+
+INFO: SDL2 Dreamcast video initialized: 640x480
+INFO: DREAMCAST_CreateWindow: window 640x480 created with framebuffer
+INFO: Display modes for Dreamcast retrieved successfully.
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+Renderer: Dreamcast PVR flags=0000000e
+PAGE 1: API prechecks and state restoration
+  API PASS: prototype advertises TARGETTEXTURE
+  API PASS: ARGB1555 target is rejected
+  API PASS: GetRenderTarget returns selected target
+  API PASS: UpdateTexture on target fails cleanly
+  API PASS: LockTexture on target is rejected
+pvr_prim: attempt to submit data unaligned to 8 bytes.
+FAIL: SDL_SetRenderTarget(renderer, NULL): Dreamcast PVR rejected a render primitive
+pvr_list_finish: attempt to close unopened list
+ERROR: Dreamcast PVR list cleanup failed
+
+*** ASSERTION FAILURE ***
+Assertion "pvr_mem_sbrk != NULL" failed at pvr_mem.c:126 in `pvr_mem_free': pvr_mem_* used, but PVR hasn't been initialized yet
+
+-------- Stack Trace (innermost first) ---------
+   8c0cad60   pvr_mem_free at ??:?
+   8c049ee0   DC_PVR_DestroyRenderer at /home/gpf/code/dreamcast/SDL2/src/render/dreamcast/SDL_render_dreamcast_pvr.c:734
+   8c0c62b8   arch_main at /home/gpf/code/dreamcast/SDL2/src/render/SDL_render.c:4488
+   8c010052   arch_real_exit at ??:?
+-------------- End Stack Trace -----------------
+arch: aborting the system
+Program returned 1

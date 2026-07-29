@@ -8,23 +8,25 @@
 
 #define OUTPUT_W 640
 #define OUTPUT_H 480
-#define PAGE_COUNT 10
+#define PAGE_COUNT 12
 #ifndef PAGE_HOLD_MS
 #define PAGE_HOLD_MS 8000
 #endif
 
 #ifdef DC_PVR_RENDER_TARGET_HARDWARE_SCREENSHOT
 static const char *const capture_paths[PAGE_COUNT] = {
-    "/pc/pvr_render_target-hardware-page1.ppm",
-    "/pc/pvr_render_target-hardware-page2.ppm",
-    "/pc/pvr_render_target-hardware-page3.ppm",
-    "/pc/pvr_render_target-hardware-page4.ppm",
-    "/pc/pvr_render_target-hardware-page5.ppm",
-    "/pc/pvr_render_target-hardware-page6.ppm",
-    "/pc/pvr_render_target-hardware-page7.ppm",
-    "/pc/pvr_render_target-hardware-page8.ppm",
-    "/pc/pvr_render_target-hardware-page9.ppm",
-    "/pc/pvr_render_target-hardware-page10.ppm"
+    "/pc/pvr_render_target_phase5b_page1.ppm",
+    "/pc/pvr_render_target_phase5b_page2.ppm",
+    "/pc/pvr_render_target_phase5b_page3.ppm",
+    "/pc/pvr_render_target_phase5b_page4.ppm",
+    "/pc/pvr_render_target_phase5b_page5.ppm",
+    "/pc/pvr_render_target_phase5b_page6.ppm",
+    "/pc/pvr_render_target_phase5b_page7.ppm",
+    "/pc/pvr_render_target_phase5b_page8.ppm",
+    "/pc/pvr_render_target_phase5b_page9.ppm",
+    "/pc/pvr_render_target_phase5b_page10.ppm",
+    "/pc/pvr_render_target_phase5b_page11.ppm",
+    "/pc/pvr_render_target_phase5b_page12.ppm"
 };
 #endif
 
@@ -434,6 +436,71 @@ static int page10_guards(SDL_Renderer *renderer)
                         "intact white/magenta/cyan/yellow border, red center, no flip or stale padding");
 }
 
+static int page11_repeated_seeds(SDL_Renderer *renderer)
+{
+    SDL_Texture *t = target(renderer, 64, 64);
+    int i;
+
+    printf("PAGE 11: repeated preservation seeds with stable markers\n");
+    if (!t) return -1;
+    REQUIRE(SDL_SetRenderTarget(renderer, t));
+    REQUIRE(clear_to(renderer, 5, 5, 15));
+    REQUIRE(screen_panel(renderer, 8, 8, 24, 24, 200, 50, 50)); /* marker A */
+    for (i = 0; i < 6; ++i) {
+        int x = 36 + (i % 3) * 10;
+        int y = 40 + (i / 3) * 12;
+        Uint8 r = (Uint8)(180 + i * 10);
+        Uint8 g = (Uint8)(60 + i * 8);
+        Uint8 b = (Uint8)(30 + i * 5);
+
+        REQUIRE(screen_panel(renderer, x, y, 8, 8, r, g, b));
+    }
+    REQUIRE(SDL_SetRenderTarget(renderer, NULL));
+    REQUIRE(clear_to(renderer, 2, 4, 8));
+    REQUIRE(copy(renderer, t, 100, 200, 440, 280));
+    SDL_DestroyTexture(t);
+    return present_page(renderer, 10, "repeated seeds",
+                        "marker A plus six ordered gradient cells, no accumulating edge contamination");
+}
+
+static int page12_allocation_failure(SDL_Renderer *renderer)
+{
+    SDL_Texture *t;
+    int i;
+
+    printf("PAGE 12: allocation-failure and rollback coverage\n");
+    t = target(renderer, 256, 256);
+    if (!t) return -1;
+    REQUIRE(SDL_SetRenderTarget(renderer, t));
+    REQUIRE(clear_to(renderer, 40, 20, 10));
+    REQUIRE(screen_panel(renderer, 16, 16, 224, 224, 100, 100, 180));
+    SDL_DestroyTexture(t);
+
+    /* Repeated create/destroy cycle to exercise allocator rollback. */
+    for (i = 0; i < 8; ++i) {
+        t = target(renderer, 32, 32);
+        if (!t) {
+            printf("  CREATE FAIL at iteration %d, stopping\n", i);
+            goto page12_done;
+        }
+        REQUIRE(SDL_SetRenderTarget(renderer, t));
+        REQUIRE(clear_to(renderer, (Uint8)(20 + i * 20), 10, 50));
+        REQUIRE(SDL_SetRenderTarget(renderer, NULL));
+        SDL_DestroyTexture(t);
+    }
+    t = target(renderer, 32, 32);
+    if (!t) return -1;
+    REQUIRE(SDL_SetRenderTarget(renderer, t));
+    REQUIRE(clear_to(renderer, 80, 20, 20));
+    REQUIRE(SDL_SetRenderTarget(renderer, NULL));
+    REQUIRE(clear_to(renderer, 5, 8, 15));
+    REQUIRE(screen_panel(renderer, 40, 400, 560, 24,
+                         0, 160, 40));
+page12_done:
+    return present_page(renderer, 11, "allocation failure",
+                        "green recovery bar at bottom; any failed creates stop early");
+}
+
 int main(int argc, char **argv)
 {
     SDL_Window *window = NULL;
@@ -462,7 +529,8 @@ int main(int argc, char **argv)
         page3_screen_persistence(renderer) < 0 || page4_two_targets(renderer) < 0 ||
         page5_blends(renderer) < 0 || page6_filter_mod(renderer) < 0 ||
         page7_reselection(renderer) < 0 || page8_target_present(renderer) < 0 ||
-        page9_feedback_lifecycle(renderer) < 0 || page10_guards(renderer) < 0) {
+        page9_feedback_lifecycle(renderer) < 0 || page10_guards(renderer) < 0 ||
+        page11_repeated_seeds(renderer) < 0 || page12_allocation_failure(renderer) < 0) {
         goto done;
     }
     printf("API SUMMARY: %d checks, %d failures\n", checks, failures);

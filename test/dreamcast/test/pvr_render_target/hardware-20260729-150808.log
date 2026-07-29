@@ -1,0 +1,121 @@
+Connecting to 192.168.0.128...
+dc-load-ip 3.0.1 using Broadband Adapter (HIT-0400)
+Console enabled
+Upload <test/dreamcast/test/pvr_render_target/pvr_render_target.elf>
+File format is ELF, start address is 0x8c010000
+Section .text, lma 0x8c010000, size 956540
+Section .init, lma 0x8c0fa000, size 54
+Section .fini, lma 0x8c0fa038, size 42
+Section .rodata, lma 0x8c0fa080, size 91312
+Section .eh_frame, lma 0x8c110530, size 360
+Section .ctors, lma 0x8c110718, size 8
+Section .dtors, lma 0x8c110720, size 8
+Section .data, lma 0x8c110728, size 13176
+Section .got, lma 0x8c113aa0, size 12
+Transferred 1061512 bytes at 4217604 bytes / sec
+Executing at 0x8c010000
+Sending execute command (0xac010000, console=1, cdfsredir=0)...argv(1, argv0="pvr_render_target.elf")...executing
+
+--
+KallistiOS v2.3.0 [dreamcast/pristine]
+  Git revision: af085653-dirty
+  Mon Jul 27 01:41:26 PM MST 2026
+  gpf@gpf-B550-Phantom-Gaming-4-ac:/opt/toolchains/dc/kos
+  sh-elf-gcc (GCC) 15.3.1 20260705
+maple: active drivers:
+    Dreameye (Camera): Camera
+    Sound Input Peripheral: Microphone
+    PuruPuru (Vibration) Pack: JumpPack
+    VMU Driver: Clock, LCD, MemoryCard
+    Mouse Driver: Mouse
+    Keyboard Driver: Keyboard
+    Controller Driver: Controller
+    Lightgun: LightGun
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+dc-load console support enabled
+maple_irq: error EBADFUNC on C0 when sending command: 9
+maple: attached devices:
+  A0: Dreamcast Controller           (01000000: Controller)
+  A1: Visual Memory                  (0e000000: Clock, LCD, MemoryCard)
+  C0: Keyboard                       (40000000: Keyboard)
+  D0: Dreamcast Mouse                (00020000: Mouse)
+
+INFO: SDL2 Dreamcast video initialized: 640x480
+INFO: DREAMCAST_CreateWindow: window 640x480 created with framebuffer
+INFO: Display modes for Dreamcast retrieved successfully.
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+Renderer: Dreamcast PVR flags=0000000e
+PAGE 1: API prechecks and state restoration
+  API PASS: prototype advertises TARGETTEXTURE
+  API PASS: ARGB1555 target is rejected
+  API PASS: GetRenderTarget returns selected target
+  API PASS: UpdateTexture on target fails cleanly
+  API PASS: LockTexture on target is rejected
+  API PASS: screen viewport restored after target reset
+  API PASS: screen clip restored after target reset
+PAGE 1/12 PRESENTED: API precheck
+  VISUAL EXPECTATION: one large green panel; red means an API assertion failed
+vid_screen_shot: written to output file '/pc/pvr_render_target_phase5b_page1.ppm'
+  CAPTURE OK: /pc/pvr_render_target_phase5b_page1.ppm
+PAGE 2: target rendering, orientation, clear, viewport and clip
+PAGE 2/12 PRESENTED: target rendering
+  VISUAL EXPECTATION: four distinct colored corners in correct orientation and a clipped magenta center
+vid_screen_shot: written to output file '/pc/pvr_render_target_phase5b_page2.ppm'
+  CAPTURE OK: /pc/pvr_render_target_phase5b_page2.ppm
+PAGE 3: CRITICAL screen persistence S1 -> target -> S2
+PAGE 3/12 PRESENTED: screen persistence
+  VISUAL EXPECTATION: BOTH the upper-left red S1 block and lower-right green S2 block
+vid_screen_shot: written to output file '/pc/pvr_render_target_phase5b_page3.ppm'
+  CAPTURE OK: /pc/pvr_render_target_phase5b_page3.ppm
+PAGE 4: target A -> target B -> screen
+PAGE 4/12 PRESENTED: two targets
+  VISUAL EXPECTATION: orange/red target A at left and cyan/green target B at right
+vid_screen_shot: written to output file '/pc/pvr_render_target_phase5b_page4.ppm'
+  CAPTURE OK: /pc/pvr_render_target_phase5b_page4.ppm
+PAGE 5: NONE / BLEND / ADD / MUL into RGB565 target
+PAGE 5/12 PRESENTED: target blend modes
+  VISUAL EXPECTATION: four distinct ordered columns: NONE, BLEND, ADD, MUL; no corruption
+vid_screen_shot: written to output file '/pc/pvr_render_target_phase5b_page5.ppm'
+  CAPTURE OK: /pc/pvr_render_target_phase5b_page5.ppm
+PAGE 6: filtering and modulation of completed target
+PAGE 6/12 PRESENTED: filtering and modulation
+  VISUAL EXPECTATION: sharp blue/white checker left; smoother red-modulated translucent checker right
+vid_screen_shot: written to output file '/pc/pvr_render_target_phase5b_page6.ppm'
+  CAPTURE OK: /pc/pvr_render_target_phase5b_page6.ppm
+PAGE 7: CRITICAL target persistence across reselection
+PAGE 7/12 PRESENTED: target reselection persistence
+  VISUAL EXPECTATION: BOTH red T1 upper-left and green T2 lower-right inside the sampled target
+vid_screen_shot: written to output file '/pc/pvr_render_target_phase5b_page7.ppm'
+  CAPTURE OK: /pc/pvr_render_target_phase5b_page7.ppm
+PAGE 8: CRITICAL target persistence across RenderPresent
+PAGE 8/12 PRESENTED: target-present persistence
+  VISUAL EXPECTATION: BOTH blue T1 upper-left and yellow T2 lower-right inside the sampled target
+vid_screen_shot: written to output file '/pc/pvr_render_target_phase5b_page8.ppm'
+  CAPTURE OK: /pc/pvr_render_target_phase5b_page8.ppm
+PAGE 9: self-feedback rejection and lifecycle recovery
+  API PASS: active-target feedback rejected with stable error
+  API PASS: feedback rejection leaves target selected
+  API PASS: destroying selected target resets to screen
+PAGE 9/12 PRESENTED: feedback and lifecycle
+  VISUAL EXPECTATION: green recovered target centered and green status bar at bottom
+vid_screen_shot: written to output file '/pc/pvr_render_target_phase5b_page9.ppm'
+  CAPTURE OK: /pc/pvr_render_target_phase5b_page9.ppm
+PAGE 10: NPOT guard geometry and padding-corruption probe
+PAGE 10/12 PRESENTED: guard geometry
+  VISUAL EXPECTATION: intact white/magenta/cyan/yellow border, red center, no flip or stale padding
+vid_screen_shot: written to output file '/pc/pvr_render_target_phase5b_page10.ppm'
+  CAPTURE OK: /pc/pvr_render_target_phase5b_page10.ppm
+PAGE 11: repeated preservation seeds with stable markers
+PAGE 11/12 PRESENTED: repeated seeds
+  VISUAL EXPECTATION: marker A plus six ordered gradient cells, no accumulating edge contamination
+vid_screen_shot: written to output file '/pc/pvr_render_target_phase5b_page11.ppm'
+  CAPTURE OK: /pc/pvr_render_target_phase5b_page11.ppm
+PAGE 12: allocation-failure and rollback coverage
+PAGE 12/12 PRESENTED: allocation failure
+  VISUAL EXPECTATION: green recovery bar at bottom; any failed creates stop early
+vid_screen_shot: written to output file '/pc/pvr_render_target_phase5b_page12.ppm'
+  CAPTURE OK: /pc/pvr_render_target_phase5b_page12.ppm
+API SUMMARY: 10 checks, 0 failures
+PASS (API/build): screenshots require direct physical inspection
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+Program returned 0

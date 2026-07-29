@@ -584,6 +584,8 @@ int DC_PVR_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Tex
 
         if (texturedata) {
             float source_uv[2];
+            float u_max;
+            float v_max;
 
             if (texturedata->logical_w <= 0 || texturedata->logical_h <= 0 ||
                 texturedata->backing_w <= 0 || texturedata->backing_h <= 0) {
@@ -591,8 +593,24 @@ int DC_PVR_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Tex
             }
             SDL_memcpy(source_uv, (const Uint8 *)uv + uv_offset,
                        sizeof(source_uv));
-            vertices[i].u = (source_uv[0] * texturedata->logical_w) / texturedata->backing_w;
-            vertices[i].v = (source_uv[1] * texturedata->logical_h) / texturedata->backing_h;
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+            /* Completed targets use the physically validated edge-safe
+             * endpoint. Non-target and uncompleted textures keep the
+             * standard logical/backing scaling. */
+            if (texturedata->access == SDL_TEXTUREACCESS_TARGET &&
+                texturedata->current_valid) {
+                u_max = (texturedata->logical_w <= 1) ? 0.0f :
+                        (float)(texturedata->logical_w - 1) / (float)texturedata->backing_w;
+                v_max = (texturedata->logical_h <= 1) ? 0.0f :
+                        (float)(texturedata->logical_h - 1) / (float)texturedata->backing_h;
+            } else
+#endif
+            {
+                u_max = (float)texturedata->logical_w / (float)texturedata->backing_w;
+                v_max = (float)texturedata->logical_h / (float)texturedata->backing_h;
+            }
+            vertices[i].u = source_uv[0] * u_max;
+            vertices[i].v = source_uv[1] * v_max;
             if (!DC_PVR_FloatIsFinite(source_uv[0]) ||
                 !DC_PVR_FloatIsFinite(source_uv[1]) ||
                 !DC_PVR_FloatIsFinite(vertices[i].u) ||

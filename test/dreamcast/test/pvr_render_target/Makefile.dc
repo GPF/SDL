@@ -22,6 +22,8 @@ check-sdl2:
 		(echo "SDL2 is not installed in $(SDL2_LIBDIR)"; exit 1)
 	@sh-elf-nm $(SDL2_LIBDIR)/libSDL2.a | grep -q '[[:space:]]_DC_RenderDriver$$' || \
 		(echo "Requested SDL2 does not include the native Dreamcast PVR renderer."; exit 1)
+	@sh-elf-nm $(SDL2_LIBDIR)/libSDL2.a | grep -q '[[:space:]]_DC_PVR_SetRenderTarget$$' || \
+		(echo "Requested SDL2 does not include the guarded render-target prototype."; exit 1)
 
 clean:
 	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin $(TARGET).map

@@ -379,6 +379,15 @@ onsite operator before launch and use an existing pause or observation mode.
 When the task permits a test-only correction, extending display hold times is
 acceptable, but do not infer a visual pass from the brief output.
 
+Do not manually interrupt or terminate `kos-tool`/`dc-load` while the uploaded
+ELF is still running. An external Ctrl-C during program execution can crash the
+physical Dreamcast. Let the test exit normally and wait for `Program returned`.
+When a hardware diagnostic needs to return early, add an explicit in-program
+`arch_exit()` path so control returns safely to the `dc-load-ip` loader before
+ending the host command. If the console becomes unresponsive, ask the onsite
+operator to restart the Dreamcast rather than repeatedly interrupting or
+relaunching it.
+
 ## Phase 1: lifecycle and build integration
 
 - Add an explicit Dreamcast PVR CMake option (`SDL_VIDEO_RENDER_DREAMCAST_PVR`),
@@ -953,13 +962,56 @@ recreation work on physical hardware with retained screenshots.
   authoritative failure is missing prior destination contents and incomplete
   extreme-edge presentation in the physical framebuffer captures.
 - Do not promote or commit the prototype as completed Phase 5 functionality.
-  Next research must define an exact destination-preservation architecture for
-  both screen and target scenes, quantify VRAM/TA costs, preserve SDL painter
-  order, and retain ordinary capability isolation.
+  A bounded physical microprobe has since validated an offscreen logical-screen
+  plus current/next target seed architecture. At 640x480 the two POT-backed
+  screen allocations consume about 2 MiB, leaving 3,845,800 bytes of the
+  current PVR texture heap; a completed preservation scene averages 6.680 ms.
+  The same probe confirms that enlarged target sampling must map its maximum UV
+  to `(logical - 1) / backing`, not `logical / backing`; 1:1 controls prove KOS
+  clipping and RTT edge writes are intact. Full results are in
+  `PVR_RENDER_TARGET_PRESERVATION_RESEARCH.md`.
+- A guarded second coding pass is now feasible, but it must implement logical
+  screen preservation and target preservation together. Keep ordinary target
+  capability disabled until the integrated original persistence pages, edge
+  matrix, repeated-copy fidelity, allocation rollback, and physical screenshot
+  gates pass.
 
 The serial log and all ten raw captures are under
 `test/dreamcast/test/pvr_render_target/`. Full evidence and reviewed prototype
 corrections are recorded in `src/render/dreamcast/PVR_RENDER_TARGET_RESEARCH.md`.
+
+### Phase 5.2: guarded preservation prototype — hardware validated
+
+- The second private `DC_PVR_RENDER_TARGET_PROTOTYPE` pass adds paired RGB565
+  allocations for each target and a paired POT-backed logical screen. Every
+  successful RTT scene commits centrally by finishing its list and scene,
+  swapping current/next, and marking the new current valid. Resumed
+  destinations seed current into next before later SDL commands. Physical
+  presentation copies the completed logical screen without changing its
+  ownership.
+- Preservation seeds use proper 32-byte `pvr_vertex_t` commands and the
+  physically validated maximum UV `(logical - 1) / backing`. Prototype-owned
+  screen VRAM is released before synchronized PVR shutdown; failed recovery
+  shutdown deliberately abandons allocator pointers rather than freeing them
+  after the allocator is gone. Target allocation rollback frees the first
+  allocation if the second step fails.
+- The final 12-page physical run passed on a real Dreamcast at 640x480 VGA.
+  It reported 10 API checks with zero failures, captured every raw framebuffer,
+  returned zero to `dc-load-ip`, and showed no freeze, reset, timeout, crash,
+  missing geometry, corruption, or failed recovery. Screen persistence,
+  A/B target switching, target reselection, target-selected
+  `SDL_RenderPresent`, NONE/BLEND/ADD/MUL, filtering/modulation, feedback
+  rejection, selected-target destruction, NPOT borders, repeated preservation,
+  and allocator lifecycle recovery all rendered as expected.
+- The authoritative final serial log is
+  `test/dreamcast/test/pvr_render_target/hardware-20260729-150808.log`; retained
+  raw captures are `pvr_render_target_phase5b_page1.ppm` through
+  `pvr_render_target_phase5b_page12.ppm` under the same test directory. The
+  earlier `150242` failure and `150436` test-layout run remain preserved as
+  diagnostic evidence.
+- This validates the guarded prototype design. Keep ordinary-build capability
+  isolation until the project explicitly chooses promotion and completes any
+  desired wider VRAM-pressure, video-mode, and performance gates.
 
 ## Phase 6: Dreamcast-specific optimization
 
