@@ -1,35 +1,53 @@
-# Native PVR fixed-class strided RGB565 test
+# PVR Strided Texture Test
 
-This test exercises the guarded native Dreamcast PVR strided-texture
-increment. At 640x480 the renderer's fixed class is 640 pixels:
+Focused physical-hardware test for the native PVR fixed-class strided texture
+optimization. At 640x480, ordinary RGB565, ARGB1555, and ARGB4444 textures
+with a 600-pixel logical width use the 640-pixel stride class. A 300-pixel
+RGB565 control remains POT-backed because the fixed class would cost more.
 
-* 600x240 static RGB565 uses a 640-pixel row pitch and POT header dimensions.
-* 580x240 streaming RGB565 uses the same class and exposes its staging pitch
-  through `SDL_LockTexture`.
-* 300x180 RGB565 remains POT because a 640-pixel pitch would cost more than
-  its 512-pixel POT row.
+## Build
 
-The single captured page shows the two strided panels beside a POT panel,
-including a padded-pitch partial update. The expected result is stable row
-markers, an intact yellow 64x64 update, and no checkerboard or edge corruption.
-
-Build against the local native-PVR archive:
-
-```sh
+```bash
+# Ordinary build
 make -f Makefile.dc clean
 make -f Makefile.dc -B SDL2_LIBDIR=/path/to/build-scripts/dcbuild
-make -f Makefile.dc -B SDL2_LIBDIR=/path/to/build-scripts/dcbuild \
-    HARDWARE_SCREENSHOTS=1
+
+# Hardware screenshot capture
+make -f Makefile.dc -B HARDWARE_SCREENSHOTS=1 \
+    SDL2_LIBDIR=/path/to/build-scripts/dcbuild
 ```
 
-Launch the screenshot build on physical hardware and allow it to return:
+## Test pages
 
-```sh
-kos-tool -t 192.168.0.128 -x pvr_strided_textures.elf -m .
-```
+| Page | Description |
+|------|-------------|
+| 1 | RGB565 static + streaming + POT, including a padded-pitch partial update |
+| 2 | ARGB1555 static blend and streaming modulation probes |
+| 3 | ARGB4444 static blend and streaming modulation probes |
+| 4 | RGB565, ARGB1555, ARGB4444, and POT together in one scene |
+| 5 | Update after scene reference and normal texture destruction |
 
-Capture path:
+## Hardware capture
+
+When `HARDWARE_SCREENSHOTS=1` is set, the test writes raw 640×480 captures to:
 
 ```text
-/pc/pvr_strided_textures-phase6_2.ppm
+/pc/pvr_strided_textures-page1-rgb565.ppm
+/pc/pvr_strided_textures-page2-1555-blend.ppm
+/pc/pvr_strided_textures-page2-1555-mod.ppm
+/pc/pvr_strided_textures-page3-4444-blend.ppm
+/pc/pvr_strided_textures-page3-4444-mod.ppm
+/pc/pvr_strided_textures-page4-mixed.ppm
 ```
+
+The capture helper waits through three vblanks after presentation, following
+the established Dreamcast test convention so each path records its own page.
+
+## Physical validation
+
+On 2026-07-30, the screenshot build returned normally on a 640x480 VGA
+Dreamcast. All six captures were directly inspected: RGB565 retained its
+partial-update marker and POT control; ARGB1555 and ARGB4444 retained their
+alpha/blend and modulation patterns; and the mixed page contained all three
+strided formats beside the POT control without corruption. The replacement
+lifecycle completed normally after an update to a scene-referenced texture.

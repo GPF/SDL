@@ -921,8 +921,8 @@ class selected at texture creation, with immutable POT fallback for textures
 that cannot use that class. It does not implement per-texture natural strides,
 flush/split migration, or strided `.dt` payloads.
 
-The renderer-created fixed-class RGB565 increment is now implemented and
-hardware-validated. Remaining gates are other 16-bit formats, the full legal
+The renderer-created fixed-class RGB565, ARGB1555, and ARGB4444 increment is
+now implemented and hardware-validated. Remaining gates are the full legal
 stride range, additional filtering coordinates, other video modes, and
 stress/capacity coverage. Existing POT-backed NPOT support remains the safe
 fallback for every conflict or unsupported case. See

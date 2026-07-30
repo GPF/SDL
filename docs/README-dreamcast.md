@@ -40,13 +40,13 @@ automatic `SDL_CreateRenderer(window, -1, SDL_RENDERER_TARGETTEXTURE)` driver
 filtering does not discover it. Select the Dreamcast PVR driver explicitly (or
 through `SDL_HINT_RENDER_DRIVER`) and query the created renderer information.
 
-## Strided RGB565 textures
+## Strided 16-bit textures
 
-The hardware-validated native PVR renderer stores eligible static and streaming
-RGB565 textures using a Dreamcast strided layout. The layout is selected when the
-texture is created; textures that cannot use the renderer's single active
-stride remain POT-backed automatically. This is transparent to SDL callers,
-but all strided textures used in one presented frame must share the same
-stride. POT textures may be mixed with them. `.dt`, target, alpha-bearing,
-twiddled, VQ, and mipmapped textures retain their existing POT or preformatted
-paths.
+The hardware-validated native PVR renderer stores eligible ordinary static and
+streaming RGB565, ARGB1555, and ARGB4444 textures using a Dreamcast strided
+layout. The layout is selected at texture creation; textures that cannot use
+the renderer's single active stride remain POT-backed automatically. This is
+transparent to SDL callers, but all strided textures used in one presented
+frame must share the same stride. POT textures may be mixed with them. `.dt`,
+target, twiddled, VQ, and mipmapped textures retain their existing POT or
+preformatted paths.

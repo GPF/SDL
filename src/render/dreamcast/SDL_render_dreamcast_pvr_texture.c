@@ -175,7 +175,9 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     backing_w = DC_PVR_NextPowerOfTwo(texture->w);
     backing_h = DC_PVR_NextPowerOfTwo(texture->h);
     if (texture->access != SDL_TEXTUREACCESS_TARGET &&
-        texture->format == SDL_PIXELFORMAT_RGB565 &&
+        (texture->format == SDL_PIXELFORMAT_RGB565 ||
+         texture->format == SDL_PIXELFORMAT_ARGB1555 ||
+         texture->format == SDL_PIXELFORMAT_ARGB4444) &&
         renderdata->preferred_stride_px > 0 &&
         texture->w <= renderdata->preferred_stride_px &&
         renderdata->preferred_stride_px < backing_w &&

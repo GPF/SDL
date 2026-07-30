@@ -1165,24 +1165,26 @@ the guarded render-target prototype or change renderer capability advertising.
   latch an independent stride. Changing stride between completed frames works.
 - Implementation policy is one active strided width per frame/scene,
   same-stride batching, and ordinary POT fallback for conflicting strided
-  widths. Strided `.dt`, DMA, other 16-bit formats, the full 32–992 width
-  range, other video modes, and capacity/stress coverage remain later work.
+  widths. Strided `.dt`, DMA, the full 32–992 width range, other video modes,
+  and capacity/stress coverage remain later work; other renderer-created
+  16-bit formats were completed by Phase 6.3.
 - The source-backed design, hardware findings, capture paths, and limitations
   are recorded in `src/render/dreamcast/PVR_STRIDED_TEXTURE_RESEARCH.md` and
   the microprobe README. No SDL renderer functionality changes in this phase.
 
-### Phase 6.3: fixed-class RGB565 strided renderer integration — done
+### Phase 6.3: fixed-class strided renderer integration — done
 
 - The guarded native PVR renderer selects an immutable layout at texture
-  creation for ordinary static and streaming RGB565 textures. A renderer-wide
+  creation for ordinary static and streaming RGB565, ARGB1555, and ARGB4444
+  textures. A renderer-wide
   stride class is derived from the output width; textures that cannot use it
   safely or economically remain POT-backed automatically. No duplicate
   strided/POT copies are retained.
 - Strided textures use `PVR_TXRFMT_X32_STRIDE`, the selected row pitch, and
   POT header dimensions. Existing full/partial updates, streaming locks,
   replacement VRAM, deferred destruction, logical/POT UV scaling, and POT
-  coexistence are preserved. Render-target, `.dt`, alpha-bearing, twiddled,
-  VQ, and mipmapped textures remain on their existing paths.
+  coexistence are preserved. Render-target, `.dt`, twiddled, VQ, and
+  mipmapped textures remain on their existing paths.
 - The frame stride is programmed and read back before the first strided
   header, remains stable through the presented frame, and resets only after a
   successful `SDL_RenderPresent`. PVR list boundaries and flushes do not reset
@@ -1199,9 +1201,13 @@ the guarded render-target prototype or change renderer capability advertising.
 - The implementation, design boundary, allocation equations, and remaining
   limitations are recorded in
   `src/render/dreamcast/PVR_STRIDED_TEXTURE_INTEGRATION_RESEARCH.md`.
-- Natural per-texture stride selection, strided `.dt`, other 16-bit formats,
-  DMA, wider video modes, and capacity/stress coverage remain Phase 7 or later
-  work.
+- **Alpha-format hardware validation (2026-07-30):** ARGB1555 and ARGB4444
+  static and streaming textures passed blend, modulation, mixed-scene, and
+  fixed-class streaming-pitch checks on real 640x480 VGA hardware. Six raw
+  PPMs and normal lifecycle completion are retained in
+  `test/dreamcast/test/pvr_strided_textures/`.
+- Natural per-texture stride selection, strided `.dt`, DMA, wider video modes,
+  and capacity/stress coverage remain Phase 7 or later work.
 
 ## Phase 7: hardening and default enablement
 

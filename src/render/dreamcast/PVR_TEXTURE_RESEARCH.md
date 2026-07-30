@@ -440,7 +440,7 @@ Both dimensions must independently be powers of two. No rectangular NPOT is vali
 ### 2.5 Stride restrictions
 
 - **Power-of-two stride:** `PVR_TXRFMT_POW2_STRIDE` = `(0 << 25)`. Default. Stride equals backing width (POT).
-- **32-pixel stride:** `PVR_TXRFMT_X32_STRIDE` = `(1 << 25)`. For strided NPOT textures. Requires `pvr_txr_set_stride(width)` before submission. Width must be multiple of 32 and ≤ 992. Twiddled textures cannot use this flag. The fixed-class RGB565 increment is covered by Phase 6.3; other formats remain deferred.
+- **32-pixel stride:** `PVR_TXRFMT_X32_STRIDE` = `(1 << 25)`. For strided NPOT textures. Requires `pvr_txr_set_stride(width)` before submission. Width must be multiple of 32 and ≤ 992. Twiddled textures cannot use this flag. Phase 6.3 validates the fixed-class renderer-created RGB565, ARGB1555, and ARGB4444 scope.
 
 ### 2.6 VRAM alignment
 
@@ -472,8 +472,9 @@ Both dimensions must independently be powers of two. No rectangular NPOT is vali
 - Logical dimensions retained separately for UV scaling.
 - Synchronous upload via `pvr_txr_load`.
 - No DMA.
-- Fixed-class RGB565 strided NPOT storage is implemented in the native
-  renderer; this baseline remains POT for other formats and layouts.
+- Fixed-class strided NPOT storage is hardware-validated in the native
+  renderer for ordinary static and streaming RGB565, ARGB1555, and ARGB4444
+  textures. All other formats and layouts remain POT.
 - Non-twiddled (`PVR_TXRFMT_NONTWIDDLED`).
 
 ## 3. Logical dimensions and backing dimensions

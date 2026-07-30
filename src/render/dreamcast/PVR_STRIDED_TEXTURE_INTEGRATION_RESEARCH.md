@@ -1,5 +1,12 @@
 # Native PVR strided-texture integration research
 
+> Implementation status (2026-07-30): the fixed-class integration described
+> here is complete and hardware-validated for ordinary static and streaming
+> RGB565, ARGB1555, and ARGB4444 textures at 640x480 VGA. The original
+> RGB565-only scope below is retained as the initial design decision; target,
+> `.dt`, twiddled, VQ, mipmapped, and natural per-texture stride layouts remain
+> outside the implementation.
+
 ## 1. Executive recommendation
 
 **Recommendation: GO, but only for a deliberately narrow first increment.**
@@ -22,9 +29,8 @@ The increment should:
 
 * keep the current SDL command queue and synchronous upload model;
 * use `PVR_TXRFMT_X32_STRIDE` and `pvr_txr_set_stride()` only for the selected
-  RGB565 class;
-* keep POT storage for ARGB1555, ARGB4444, `.dt`, target, twiddled, VQ, and
-  mipmapped textures;
+  fixed stride class;
+* keep POT storage for `.dt`, target, twiddled, VQ, and mipmapped textures;
 * preserve the current `logical / POT-header` UV convention;
 * use the existing replacement-allocation/deferred-free path without changing
   a texture's layout after creation; and
@@ -315,9 +321,8 @@ make a late fallback possible.
 
 | Category | First increment |
 |---|---|
-| Static RGB565 | Strided when fixed class is legal and cheaper; otherwise POT |
-| Streaming RGB565 | Same immutable choice; locks expose the selected pitch |
-| ARGB1555 / ARGB4444 | POT only; sampled-alpha edge behavior remains unchanged |
+| Static RGB565 / ARGB1555 / ARGB4444 | Strided when fixed class is legal and cheaper; otherwise POT |
+| Streaming RGB565 / ARGB1555 / ARGB4444 | Same immutable choice; locks expose the selected pitch |
 | SDL render-target textures | POT paired RTT allocation only |
 | Direct `.dt` | Existing preformatted POT/twiddled/VQ path only |
 | Twiddled / VQ | POT/format-specific path; incompatible with X32 stride |
@@ -427,10 +432,9 @@ separate design resolves those lifetime and frame-global conflicts.
 
 ## 12. GO/NO-GO verdict
 
-**GO for implementation of the guarded fixed-class RGB565 increment.** It is
-source-compatible with the current texture/update architecture, agrees with
-the Phase 6.2 physical evidence, keeps POT fallback automatic, and avoids
-duplicate VRAM. **NO-GO** for a first implementation that lets each texture
-choose its own natural stride or changes the modulo at list boundaries; those
-policies are demonstrably unsafe without migration or a much larger queue and
-allocation design.
+**GO completed:** the guarded fixed-class RGB565, ARGB1555, and ARGB4444
+increment is source-compatible with the texture/update architecture, agrees
+with the Phase 6.2 physical evidence, keeps POT fallback automatic, and avoids
+duplicate VRAM. **NO-GO** for per-texture natural stride selection or changing
+the modulo at list boundaries; those policies remain unsafe without migration
+or a much larger queue and allocation design.
