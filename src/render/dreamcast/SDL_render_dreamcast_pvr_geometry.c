@@ -54,7 +54,7 @@ static DC_PVR_GeometryBoundsState DC_PVR_CalcEffectiveGeometryBounds(
     Sint64 viewport_x = 0;
     Sint64 viewport_y = 0;
 
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+#if defined(DC_PVR_RENDER_TARGETS_ENABLED)
     if (data->current_target) {
         DC_PVR_TextureData *texturedata =
             (DC_PVR_TextureData *)data->current_target->driverdata;
@@ -481,7 +481,7 @@ int DC_PVR_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Tex
     DC_PVR_Vertex *vertices;
     int i;
 
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+#if defined(DC_PVR_RENDER_TARGETS_ENABLED)
     if (texture && renderer->target && texture == renderer->target) {
         return SDL_SetError("Dreamcast PVR cannot sample the active render target");
     }
@@ -593,7 +593,7 @@ int DC_PVR_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Tex
             }
             SDL_memcpy(source_uv, (const Uint8 *)uv + uv_offset,
                        sizeof(source_uv));
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+#if defined(DC_PVR_RENDER_TARGETS_ENABLED)
             /* Completed targets use the physically validated edge-safe
              * endpoint. Non-target and uncompleted textures keep the
              * standard logical/backing scaling. */
@@ -632,7 +632,7 @@ int DC_PVR_EmitFullTargetClear(SDL_Renderer *renderer,
     int output_h = data->output_h;
     int i;
 
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+#if defined(DC_PVR_RENDER_TARGETS_ENABLED)
     if (data->current_target) {
         DC_PVR_TextureData *texturedata =
             (DC_PVR_TextureData *)data->current_target->driverdata;

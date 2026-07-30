@@ -1,9 +1,10 @@
 # Performance comparison: ordinary native Dreamcast PVR renderer
 # versus guarded render-target prototype.
 #
-# Two separate ELFs are built from the same source:
+# Three separate ELFs are built from the same source:
 #   ordinary  — no DC_PVR_RENDER_TARGET_PROTOTYPE
 #   prototype — DC_PVR_RENDER_TARGET_PROTOTYPE defined
+#   ordered   — DC_PVR_ORDERED_RENDER_TARGETS defined
 #
 # Each build links against its own SDL2 archive and is verified via
 # linker-map symbol checks.
@@ -16,6 +17,9 @@ TARGET_SRC = pvr_render_target_performance.c
 SDL2_ROOT ?= $(abspath ../../../..)
 SDL2_ORDINARY_LIBDIR ?= $(SDL2_ROOT)/build-scripts/dcbuild
 SDL2_PROTOTYPE_LIBDIR ?= $(SDL2_ROOT)/build-scripts/dcbuild_prototype
+SDL2_ORDERED_LIBDIR ?= $(SDL2_ROOT)/build-scripts/dcbuild_ordered
+SDL2_INCLUDEDIR ?= $(KOS_BASE)/addons/include/SDL2
+SDL2_CONFIG_INCLUDEDIR ?= $(SDL2_INCLUDEDIR)
 
 # ------------------------------------------------------------------
 # Screenshot support
@@ -29,12 +33,14 @@ endif
 # ------------------------------------------------------------------
 # Common flags
 # ------------------------------------------------------------------
-COMMON_CFLAGS = -I$(KOS_BASE)/addons/include/SDL2 -DDREAMCAST -D__DREAMCAST__ \
+COMMON_CFLAGS = -I$(SDL2_CONFIG_INCLUDEDIR) -I$(SDL2_INCLUDEDIR) \
+		-DDREAMCAST -D__DREAMCAST__ \
 		-Wall -Wextra -Werror
 
 all: check-ordinary check-prototype \
 	ordinary.elf ordinary.bin \
-	prototype.elf prototype.bin
+	prototype.elf prototype.bin \
+	check-ordered ordered.elf ordered.bin
 
 # ------------------------------------------------------------------
 # Ordinary build
@@ -68,6 +74,22 @@ prototype.bin: prototype.elf
 	$(KOS_OBJCOPY) -O binary prototype.elf prototype.bin
 
 # ------------------------------------------------------------------
+# Ordered build
+# ------------------------------------------------------------------
+ordered.o: $(TARGET_SRC)
+	kos-cc $(COMMON_CFLAGS) $(SCREENSHOT_CFLAGS) \
+		-DDC_PVR_ORDERED_RENDER_TARGETS -c $< -o $@
+
+ordered.elf: ordered.o
+	kos-cc -o ordered.elf ordered.o -Wl,-Map,ordered.map \
+		$(SDL2_ORDERED_LIBDIR)/libSDL2.a \
+		$(SDL2_ORDERED_LIBDIR)/libSDL2main.a \
+		-lGL -lm -lkosutils -lpthread
+
+ordered.bin: ordered.elf
+	$(KOS_OBJCOPY) -O binary ordered.elf ordered.bin
+
+# ------------------------------------------------------------------
 # Linker-map symbol checks (via sh-elf-nm on the ELF)
 # ------------------------------------------------------------------
 check-ordinary: ordinary.elf
@@ -88,16 +110,31 @@ check-prototype: prototype.elf
 		echo "  PASS: _DC_PVR_SetRenderTarget found" || \
 		(echo "  FAIL: _DC_PVR_SetRenderTarget NOT found"; exit 1)
 
+check-ordered: ordered.elf
+	@echo "=== ORDERED ELF SYMBOL CHECK ==="
+	@sh-elf-nm ordered.elf | grep -q '_DC_RenderDriver' && \
+		echo "  PASS: _DC_RenderDriver found" || \
+		(echo "  FAIL: _DC_RenderDriver NOT found"; exit 1)
+	@sh-elf-nm ordered.elf | grep -q '_DC_PVR_PrepareRenderTarget' && \
+		echo "  PASS: _DC_PVR_PrepareRenderTarget found" || \
+		(echo "  FAIL: _DC_PVR_PrepareRenderTarget NOT found"; exit 1)
+	@strings ordered.elf | grep -q 'first logical-screen VRAM surface' && \
+		(echo "  FAIL: logical-screen preservation path found"; exit 1) || \
+		echo "  PASS: logical-screen preservation path absent"
+
 # ------------------------------------------------------------------
 # Hardware launch commands
 # ------------------------------------------------------------------
-.PHONY: run-ordinary run-prototype
+.PHONY: run-ordinary run-prototype run-ordered
 run-ordinary: ordinary.bin
 	@echo "Upload and run: ordinary.elf"
 	@echo "  kos-tool -t <DC_IP> -x ordinary.elf -m ."
 run-prototype: prototype.bin
 	@echo "Upload and run: prototype.elf"
 	@echo "  kos-tool -t <DC_IP> -x prototype.elf -m ."
+run-ordered: ordered.bin
+	@echo "Upload and run: ordered.elf"
+	@echo "  kos-tool -t <DC_IP> -x ordered.elf -m ."
 
 # ------------------------------------------------------------------
 # Clean
@@ -105,4 +142,5 @@ run-prototype: prototype.bin
 .PHONY: clean
 clean:
 	rm -f ordinary.o ordinary.elf ordinary.bin ordinary.map \
-		prototype.o prototype.elf prototype.bin prototype.map
+		prototype.o prototype.elf prototype.bin prototype.map \
+		ordered.o ordered.elf ordered.bin ordered.map

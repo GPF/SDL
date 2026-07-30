@@ -6,11 +6,12 @@
  * SDL_RenderPresent + pvr_wait_render_done + vsync) using the KOS high-
  * resolution monotonic timer.
  *
- * Builds in two modes:
+ * Builds in three modes:
  *   ordinary  — no DC_PVR_RENDER_TARGET_PROTOTYPE, no target-texture support
  *   prototype — DC_PVR_RENDER_TARGET_PROTOTYPE defined, target-texture support
+ *   ordered   — DC_PVR_ORDERED_RENDER_TARGETS defined, direct-screen ordered RTT
  *
- * Workloads A-D are identical for both builds.  Workloads E-F are prototype-
+ * Workloads A-D are identical for all builds. Workloads E-F are target-build
  * only and reported separately.
  */
 
@@ -21,6 +22,10 @@
 
 #include <stdio.h>
 #include <string.h>
+
+#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE) || defined(DC_PVR_ORDERED_RENDER_TARGETS)
+#define DC_PVR_PERFORMANCE_HAS_TARGETS 1
+#endif
 
 /* ------------------------------------------------------------------ */
 /* Configuration                                                      */
@@ -48,6 +53,8 @@ static const char *const ordinary_capture =
     "/pc/pvr_render_target_performance-ordinary.ppm";
 static const char *const prototype_capture =
     "/pc/pvr_render_target_performance-prototype.ppm";
+static const char *const ordered_capture =
+    "/pc/pvr_render_target_performance-ordered.ppm";
 #endif
 
 /* ------------------------------------------------------------------ */
@@ -506,13 +513,13 @@ static int draw_reference_screen(SDL_Renderer *renderer,
 {
     SDL_Texture *tex;
     int frame;
-#ifdef DC_PVR_RENDER_TARGET_PROTOTYPE
+#ifdef DC_PVR_PERFORMANCE_HAS_TARGETS
     SDL_Texture *target;
 #endif
 
     (void)label;
 
-#ifdef DC_PVR_RENDER_TARGET_PROTOTYPE
+#ifdef DC_PVR_PERFORMANCE_HAS_TARGETS
     target = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB565,
                                SDL_TEXTUREACCESS_TARGET, 64, 64);
     if (!target)
@@ -562,7 +569,7 @@ static int draw_reference_screen(SDL_Renderer *renderer,
         REQUIRE(fill_rect(renderer, OUTPUT_W - 8, OUTPUT_H - 8, 8, 8,
                           255, 255, 255, 255, SDL_BLENDMODE_NONE));
 
-#ifdef DC_PVR_RENDER_TARGET_PROTOTYPE
+#ifdef DC_PVR_PERFORMANCE_HAS_TARGETS
         {
             SDL_Rect target_panel = { 460, 280, 128, 128 };
             REQUIRE(SDL_RenderCopy(renderer, target, NULL, &target_panel));
@@ -572,7 +579,7 @@ static int draw_reference_screen(SDL_Renderer *renderer,
         REQUIRE(present_and_vblank(renderer));
     }
     SDL_DestroyTexture(tex);
-#ifdef DC_PVR_RENDER_TARGET_PROTOTYPE
+#ifdef DC_PVR_PERFORMANCE_HAS_TARGETS
     SDL_DestroyTexture(target);
 #endif
     return 0;
@@ -757,6 +764,8 @@ int main(int argc, char **argv)
     /* Determine build kind from preprocessor */
 #ifdef DC_PVR_RENDER_TARGET_PROTOTYPE
     const char *build_kind = "prototype";
+#elif defined(DC_PVR_ORDERED_RENDER_TARGETS)
+    const char *build_kind = "ordered";
 #else
     const char *build_kind = "ordinary";
 #endif
@@ -785,6 +794,9 @@ int main(int argc, char **argv)
     /* The Dreamcast video path is selected during SDL video
      * initialization, so set the hint before SDL_Init(). */
     SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO");
+#ifdef DC_PVR_ORDERED_RENDER_TARGETS
+    SDL_SetHint(SDL_HINT_DC_PVR_RENDER_TARGETS, "1");
+#endif
 
     /* SDL init */
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -841,7 +853,7 @@ int main(int argc, char **argv)
                             "ordinary: SDL_RENDERER_TARGETTEXTURE absent");
         } else {
             assertion_check(has_target,
-                            "prototype: SDL_RENDERER_TARGETTEXTURE present");
+                            "target build: SDL_RENDERER_TARGETTEXTURE present");
         }
     }
 
@@ -881,11 +893,11 @@ int main(int argc, char **argv)
     if (workload_result < 0) goto done;
 
     /* ------------------------------------------------------------------ */
-    /* Workloads E-F (prototype only)                                     */
+    /* Workloads E-F (target builds only)                                 */
     /* ------------------------------------------------------------------ */
 
-    if (SDL_strcmp(build_kind, "prototype") == 0) {
-        printf("\n========== PROTOTYPE-ONLY TARGET WORKLOADS (E-F) ==========\n");
+    if (SDL_strcmp(build_kind, "ordinary") != 0) {
+        printf("\n========== TARGET WORKLOADS (E-F) ==========\n");
 
         workload_result = run_workload(build_kind, 'E', workload_target_update, test_tex, renderer);
         if (workload_result < 0) goto done;
@@ -911,8 +923,10 @@ int main(int argc, char **argv)
 #ifdef DC_PVR_RENDER_TARGET_PERFORMANCE_HARDWARE_SCREENSHOT
         if (SDL_strcmp(build_kind, "ordinary") == 0) {
             cap_path = ordinary_capture;
-        } else {
+        } else if (SDL_strcmp(build_kind, "prototype") == 0) {
             cap_path = prototype_capture;
+        } else {
+            cap_path = ordered_capture;
         }
 #endif
         if (cap_path) {

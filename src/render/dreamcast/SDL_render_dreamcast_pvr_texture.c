@@ -115,15 +115,19 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 {
     DC_PVR_TextureData *data;
     int pvr_format;
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+#if defined(DC_PVR_RENDER_TARGETS_ENABLED)
     pvr_ptr_t vram_next;
+#else
+    (void)renderer;
 #endif
 
-    (void)renderer;
     if (texture->access == SDL_TEXTUREACCESS_TARGET) {
-#if !defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+#if !defined(DC_PVR_RENDER_TARGETS_ENABLED)
         return SDL_SetError("Dreamcast PVR does not support render targets");
 #else
+        if (!renderer->SetRenderTarget) {
+            return SDL_SetError("Dreamcast PVR render targets are not enabled");
+        }
         if (texture->format != SDL_PIXELFORMAT_RGB565) {
             return SDL_SetError("Dreamcast PVR target textures require RGB565 format");
         }
@@ -171,7 +175,7 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     data->allocation_size = (size_t)data->vram_pitch * data->backing_h;
     data->filter = PVR_FILTER_NEAREST;
     data->dirty = SDL_TRUE;
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+#if defined(DC_PVR_RENDER_TARGETS_ENABLED)
     data->rtt_render_w = texture->w;
     data->rtt_render_h = texture->h;
     data->rtt_stride_px = data->backing_w;
@@ -179,7 +183,7 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 #endif
     if (texture->access == SDL_TEXTUREACCESS_TARGET) {
         data->pixels = NULL;
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+#if defined(DC_PVR_RENDER_TARGETS_ENABLED)
         vram_next = pvr_mem_malloc(data->allocation_size);
         if (!vram_next) {
             if (data->pixels) {
@@ -205,7 +209,7 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     }
 #if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
     if (DC_PVR_TestShouldFailAllocation(DC_PVR_TEST_ALLOC_VRAM)) {
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+#if defined(DC_PVR_RENDER_TARGETS_ENABLED)
         if (data->vram_next) {
             pvr_mem_free(data->vram_next);
             data->vram_next = NULL;
@@ -220,7 +224,7 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 #endif
     data->vram = pvr_mem_malloc(data->allocation_size);
     if (!data->vram) {
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+#if defined(DC_PVR_RENDER_TARGETS_ENABLED)
         if (data->vram_next) {
             pvr_mem_free(data->vram_next);
             data->vram_next = NULL;
@@ -319,7 +323,7 @@ int DC_PVR_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
     size_t row_bytes;
     int row;
 
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+#if defined(DC_PVR_RENDER_TARGETS_ENABLED)
     if (data && data->access == SDL_TEXTUREACCESS_TARGET) {
         return SDL_SetError("Dreamcast PVR target textures cannot be CPU-updated");
     }
@@ -481,7 +485,7 @@ void DC_PVR_DestroyTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     data->lock_deferred_vram = NULL;
     data->locked = SDL_FALSE;
     SDL_zero(data->locked_rect);
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
+#if defined(DC_PVR_RENDER_TARGETS_ENABLED)
     if (data->vram_next) {
         pvr_mem_free(data->vram_next);
         data->vram_next = NULL;

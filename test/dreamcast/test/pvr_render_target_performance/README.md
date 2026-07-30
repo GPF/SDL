@@ -407,3 +407,35 @@ Future promotion work must avoid charging ordinary screen rendering for the
 paired logical-screen path, or establish an explicit opt-in policy with costs
 acceptable to the project. Wider video-mode testing and optimization do not
 change this measured 640x480 VGA decision by themselves.
+
+## 17. Ordered-render-target follow-up (hardware validated)
+
+The build now also accepts `SDL2_ORDERED_LIBDIR` and produces `ordered.elf`
+from an archive compiled with `DC_PVR_ORDERED_RENDER_TARGETS`. The ordered
+program enables `SDL_HINT_DC_PVR_RENDER_TARGETS`, runs the same screen-only
+workloads A-D and target workloads E-F, and writes this additional capture when
+screenshots are enabled:
+
+```text
+/pc/pvr_render_target_performance-ordered.ppm
+```
+
+Physical 640x480 VGA validation passed for both builds. Each reported zero
+failures, returned zero normally to `dc-load-ip`, and wrote its raw capture.
+Both builds reported 5,943,040 bytes available after renderer creation.
+
+| Workload | Ordinary mean | Ordered mean | Difference |
+|---|---:|---:|---:|
+| A | 16,679 us | 16,679 us | 0 us |
+| B | 16,678 us | 16,678 us | 0 us |
+| C | 16,678 us | 16,678 us | 0 us |
+| D | 33,361 us | 33,361 us | 0 us |
+| E | — | 16,679 us | target update |
+| F | — | 16,678 us | target preservation |
+
+The ordinary and ordered reference captures share the dark background, textured
+panel, magenta overlap, and green status bar. The ordered capture additionally
+shows its expected sampled-target panel with green and yellow markers. No
+unexpected geometry, screen-copy artifact, or visual corruption was observed.
+This validates the low-cost ordered path for the tested 640x480 VGA workload;
+wider video-mode and stress coverage remains future hardening.

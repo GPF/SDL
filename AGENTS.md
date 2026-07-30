@@ -1036,7 +1036,59 @@ corrections are recorded in `src/render/dreamcast/PVR_RENDER_TARGET_RESEARCH.md`
   design must avoid imposing the paired logical-screen RTT cost on ordinary
   screen-only rendering, or define an explicit opt-in policy. Authoritative
   logs, captures, workload definitions, and limitations are under
-  `test/dreamcast/test/pvr_render_target_performance/`.
+`test/dreamcast/test/pvr_render_target_performance/`.
+
+### Phase 5.3: guarded ordered RTT implementation — hardware validated
+
+- A private `DC_PVR_ORDERED_RENDER_TARGETS` build implements the lower-cost
+  Dreamcast ordering contract: all texture-target work precedes the final
+  physical-screen pass. The screen renders directly to the framebuffer; this
+  path allocates no logical-screen current/next pair and performs no final
+  logical-screen copy. Individual RGB565 targets retain paired current/next
+  allocations and the validated preservation seed/swap behavior.
+- The experimental `SDL_HINT_DC_PVR_RENDER_TARGETS` creation-time opt-in is
+  disabled by default. Opted-in renderer instances install the target
+  callbacks and report `SDL_RENDERER_TARGETTEXTURE`. The static driver
+  description intentionally remains unchanged, so automatic driver selection
+  requested with `SDL_RENDERER_TARGETTEXTURE` cannot discover the experimental
+  instance capability; applications must select the Dreamcast PVR renderer
+  explicitly during this guarded increment.
+- A Dreamcast-only pre-transition callback in `SDL_SetRenderTarget` flushes
+  queued work, validates ordering, and prepares the backend transition before
+  SDL mutates its target, viewport, or clip state. After the first executed
+  screen clear or nonempty screen draw command, a non-NULL target switch fails
+  with a precise SDL error until a successful screen-selected present. Flushes
+  and state-only commands are not frame boundaries or screen render intent.
+- Ordered mode begins PVR scenes lazily at the first clear or drawable command.
+  This permits target -> screen state-only -> target transitions without an
+  empty physical scene. A target-selected present finishes target work, sets
+  and logs an error, does not present or reset ordering, and remains recoverable
+  by selecting the screen and completing a normal screen frame.
+- `test/dreamcast/test/pvr_ordered_render_target` is the five-page focused gate
+  for allowed A/B ordering, preservation, clear/geometry/flush rejection,
+  batched and non-batched recovery, target-selected present, selected-target
+  destruction, incomplete-frame destruction, exact paired allocation cost,
+  and injected second-allocation rollback. The performance comparison also has
+  an ordered build for ordinary screen-only and RTT workloads.
+- Static Dreamcast builds pass for ordered, ordinary, full-preservation
+  prototype, and native-renderer opt-out configurations. The focused test and
+  ordered performance test compile with `-Wall -Wextra -Werror`.
+- **Physical-hardware validation (2026-07-29):** Passed on a real 640x480 VGA
+  Dreamcast. The focused test reported 23 checks and zero failures, captured
+  all five pages, and returned zero. All ordering rejection, recovery,
+  target-preservation, selected-present, lifecycle, and allocation checks
+  passed. The ordered renderer retained 5,943,040 bytes after creation; its
+  target pair consumed 65,624 bytes including KOS allocator metadata, and the
+  injected failed allocation showed no payload leak.
+- The ordinary and ordered performance ELFs both returned zero and captured
+  their reference screens. Both reported 5,943,040 bytes available. Screen-only
+  means for A-D were respectively 16,679/16,678/16,678/33,361 us in both
+  builds, with ordered target workloads E/F at 16,679/16,678 us. The ordered
+  reference adds only its expected sampled-target panel; shared screen content
+  matches the ordinary capture. This validates the low-cost path for the
+  tested 640x480 VGA mode. Wider video-mode, VRAM-pressure, and stress coverage
+  remain Phase 7 hardening, and the mode remains experimental rather than
+  default-enabled.
 
 ## Phase 6: Dreamcast-specific optimization
 

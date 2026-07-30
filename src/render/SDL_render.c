@@ -2586,7 +2586,19 @@ int SDL_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
         return 0;
     }
 
-    FlushRenderCommands(renderer); /* time to send everything to the GPU! */
+#ifdef __DREAMCAST__
+    if (renderer->PrepareRenderTarget) {
+        if (FlushRenderCommands(renderer) < 0) {
+            return -1;
+        }
+        if (renderer->PrepareRenderTarget(renderer, texture) < 0) {
+            return -1;
+        }
+    } else
+#endif
+    {
+        FlushRenderCommands(renderer); /* time to send everything to the GPU! */
+    }
 
     SDL_LockMutex(renderer->target_mutex);
 

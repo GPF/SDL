@@ -1,0 +1,49 @@
+TARGET = pvr_ordered_render_target
+OBJS = pvr_ordered_render_target.o
+
+SDL2_ROOT ?= $(abspath ../../../..)
+SDL2_LIBDIR ?= $(SDL2_ROOT)/build-scripts/dcbuild_ordered
+SDL2_INCLUDEDIR ?= $(SDL2_LIBDIR)/include/SDL2
+SDL2_CONFIG_INCLUDEDIR ?= $(SDL2_LIBDIR)/include-config-/SDL2
+
+HARDWARE_SCREENSHOTS ?= 0
+SCREENSHOT_CFLAGS =
+ifeq ($(HARDWARE_SCREENSHOTS),1)
+SCREENSHOT_CFLAGS += -DDC_PVR_ORDERED_RENDER_TARGET_HARDWARE_SCREENSHOT
+endif
+
+all: check-sdl2 $(TARGET).bin
+
+include $(KOS_BASE)/Makefile.rules
+
+.PHONY: check-sdl2
+check-sdl2:
+	@test -f $(SDL2_INCLUDEDIR)/SDL.h || \
+		(echo "SDL2 headers not found in $(SDL2_INCLUDEDIR)"; exit 1)
+	@test -f $(SDL2_LIBDIR)/libSDL2.a || \
+		(echo "Ordered SDL2 archive not found in $(SDL2_LIBDIR)"; exit 1)
+	@sh-elf-nm $(SDL2_LIBDIR)/libSDL2.a | grep -q '[[:space:]]_DC_RenderDriver$$' || \
+		(echo "Native Dreamcast PVR renderer missing from archive"; exit 1)
+	@sh-elf-nm $(SDL2_LIBDIR)/libSDL2.a | grep -q '[[:space:]]_DC_PVR_PrepareRenderTarget$$' || \
+		(echo "Ordered render-target preparation hook missing from archive"; exit 1)
+
+pvr_ordered_render_target.o: pvr_ordered_render_target.c
+	kos-cc -I$(SDL2_CONFIG_INCLUDEDIR) -I$(SDL2_INCLUDEDIR) \
+		-DDREAMCAST -D__DREAMCAST__ \
+		-Wall -Wextra -Werror -DDC_PVR_ORDERED_RENDER_TARGETS \
+		$(SCREENSHOT_CFLAGS) -c $< -o $@
+
+$(TARGET).elf: $(OBJS)
+	kos-cc -o $@ $(OBJS) -Wl,-Map,$(TARGET).map \
+		$(SDL2_LIBDIR)/libSDL2.a $(SDL2_LIBDIR)/libSDL2main.a \
+		-lGL -lm -lkosutils -lpthread
+
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+.PHONY: clean run
+clean:
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin $(TARGET).map
+
+run: $(TARGET).elf
+	kos-tool -t 192.168.0.128 -x $(TARGET).elf -m .
