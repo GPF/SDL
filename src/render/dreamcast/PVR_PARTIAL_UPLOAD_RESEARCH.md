@@ -1,7 +1,8 @@
 # Dreamcast Native PVR Renderer: Partial Texture Upload Research
 
-**Status:** Research complete. Recommendation: defer partial uploads to a later
-optimization phase. First implementation keeps full-backing upload.
+**Status:** Research complete; its original defer recommendation was superseded
+by the guarded Phase 6.5 implementation and physical-hardware validation on
+2026-07-30. The historical analysis below remains the design record.
 **Date:** 2026-07-28
 **Scope:** KOS transfer-API audit, VRAM layout analysis, partial-upload
 strategy comparison, alignment constraints, synchronization, dirty-region
@@ -16,6 +17,19 @@ and produces an implementation-ready recommendation.
 
 **Related research:** `PVR_TEXTURE_RESEARCH.md` records the Phase 3 texture
 baseline design and the implemented behavior that this document extends from.
+
+> **Implementation addendum (2026-07-30).**
+> `SDL_DC_PVR_PARTIAL_UPLOAD` is an OFF-by-default option dependent on the
+> native Dreamcast PVR renderer. When enabled, `UpdateTexture` and
+> `UnlockTexture` use a synchronous store-queue partial copy only for
+> unreferenced nontwiddled POT allocations and strictly smaller
+> 32-byte-expanded contiguous physical ranges. The range is copied unchanged
+> from CPU staging to an aligned temporary buffer. Strided, preformatted,
+> target, scene-referenced, and complete-backing updates retain the existing
+> full-upload path; complete backings still use the blocking DMA/SQ chooser.
+> `test/dreamcast/test/pvr_partial_upload` passed its three captured pages on
+> real 640x480 VGA hardware. The implementation status, exact commands, and
+> capture hashes are maintained in `AGENTS.md`.
 
 ## 1. Current upload-path audit
 

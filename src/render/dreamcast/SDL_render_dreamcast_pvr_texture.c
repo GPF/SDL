@@ -117,6 +117,90 @@ static void DC_PVR_CommitVRAMReplacement(DC_PVR_RenderData *renderdata,
     renderdata->header_texture = NULL;
 }
 
+/* Attempt a partial VRAM upload for a rect update on a POT-backed texture.
+ *
+ * Computes the absolute byte range within the staging buffer:
+ *   byte_start = y * cpu_pitch + x * 2
+ *   byte_end   = byte_start + (h - 1) * cpu_pitch + w * 2
+ *
+ * Expands to 32-byte alignment boundaries (round start down, end up).
+ * Copies the exact contiguous range from data->pixels into a 32-byte-aligned
+ * temporary buffer. Never zero-fills expanded bytes.
+ *
+ * Validates exp_end <= allocation_size before proceeding.
+ *
+ * Uses synchronous store-queue pvr_txr_load only. Partial DMA is deferred
+ * until the contiguous span model and a hardware-validated threshold are
+ * established.
+ *
+ * Returns 1 on partial-upload success, 0 on fallback to full upload.
+ *
+ * POT-only scope: strided textures must fall through to full-backing upload. */
+#if SDL_DC_PVR_PARTIAL_UPLOAD
+static int DC_PVR_PartialUpload(DC_PVR_TextureData *data, pvr_ptr_t dest,
+                                int x, int y, int w, int h)
+{
+    size_t byte_start;
+    size_t byte_end;
+    size_t exp_start;
+    size_t exp_end;
+    size_t upload_bytes;
+    void *tmp;
+    pvr_ptr_t upload_dest;
+    SDL_bool show = SDL_GetHintBoolean("DC_PVR_SHOW_UPLOAD_PATH", SDL_FALSE);
+
+    /* Strided textures: must use full-backing upload. */
+    if (data->layout != DC_PVR_TEXTURE_LAYOUT_POT)
+        return 0;
+
+    /* Compute absolute byte range within the staging buffer. */
+    byte_start = (size_t)y * (size_t)data->cpu_pitch + (size_t)x * 2u;
+    byte_end   = byte_start + (size_t)(h - 1) * (size_t)data->cpu_pitch + (size_t)w * 2u;
+
+    /* Expand to 32-byte boundaries. */
+    exp_start = byte_start & ~(size_t)31u;
+    exp_end   = (byte_end + 31u) & ~(size_t)31u;
+
+    /* Validate against allocation size. */
+    if (exp_end > data->allocation_size)
+        return 0;
+
+    /* A physical full-backing upload should retain the established DMA/SQ
+     * chooser rather than paying for a temporary partial-upload buffer. */
+    if (exp_start == 0 && exp_end == data->allocation_size)
+        return 0;
+
+    upload_bytes = exp_end - exp_start;
+
+    /* Allocate a 32-byte-aligned temporary buffer. */
+    tmp = aligned_alloc(32, upload_bytes);
+    if (!tmp)
+        return 0;
+
+    /* Copy the exact contiguous byte range from data->pixels. Never
+     * zero-fill expanded bytes — the staging buffer already contains
+     * valid neighboring texels from its zero-initialized backing. */
+    SDL_memcpy(tmp, (const Uint8 *)data->pixels + exp_start, upload_bytes);
+
+    /* Determine upload destination within VRAM. */
+    upload_dest = dest;
+    if (exp_start > 0)
+        upload_dest = (pvr_ptr_t)((Uint8 *)dest + exp_start);
+
+    if (show)
+        SDL_LogDebug(SDL_LOG_CATEGORY_RENDER,
+            "Dreamcast PVR: partial SQ %lu B to vram+%lu "
+            "(orig %dx%d at %d,%d byte_start=%lu byte_end=%lu)",
+            (unsigned long)upload_bytes,
+            (unsigned long)exp_start, w, h, x, y,
+            (unsigned long)byte_start, (unsigned long)byte_end);
+
+    pvr_txr_load(tmp, upload_dest, upload_bytes);
+    free(tmp);
+    return 1;
+}
+#endif
+
 /* Upload data->pixels to VRAM using DMA when source is 32-byte aligned,
  * falling back to SQ. count must be a multiple of 32. SQ fallback always
  * succeeds (pvr_txr_load is void).
@@ -436,6 +520,24 @@ int DC_PVR_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
     }
 
     data->dirty = SDL_TRUE;
+
+    /* Attempt partial VRAM upload for an unreferenced POT allocation. The
+     * helper validates the physical aligned range; strided textures and
+     * referenced allocations always fall through to full-backing upload. */
+#if SDL_DC_PVR_PARTIAL_UPLOAD
+    if (!data->referenced_in_scene) {
+        if (DC_PVR_PartialUpload(data, upload_vram,
+                                 rect->x, rect->y, rect->w, rect->h)) {
+            data->uploaded = SDL_TRUE;
+            data->dirty = SDL_FALSE;
+            if (deferred) {
+                DC_PVR_CommitVRAMReplacement(renderdata, data, upload_vram, deferred);
+            }
+            return 0;
+        }
+    }
+#endif
+
     /* Upload the complete POT backing store synchronously. Uses DMA when
      * source is 32-byte aligned; falls back to SQ on failure. */
     DC_PVR_UploadToVRAM(data, upload_vram, data->allocation_size);
@@ -508,6 +610,32 @@ void DC_PVR_UnlockTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     }
     upload_vram = data->lock_replacement_vram ? data->lock_replacement_vram
                                                : data->vram;
+
+    /* Attempt partial VRAM upload for an unreferenced POT allocation. The
+     * helper validates the physical aligned range; strided textures and
+     * referenced allocations always fall through to full-backing upload. */
+#if SDL_DC_PVR_PARTIAL_UPLOAD
+    if (!data->referenced_in_scene) {
+        if (DC_PVR_PartialUpload(data, upload_vram,
+                                 data->locked_rect.x,
+                                 data->locked_rect.y,
+                                 data->locked_rect.w,
+                                 data->locked_rect.h)) {
+            data->uploaded = SDL_TRUE;
+            data->dirty = SDL_FALSE;
+            data->locked = SDL_FALSE;
+            SDL_zero(data->locked_rect);
+            if (data->lock_deferred_vram) {
+                DC_PVR_CommitVRAMReplacement(renderdata, data, upload_vram,
+                                             data->lock_deferred_vram);
+                data->lock_replacement_vram = NULL;
+                data->lock_deferred_vram = NULL;
+            }
+            return;
+        }
+    }
+#endif
+
     DC_PVR_UploadToVRAM(data, upload_vram, data->allocation_size);
     if (data->lock_deferred_vram) {
         DC_PVR_CommitVRAMReplacement(renderdata, data, upload_vram,

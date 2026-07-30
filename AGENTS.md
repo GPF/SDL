@@ -549,8 +549,9 @@ logical sizes, filtering, modulation, rotation, and flips all work.
   nontwiddled 16-bit VRAM allocations. Target textures remain rejected.
 - Full and partial updates honor caller pitch and backing pitch, while full and
   partial streaming locks return a pointer into staging with the full backing
-  pitch. Updates and unlocks synchronously upload the complete backing through
-  `pvr_txr_load`; DMA and partial VRAM uploads remain deferred.
+  pitch. This baseline initially uploaded the complete backing synchronously;
+  later guarded Phase 6.4 DMA and Phase 6.5 POT partial-upload increments are
+  recorded below.
 - Nearest and bilinear filtering are supported and included in polygon-header
   cache identity. RGB565 disables sampled texture alpha while retaining vertex
   alpha; ARGB1555 and ARGB4444 retain sampled alpha. Existing modulation,
@@ -785,12 +786,11 @@ static SDL_bool IsSupportedBlendMode(SDL_Renderer *renderer, SDL_BlendMode blend
 
 **MEDIUM — `DC_PVR_UpdateTexture` uploads full POT backing on every partial update**
 
-The implementation copies the requested rectangle into staging, then calls
-`pvr_txr_load(data->pixels, data->vram, data->allocation_size)` — the full
-allocation — regardless of which rectangle was updated. A 1×1 partial update
-still transfers `backing_w × backing_h × 2` bytes. This is documented as
-Phase 0/3.1 intentional behavior. No fix required in the focused copy/copy-ex
-increment; partial uploads remain a later texture-optimization task.
+At the time of this review, the implementation copied the requested rectangle
+into staging and uploaded the full allocation. That Phase 0/3.1 behavior was
+intentional. Guarded Phase 6.5 now adds physical-range partial uploads for
+unreferenced POT allocations; unsupported or scene-referenced layouts still
+use the full-backing path.
 
 **MEDIUM — OpenGL diff should be separated**
 
@@ -871,8 +871,9 @@ the name dependency.
   old/new update ordering, nearest/bilinear filtering, and ARGB1555/ARGB4444
   alpha. Capture paths and SHA-256 values are recorded in the focused README.
   The ordinary ELF was rebuilt without capture references.
-- Full-backing synchronous uploads remain intentional. Partial uploads, DMA,
-  custom store-queue row transfers, and read-modify-write logic remain
+- Full-backing uploads remain the default and fallback behavior. The guarded
+  Phase 6.4 blocking-DMA and Phase 6.5 POT partial-upload increments are
+  recorded below; custom row transfers and read-modify-write logic remain
   deferred. Non-VGA modes and broader capacity/performance profiling remain
   later hardening.
 
@@ -1100,6 +1101,7 @@ After baseline SDL behavior is stable, add and benchmark:
 - mipmapped `.dt` assets where SDL semantics permit;
 - strided NPOT textures;
 - DMA uploads;
+- guarded partial VRAM uploads;
 - opaque and punch-through list routing; and
 - state-header and draw-call batching.
 
@@ -1238,6 +1240,55 @@ the guarded render-target prototype or change renderer capability advertising.
   `src/render/dreamcast/PVR_DMA_UPLOAD_RESEARCH.md`. Wider video modes,
   VRAM-pressure/lifecycle stress, and measured DMA-versus-SQ performance remain
   Phase 7 hardening before any default-performance claim.
+
+### Phase 6.5: guarded POT partial VRAM uploads — hardware validated
+
+- `SDL_DC_PVR_PARTIAL_UPLOAD` is a Dreamcast-PVR-dependent CMake option and
+  remains OFF by default. When enabled, an unreferenced nontwiddled POT
+  RGB565, ARGB1555, or ARGB4444 rectangle update copies only its contiguous
+  32-byte-expanded physical range from CPU staging into a 32-byte-aligned
+  temporary buffer, then submits that range synchronously with
+  `pvr_txr_load()`. Neighboring bytes are copied from staging, never
+  synthesized or zero-filled. Strided, preformatted, target, and
+  scene-referenced allocations retain their established full-backing path.
+- A range equal to the whole physical allocation intentionally falls through
+  to the existing blocking DMA/SQ chooser; partial upload does not regress a
+  full upload into a temporary SQ copy. Partial DMA, row-by-row DMA, vertex
+  DMA, and partial strided uploads remain deferred.
+- Build the guarded library with the active KOS CMake toolchain, not the
+  deprecated `dreamcast.toolchain.cmake` path:
+
+  ```sh
+  cd /home/gpf/code/dreamcast/SDL2
+  cmake -S . -B /tmp/sdl2-dc-partial \
+    -DCMAKE_TOOLCHAIN_FILE=/opt/toolchains/dc/kos/utils/cmake/kallistios.toolchain.cmake \
+    -DSDL_VIDEO_RENDER_DREAMCAST_PVR=ON \
+    -DSDL_DC_PVR_PARTIAL_UPLOAD=ON \
+    -DSDL_SHARED=OFF -DSDL_STATIC=ON \
+    -DCMAKE_C_FLAGS="-Wall -Wextra"
+  cmake --build /tmp/sdl2-dc-partial -j2
+  cd test/dreamcast/test/pvr_partial_upload
+  make -B -f Makefile.dc SDL2_LIBDIR=/tmp/sdl2-dc-partial \
+    EXTRA_CFLAGS="-DPVR_TEXTURE_HARDWARE_SCREENSHOT"
+  ```
+
+  Verify the CMake cache reports both options ON. Tests must link the local
+  archive explicitly because KOS's addon library search path otherwise wins.
+- `test/dreamcast/test/pvr_partial_upload` covers interior, edge, multi-row,
+  padded-pitch, and neighboring-texel POT updates; ARGB1555/ARGB4444;
+  streaming lock/unlock; replacement after scene reference; strided fallback;
+  and recovery. **Physical-hardware validation (2026-07-30):** the final
+  screenshot-enabled run at 640x480 VGA passed all three pages and returned
+  zero normally to dc-load-ip. Direct capture inspection confirmed every
+  documented RGB565/alpha/streaming panel and the visible yellow edge update
+  on the blue strided fallback panel. Raw captures are
+  `test/dreamcast/test/pvr_partial_upload/pvr_partial_upload-page1.ppm`
+  through `page3.ppm`, with SHA-256 values respectively
+  `153a32b7034b18f0fa5bb35e2ebe49c0ac18343d429183145ca85c43d16b25d5`,
+  `7ef10cb4156c452d2b24030dd47d4677f04d7cde1c5c195af608ff89e02b64a7`, and
+  `40586a038c287fb129c4d13223216b019cd974473cc74de709be52f269f8434e`.
+  Captures wait three vblanks after present because the PVR path is
+  three-buffered.
 
 ## Phase 7: hardening and default enablement
 
