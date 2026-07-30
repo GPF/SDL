@@ -113,8 +113,12 @@ static void DC_PVR_CommitVRAMReplacement(DC_PVR_RenderData *renderdata,
 
 int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 {
+    DC_PVR_RenderData *renderdata = (DC_PVR_RenderData *)renderer->driverdata;
     DC_PVR_TextureData *data;
     int pvr_format;
+    int backing_w;
+    int backing_h;
+    int stride_px = 0;
 #if defined(DC_PVR_RENDER_TARGETS_ENABLED)
     pvr_ptr_t vram_next;
 #else
@@ -168,9 +172,27 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     data->access = texture->access;
     data->logical_w = texture->w;
     data->logical_h = texture->h;
-    data->backing_w = DC_PVR_NextPowerOfTwo(texture->w);
-    data->backing_h = DC_PVR_NextPowerOfTwo(texture->h);
-    data->cpu_pitch = data->backing_w * 2;
+    backing_w = DC_PVR_NextPowerOfTwo(texture->w);
+    backing_h = DC_PVR_NextPowerOfTwo(texture->h);
+    if (texture->access != SDL_TEXTUREACCESS_TARGET &&
+        texture->format == SDL_PIXELFORMAT_RGB565 &&
+        renderdata->preferred_stride_px > 0 &&
+        texture->w <= renderdata->preferred_stride_px &&
+        renderdata->preferred_stride_px < backing_w &&
+        texture->h <= 1024) {
+        stride_px = renderdata->preferred_stride_px;
+        data->pvr_format |= PVR_TXRFMT_X32_STRIDE;
+        data->layout = DC_PVR_TEXTURE_LAYOUT_STRIDED;
+        data->stride_px = stride_px;
+        backing_w = DC_PVR_NextPowerOfTwo(stride_px);
+    } else {
+        data->layout = DC_PVR_TEXTURE_LAYOUT_POT;
+        data->stride_px = backing_w;
+    }
+    data->backing_w = backing_w;
+    data->backing_h = backing_h;
+    data->cpu_pitch = (data->layout == DC_PVR_TEXTURE_LAYOUT_STRIDED)
+                          ? stride_px * 2 : data->backing_w * 2;
     data->vram_pitch = data->cpu_pitch;
     data->allocation_size = (size_t)data->vram_pitch * data->backing_h;
     data->filter = PVR_FILTER_NEAREST;
@@ -294,6 +316,8 @@ int DC_PVR_CreateDreamcastTexture(SDL_Renderer *renderer, SDL_Texture *texture,
     data->logical_h = dt->height;
     data->backing_w = dt->pvr_width;
     data->backing_h = dt->pvr_height;
+    data->stride_px = data->backing_w;
+    data->layout = DC_PVR_TEXTURE_LAYOUT_POT;
     data->access = SDL_TEXTUREACCESS_STATIC;
     data->filter = PVR_FILTER_NEAREST;
     data->uploaded = SDL_TRUE;

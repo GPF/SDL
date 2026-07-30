@@ -35,6 +35,12 @@ typedef struct DC_PVR_Vertex
     Uint32 color;
 } DC_PVR_Vertex;
 
+typedef enum DC_PVR_TextureLayout
+{
+    DC_PVR_TEXTURE_LAYOUT_POT = 0,
+    DC_PVR_TEXTURE_LAYOUT_STRIDED
+} DC_PVR_TextureLayout;
+
 typedef struct DC_PVR_TextureData
 {
     struct DC_PVR_TextureData *next_deferred;
@@ -52,6 +58,8 @@ typedef struct DC_PVR_TextureData
     int backing_h;
     int cpu_pitch;
     int vram_pitch;
+    int stride_px;
+    DC_PVR_TextureLayout layout;
     SDL_TextureAccess access;
     pvr_filter_mode_t filter;
     SDL_bool uploaded;
@@ -97,6 +105,10 @@ typedef struct DC_PVR_RenderData
     SDL_BlendMode header_blend;
     pvr_txr_shading_mode_t header_texture_env;
     pvr_filter_mode_t header_filter;
+    int header_stride_px;
+    int preferred_stride_px;
+    int frame_stride_px;
+    Uint32 stride_generation;
     DC_PVR_TextureData *deferred_textures;
     DC_PVR_DeferredVRAM *deferred_vram;
 #if defined(DC_PVR_RENDER_TARGETS_ENABLED)

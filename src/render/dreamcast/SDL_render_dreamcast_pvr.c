@@ -15,6 +15,7 @@
 #include "SDL_video.h"
 
 #include <dc/video.h>
+#include <dc/pvr/pvr_txr.h>
 
 #if defined(DC_PVR_RENDER_TARGETS_ENABLED)
 typedef enum DC_PVR_SceneKind
@@ -106,6 +107,12 @@ static void DC_PVR_ClearTextureSceneReferences(SDL_Renderer *renderer)
             texturedata->referenced_in_scene = SDL_FALSE;
         }
     }
+}
+
+static void DC_PVR_ResetFrameStride(DC_PVR_RenderData *data)
+{
+    data->frame_stride_px = 0;
+    ++data->stride_generation;
 }
 
 #if defined(DC_PVR_RENDER_TARGETS_ENABLED)
@@ -502,8 +509,22 @@ int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture, SDL_BlendMod
         if (data->header_valid && data->header_texture == texture &&
             data->header_blend == blend &&
             data->header_texture_env == texture_env &&
-            data->header_filter == texturedata->filter) {
+            data->header_filter == texturedata->filter &&
+            data->header_stride_px == texturedata->stride_px) {
             return 0;
+        }
+        if (texturedata->layout == DC_PVR_TEXTURE_LAYOUT_STRIDED) {
+            if (data->frame_stride_px != 0 &&
+                data->frame_stride_px != texturedata->stride_px) {
+                return SDL_SetError("Dreamcast PVR strided textures require one stride per frame");
+            }
+            if (data->frame_stride_px == 0) {
+                pvr_txr_set_stride((size_t)texturedata->stride_px);
+                if (pvr_txr_get_stride() != (size_t)texturedata->stride_px) {
+                    return SDL_SetError("Dreamcast PVR stride register rejected the texture pitch");
+                }
+                data->frame_stride_px = texturedata->stride_px;
+            }
         }
         pvr_poly_cxt_txr(&context, PVR_LIST_TR_POLY,
                          texturedata->pvr_format,
@@ -565,6 +586,7 @@ int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture, SDL_BlendMod
     data->header_texture_env = texture_env;
     data->header_filter = texture ? ((DC_PVR_TextureData *)texture->driverdata)->filter
                                   : PVR_FILTER_NEAREST;
+    data->header_stride_px = texture ? ((DC_PVR_TextureData *)texture->driverdata)->stride_px : 0;
     data->header_valid = SDL_TRUE;
     if (texture) {
         ((DC_PVR_TextureData *)texture->driverdata)->referenced_in_scene = SDL_TRUE;
@@ -748,6 +770,7 @@ static int DC_PVR_RenderPresent(SDL_Renderer *renderer)
             return -1;
         }
         data->ordered_frame_state = DC_PVR_TARGETS_ALLOWED;
+        DC_PVR_ResetFrameStride(data);
         return 0;
     }
     if (DC_PVR_BeginFrame(renderer) < 0) {
@@ -787,6 +810,7 @@ static int DC_PVR_RenderPresent(SDL_Renderer *renderer)
     DC_PVR_ReleaseDeferredTextures(data, SDL_TRUE);
     DC_PVR_ReleaseDeferredVRAM(data, SDL_TRUE);
     DC_PVR_ClearTextureSceneReferences(renderer);
+    DC_PVR_ResetFrameStride(data);
     return 0;
 }
 
@@ -945,6 +969,7 @@ static int DC_PVR_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, Uin
     data->vsync = SDL_TRUE;
     data->output_w = output_w;
     data->output_h = output_h;
+    data->preferred_stride_px = output_w <= 992 ? output_w : 992;
 #if defined(DC_PVR_ORDERED_RENDER_TARGETS)
     data->ordered_targets_enabled = ordered_targets_requested;
     data->ordered_frame_state = DC_PVR_TARGETS_ALLOWED;
