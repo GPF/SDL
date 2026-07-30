@@ -115,6 +115,79 @@ static void DC_PVR_ResetFrameStride(DC_PVR_RenderData *data)
     ++data->stride_generation;
 }
 
+#if SDL_DC_PVR_OPAQUE_PREFIX_ROUTING
+/* Opaque-prefix eligibility: a drawable is eligible for PVR_LIST_OP_POLY
+ * only while the prefix is open and the draw is either a supported full-
+ * target clear or untextured SDL_BLENDMODE_NONE geometry.
+ *
+ * A textured SDL_BLENDMODE_NONE draw is NOT eligible for the opaque
+ * prefix because it must be emitted through PVR_LIST_TR_POLY to preserve
+ * SDL painter order (textured NONE in OP would render before later TR
+ * draws, reversing SDL order).
+ *
+ * Once the prefix closes it never reopens in the same frame.
+ */
+static SDL_bool DC_PVR_IsOpaquePrefixEligible(SDL_BlendMode blend,
+                                                SDL_Texture *texture,
+                                                SDL_bool opaque_prefix_open)
+{
+    if (!opaque_prefix_open)
+        return SDL_FALSE;
+    if (blend != SDL_BLENDMODE_NONE)
+        return SDL_FALSE;
+    if (texture != NULL)
+        return SDL_FALSE;
+    return SDL_TRUE;
+}
+
+/* Begin the requested PVR list, transitioning from the current list if
+ * necessary.  Invalidates the polygon-header cache on any transition.
+ * Called from RunCommandQueue; only one list may be active at a time. */
+static int DC_PVR_BeginList(SDL_Renderer *renderer, int list_type)
+{
+    DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
+
+    if (data->active_list_type == list_type)
+        return 0;
+
+    if (data->list_active) {
+        if (pvr_list_finish() < 0) {
+            data->pvr_failed = SDL_TRUE;
+            return SDL_SetError("Could not finish the Dreamcast PVR list during opaque-prefix transition");
+        }
+        data->list_active = SDL_FALSE;
+        data->active_list_type = PVR_LIST_NONE;
+    }
+
+    data->header_valid = SDL_FALSE;
+
+    if (pvr_list_begin(list_type) < 0) {
+        data->pvr_failed = SDL_TRUE;
+        return SDL_SetError("Could not begin the Dreamcast PVR list");
+    }
+    data->list_active = SDL_TRUE;
+    data->active_list_type = list_type;
+    return 0;
+}
+#endif
+
+/* Finish whatever list is currently active.  Safe to call when no list is
+ * active; safe to call from destruction with an incomplete list. */
+static int DC_PVR_FinishCurrentList(SDL_Renderer *renderer)
+{
+    DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
+
+    if (!data->list_active)
+        return 0;
+    if (pvr_list_finish() < 0) {
+        data->pvr_failed = SDL_TRUE;
+        return SDL_SetError("Could not finish the Dreamcast PVR list");
+    }
+    data->list_active = SDL_FALSE;
+    data->active_list_type = PVR_LIST_NONE;
+    return 0;
+}
+
 #if defined(DC_PVR_RENDER_TARGETS_ENABLED)
 static int DC_PVR_FinishActiveScene(SDL_Renderer *renderer)
 {
@@ -320,6 +393,7 @@ static int DC_PVR_BeginSceneForCurrentTarget(SDL_Renderer *renderer)
             return SDL_SetError("Could not begin the Dreamcast PVR translucent list");
         }
         data->list_active = SDL_TRUE;
+        data->active_list_type = PVR_LIST_TR_POLY;
 
         /* Emit preservation seed only after list begin. Skip if current is
          * undefined or if the destination is already the current allocation. */
@@ -470,18 +544,22 @@ static int DC_PVR_BeginFrame(SDL_Renderer *renderer)
         data->scene_active = SDL_TRUE;
         data->header_valid = SDL_FALSE;
     }
+#if !SDL_DC_PVR_OPAQUE_PREFIX_ROUTING
     if (!data->list_active) {
         if (pvr_list_begin(PVR_LIST_TR_POLY) < 0) {
             data->pvr_failed = SDL_TRUE;
             return SDL_SetError("Could not begin the Dreamcast PVR translucent list");
         }
         data->list_active = SDL_TRUE;
+        data->active_list_type = PVR_LIST_TR_POLY;
     }
+#endif
     return 0;
 #endif
 }
 
-int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture, SDL_BlendMode blend)
+int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture,
+                      SDL_BlendMode blend, int list_type)
 {
     DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
     const pvr_txr_shading_mode_t texture_env = texture ? PVR_TXRENV_MODULATEALPHA : PVR_TXRENV_REPLACE;
@@ -506,7 +584,9 @@ int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture, SDL_BlendMod
                 return SDL_SetError("Dreamcast PVR texture has not been uploaded");
             }
         }
-        if (data->header_valid && data->header_texture == texture &&
+        if (data->header_valid &&
+            data->header_list_type == list_type &&
+            data->header_texture == texture &&
             data->header_blend == blend &&
             data->header_texture_env == texture_env &&
             data->header_filter == texturedata->filter &&
@@ -526,14 +606,14 @@ int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture, SDL_BlendMod
                 data->frame_stride_px = texturedata->stride_px;
             }
         }
-        pvr_poly_cxt_txr(&context, PVR_LIST_TR_POLY,
+        pvr_poly_cxt_txr(&context, list_type,
                          texturedata->pvr_format,
                          texturedata->backing_w, texturedata->backing_h,
                          texturedata->sample_vram, texturedata->filter);
         /* SDL's packed vertex color modulates all four sampled channels. */
         context.txr.env = texture_env;
     } else {
-        pvr_poly_cxt_col(&context, PVR_LIST_TR_POLY);
+        pvr_poly_cxt_col(&context, list_type);
     }
 
     context.gen.culling = PVR_CULLING_NONE;
@@ -587,6 +667,7 @@ int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture, SDL_BlendMod
     data->header_filter = texture ? ((DC_PVR_TextureData *)texture->driverdata)->filter
                                   : PVR_FILTER_NEAREST;
     data->header_stride_px = texture ? ((DC_PVR_TextureData *)texture->driverdata)->stride_px : 0;
+    data->header_list_type = list_type;
     data->header_valid = SDL_TRUE;
     if (texture) {
         ((DC_PVR_TextureData *)texture->driverdata)->referenced_in_scene = SDL_TRUE;
@@ -654,6 +735,17 @@ static int DC_PVR_RunCommandQueue(SDL_Renderer *renderer,
                 }
             }
 #endif
+#if SDL_DC_PVR_OPAQUE_PREFIX_ROUTING
+            if (DC_PVR_IsOpaquePrefixEligible(
+                    SDL_BLENDMODE_NONE, NULL, data->opaque_prefix_open)) {
+                if (DC_PVR_BeginList(renderer, PVR_LIST_OP_POLY) < 0)
+                    return -1;
+            } else {
+                if (DC_PVR_BeginList(renderer, PVR_LIST_TR_POLY) < 0)
+                    return -1;
+                data->opaque_prefix_open = SDL_FALSE;
+            }
+#endif
             if (DC_PVR_EmitFullTargetClear(renderer, cmd) < 0) {
                 return -1;
             }
@@ -672,6 +764,21 @@ static int DC_PVR_RunCommandQueue(SDL_Renderer *renderer,
                 if (DC_PVR_BeginFrame(renderer) < 0) {
                     return -1;
                 }
+            }
+#endif
+            if (cmd->data.draw.count == 0)
+                break;
+#if SDL_DC_PVR_OPAQUE_PREFIX_ROUTING
+            if (DC_PVR_IsOpaquePrefixEligible(
+                    cmd->data.draw.blend,
+                    cmd->data.draw.texture,
+                    data->opaque_prefix_open)) {
+                if (DC_PVR_BeginList(renderer, PVR_LIST_OP_POLY) < 0)
+                    return -1;
+            } else {
+                if (DC_PVR_BeginList(renderer, PVR_LIST_TR_POLY) < 0)
+                    return -1;
+                data->opaque_prefix_open = SDL_FALSE;
             }
 #endif
             if (DC_PVR_RunGeometryCommand(renderer, cmd, vertices) < 0) {
@@ -771,37 +878,45 @@ static int DC_PVR_RenderPresent(SDL_Renderer *renderer)
         }
         data->ordered_frame_state = DC_PVR_TARGETS_ALLOWED;
         DC_PVR_ResetFrameStride(data);
+#if SDL_DC_PVR_OPAQUE_PREFIX_ROUTING
+        data->opaque_prefix_open = SDL_TRUE;
+        data->active_list_type = -1;
+#endif
         return 0;
     }
     if (DC_PVR_BeginFrame(renderer) < 0) {
         return -1;
     }
-    if (pvr_list_finish() < 0) {
-        data->pvr_failed = SDL_TRUE;
-        return SDL_SetError("Could not finish the Dreamcast PVR translucent list");
+    if (DC_PVR_FinishCurrentList(renderer) < 0) {
+        return -1;
     }
-    data->list_active = SDL_FALSE;
     if (pvr_scene_finish() < 0) {
         data->pvr_failed = SDL_TRUE;
         return SDL_SetError("Could not finish the Dreamcast PVR scene");
     }
     data->scene_active = SDL_FALSE;
     data->header_valid = SDL_FALSE;
+#if SDL_DC_PVR_OPAQUE_PREFIX_ROUTING
+    data->opaque_prefix_open = SDL_TRUE;
+    data->active_list_type = -1;
+#endif
 #else
     if (DC_PVR_BeginFrame(renderer) < 0) {
         return -1;
     }
-    if (pvr_list_finish() < 0) {
-        data->pvr_failed = SDL_TRUE;
-        return SDL_SetError("Could not finish the Dreamcast PVR translucent list");
+    if (DC_PVR_FinishCurrentList(renderer) < 0) {
+        return -1;
     }
-    data->list_active = SDL_FALSE;
     if (pvr_scene_finish() < 0) {
         data->pvr_failed = SDL_TRUE;
         return SDL_SetError("Could not finish the Dreamcast PVR scene");
     }
     data->scene_active = SDL_FALSE;
     data->header_valid = SDL_FALSE;
+#if SDL_DC_PVR_OPAQUE_PREFIX_ROUTING
+    data->opaque_prefix_open = SDL_TRUE;
+    data->active_list_type = -1;
+#endif
 #endif
     if (pvr_wait_render_done() < 0) {
         data->pvr_failed = SDL_TRUE;
@@ -911,7 +1026,7 @@ static void DC_PVR_DestroyRenderer(SDL_Renderer *renderer)
 
 static int DC_PVR_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, Uint32 flags)
 {
-    static const pvr_init_params_t pvr_params = {
+    pvr_init_params_t pvr_params = {
         { PVR_BINSIZE_0, PVR_BINSIZE_0, PVR_BINSIZE_16, PVR_BINSIZE_0, PVR_BINSIZE_0 },
         512 * 1024,
         0, /* Direct submission; no DMA. */
@@ -960,11 +1075,15 @@ static int DC_PVR_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, Uin
     if (!data) {
         return SDL_OutOfMemory();
     }
+#if SDL_DC_PVR_OPAQUE_PREFIX_ROUTING
+    /* Enable the opaque list for the prefix routing increment.  The
+     * bin size is deliberately measured by the focused capacity test. */
+    pvr_params.opb_sizes[0] = PVR_BINSIZE_16;
+#endif
     if (pvr_init(&pvr_params) < 0) {
         SDL_free(data);
         return SDL_SetError("Could not initialize Dreamcast PVR (it may already be owned)");
     }
-
     data->pvr_owned = SDL_TRUE;
     data->vsync = SDL_TRUE;
     data->output_w = output_w;
@@ -973,6 +1092,12 @@ static int DC_PVR_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, Uin
 #if defined(DC_PVR_ORDERED_RENDER_TARGETS)
     data->ordered_targets_enabled = ordered_targets_requested;
     data->ordered_frame_state = DC_PVR_TARGETS_ALLOWED;
+#endif
+#if SDL_DC_PVR_OPAQUE_PREFIX_ROUTING
+    data->opaque_prefix_open = SDL_TRUE;
+    data->active_list_type = PVR_LIST_NONE;
+#else
+    data->active_list_type = PVR_LIST_TR_POLY;
 #endif
 
 #if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)

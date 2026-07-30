@@ -662,7 +662,8 @@ int DC_PVR_EmitFullTargetClear(SDL_Renderer *renderer,
     vertices[3].x = (float)output_w;
     vertices[3].y = (float)output_h;
 
-    if (DC_PVR_EmitHeader(renderer, NULL, SDL_BLENDMODE_NONE) < 0) {
+    if (DC_PVR_EmitHeader(renderer, NULL, SDL_BLENDMODE_NONE,
+                           data->active_list_type) < 0) {
         return -1;
     }
     for (i = 0; i < 4; ++i) {
@@ -716,7 +717,8 @@ int DC_PVR_RunGeometryCommand(SDL_Renderer *renderer,
             return SDL_SetError("Dreamcast PVR geometry is not an independent triangle list");
         }
         if (DC_PVR_EmitHeader(renderer, cmd->data.draw.texture,
-                              cmd->data.draw.blend) < 0) {
+                              cmd->data.draw.blend,
+                              data->active_list_type) < 0) {
             return -1;
         }
         for (i = 0; i < cmd->data.draw.count; i += 3) {
@@ -788,7 +790,8 @@ int DC_PVR_RunGeometryCommand(SDL_Renderer *renderer,
                 continue;
             }
             if (!header_emitted) {
-                if (DC_PVR_EmitHeader(renderer, NULL, cmd->data.draw.blend) < 0) {
+                if (DC_PVR_EmitHeader(renderer, NULL, cmd->data.draw.blend,
+                                      data->active_list_type) < 0) {
                     return -1;
                 }
                 header_emitted = SDL_TRUE;

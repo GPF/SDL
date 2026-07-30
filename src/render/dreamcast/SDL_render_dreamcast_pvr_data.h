@@ -106,6 +106,8 @@ typedef struct DC_PVR_RenderData
     pvr_txr_shading_mode_t header_texture_env;
     pvr_filter_mode_t header_filter;
     int header_stride_px;
+    int header_list_type;
+    int active_list_type;
     int preferred_stride_px;
     int frame_stride_px;
     Uint32 stride_generation;
@@ -115,6 +117,9 @@ typedef struct DC_PVR_RenderData
     SDL_Texture *current_target;
     SDL_Texture *scene_target;
     int scene_kind;
+#endif
+#if SDL_DC_PVR_OPAQUE_PREFIX_ROUTING
+    SDL_bool opaque_prefix_open;
 #endif
 #if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
     pvr_ptr_t screen_vram_current;

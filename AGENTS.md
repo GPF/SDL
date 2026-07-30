@@ -1290,6 +1290,30 @@ the guarded render-target prototype or change renderer capability advertising.
   Captures wait three vblanks after present because the PVR path is
   three-buffered.
 
+### Phase 6.6: guarded opaque-prefix list routing — hardware validated
+
+- `SDL_DC_PVR_OPAQUE_PREFIX_ROUTING` is a Dreamcast-PVR-dependent CMake
+  option and remains OFF by default. When enabled, a leading full-target clear
+  and untextured `SDL_BLENDMODE_NONE` geometry use `PVR_LIST_OP_POLY`. The
+  first other drawable permanently closes the prefix, so it and all later
+  drawables use `PVR_LIST_TR_POLY`; this preserves SDL painter order.
+- List opening is lazy, header-cache identity includes list type, and both
+  renderer-local and KOS list state begin at `PVR_LIST_NONE`. State-only
+  viewport, clip, and draw-color commands do not close the prefix. The
+  ordinary feature-off configuration compiles out this path.
+- `test/dreamcast/test/pvr_list_routing` covers leading opaque/blended/later
+  opaque order, a textured-`NONE` boundary, state-only viewport/clip behavior,
+  and empty presents. **Physical-hardware validation (2026-07-30):** the
+  feature-on 640×480 VGA ELF linked against `/tmp/sdl2-dc-opaque/libSDL2.a`
+  returned zero with no KOS errors. Direct inspection of three raw captures
+  confirms the documented order and state-only panels; hashes are in the test
+  README.
+- This remains a guarded feasibility optimization. OPB/TA capacity and
+  performance measurement, render-target interaction, punch-through routing,
+  broader video modes, and stress testing remain deferred. See
+  `src/render/dreamcast/PVR_LIST_ROUTING_RESEARCH.md` and
+  `PVR_LIST_ROUTING_FAILURE_RESEARCH.md` for the design and resolved failure.
+
 ## Phase 7: hardening and default enablement
 
 - Test VRAM exhaustion and allocation rollback.

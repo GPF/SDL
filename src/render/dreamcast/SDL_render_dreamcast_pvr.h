@@ -20,7 +20,7 @@
 
 int DC_PVR_Submit(const void *data, size_t size);
 int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture,
-                      SDL_BlendMode blend);
+                      SDL_BlendMode blend, int list_type);
 
 int DC_PVR_QueueDrawPoints(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
                            const SDL_FPoint *points, int count);
