@@ -1,0 +1,90 @@
+SDL2_ROOT ?= $(abspath ../../../..)
+SDL2_LIBDIR ?= $(SDL2_ROOT)/build-scripts/dcbuild
+SDL2_INCLUDEDIR ?= $(KOS_BASE)/addons/include/SDL2
+PVRTEX ?= $(KOS_BASE)/utils/pvrtex/pvrtex
+HOST_CC ?= cc
+HARDWARE_SCREENSHOTS ?= 0
+
+KOS_ROMDISK_DIR = romdisk
+COMMON_CFLAGS = -I$(SDL2_INCLUDEDIR) -DDREAMCAST -D__DREAMCAST__ \
+	-Wall -Wextra -Werror
+ifeq ($(HARDWARE_SCREENSHOTS),1)
+COMMON_CFLAGS += -DPVR_DT_HARDWARE_SCREENSHOT
+endif
+
+DT_ASSETS = romdisk/rgb565.dt romdisk/argb1555.dt romdisk/argb4444.dt \
+	romdisk/vq_full.dt romdisk/vq_small.dt romdisk/vq_mip.dt
+
+all: check-sdl native.bin opengl.bin
+
+include $(KOS_BASE)/Makefile.rules
+
+.PHONY: check-sdl clean
+check-sdl:
+	@test -f $(SDL2_INCLUDEDIR)/SDL.h || \
+		(echo "Missing SDL headers: $(SDL2_INCLUDEDIR)"; exit 1)
+	@test -f $(SDL2_LIBDIR)/libSDL2.a || \
+		(echo "Missing SDL archive: $(SDL2_LIBDIR)/libSDL2.a"; exit 1)
+	@sh-elf-nm $(SDL2_LIBDIR)/libSDL2.a | grep -q '[[:space:]]_DC_RenderDriver$$' || \
+		(echo "Native Dreamcast PVR renderer is absent"; exit 1)
+	@sh-elf-nm $(SDL2_LIBDIR)/libSDL2.a | grep -q '[[:space:]]_GL_RenderDriver$$' || \
+		(echo "OpenGL renderer is absent"; exit 1)
+	@sh-elf-nm $(SDL2_LIBDIR)/libSDL2.a | grep -q '[[:space:]]_SDL_LoadDreamcastTexture_RW$$' || \
+		(echo "Dreamcast .dt loader is absent"; exit 1)
+
+asset_generator: asset_generator.c
+	$(HOST_CC) -std=c99 -Wall -Wextra -Werror $< -o $@
+
+romdisk/source.tga: asset_generator | romdisk
+	./asset_generator $@
+
+romdisk:
+	mkdir -p $@
+
+romdisk/rgb565.dt: romdisk/source.tga
+	$(PVRTEX) -i $< -f rgb565 -o $@
+
+romdisk/argb1555.dt: romdisk/source.tga
+	$(PVRTEX) -i $< -f argb1555 -o $@
+
+romdisk/argb4444.dt: romdisk/source.tga
+	$(PVRTEX) -i $< -f argb4444 -o $@
+
+romdisk/vq_full.dt: romdisk/source.tga
+	$(PVRTEX) -i $< -f argb1555 -c 256 -o $@
+
+romdisk/vq_small.dt: romdisk/source.tga
+	$(PVRTEX) -i $< -f argb1555 -c small -o $@
+
+romdisk/vq_mip.dt: romdisk/source.tga
+	$(PVRTEX) -i $< -f argb4444 -c 64 -m fast -o $@
+
+romdisk.img: $(DT_ASSETS)
+romdisk.o: romdisk.img
+
+native.o: pvr_dt_texture.c
+	kos-cc $(COMMON_CFLAGS) -DPVR_DT_TEST_NATIVE -c $< -o $@
+
+opengl.o: pvr_dt_texture.c
+	kos-cc $(COMMON_CFLAGS) -DPVR_DT_TEST_OPENGL -c $< -o $@
+
+native.elf: native.o romdisk.o
+	kos-cc -o $@ $^ -Wl,-Map,native.map \
+		$(SDL2_LIBDIR)/libSDL2.a $(SDL2_LIBDIR)/libSDL2main.a \
+		-lGL -lm -lkosutils -lpthread
+
+opengl.elf: opengl.o romdisk.o
+	kos-cc -o $@ $^ -Wl,-Map,opengl.map \
+		$(SDL2_LIBDIR)/libSDL2.a $(SDL2_LIBDIR)/libSDL2main.a \
+		-lGL -lm -lkosutils -lpthread
+
+native.bin: native.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+opengl.bin: opengl.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+clean:
+	rm -f asset_generator native.o opengl.o romdisk.o romdisk_tmp.c \
+		romdisk_tmp.o romdisk.img native.elf native.bin native.map \
+		opengl.elf opengl.bin opengl.map $(DT_ASSETS) romdisk/source.tga

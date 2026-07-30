@@ -1056,6 +1056,36 @@ width for all strided textures used in a frame. Textures with different stride
 widths cannot be batched naively. Power-of-two padding should remain the safe
 default.
 
+### Phase 6.1: direct `.dt`, twiddled, VQ, and mipmapped textures — done
+
+- The Dreamcast-only `SDL_LoadDreamcastTexture_RW()` path now validates the
+  `DcTx` container once and dispatches preformatted payloads to either renderer
+  through a callback compiled only under `__DREAMCAST__`. Shared SDL changes
+  are guarded; non-Dreamcast renderer layout and texture allocation remain
+  unchanged after preprocessing.
+- The native renderer directly uploads twiddled RGB565, ARGB1555, and ARGB4444
+  payloads, full and reduced-codebook VQ, and square VQ mip chains. It retains
+  the true allocation base for destruction while applying the KOS reduced-VQ
+  sample-address adjustment. Normal SDL textures remain nontwiddled.
+- The GLdc-backed renderer retains loader support. Its Dreamcast-only callback
+  expands reduced codebooks to GLdc's conventional 2 KiB layout and preserves
+  mip-aware minification when SDL nearest or linear scale mode is selected.
+  Loader-created preformatted textures are static and immutable.
+- `test/dreamcast/test/pvr_dt_texture` generates all six valid assets with the
+  active KOS `pvrtex`, covers malformed headers and payloads, performs twenty
+  load/destroy cycles, and builds native and OpenGL ELFs with strict warnings.
+- **Physical-hardware validation (2026-07-29):** Both 640x480 VGA runs passed
+  15 checks with zero failures, captured unique raw framebuffers, returned
+  zero, and returned normally to dc-load-ip. Direct comparison shows all six
+  panels intact and corresponding across native PVR and GLdc: three twiddled
+  uncompressed formats, full VQ, reduced-codebook VQ, and VQ mipmaps. Full
+  design, limitations, commands, logs, capture paths, and hashes are in
+  `src/render/dreamcast/PVR_DT_TEXTURE_RESEARCH.md` and the test README.
+
+Strided and partial `.dt` layouts, palettes, bump maps, YUV, DMA, list routing,
+and batching remain later work. This increment does not promote the guarded
+render-target prototype or change renderer capability advertising.
+
 ## Phase 7: hardening and default enablement
 
 - Test VRAM exhaustion and allocation rollback.

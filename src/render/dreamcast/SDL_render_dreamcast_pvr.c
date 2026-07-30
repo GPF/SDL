@@ -141,6 +141,7 @@ static int DC_PVR_FinishActiveScene(SDL_Renderer *renderer)
 
                 texturedata->vram = texturedata->vram_next;
                 texturedata->vram_next = temp;
+                texturedata->sample_vram = texturedata->vram;
                 texturedata->current_valid = SDL_TRUE;
             }
             data->scene_target = NULL;
@@ -445,9 +446,9 @@ int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture, SDL_BlendMod
             return 0;
         }
         pvr_poly_cxt_txr(&context, PVR_LIST_TR_POLY,
-                         texturedata->pvr_format | PVR_TXRFMT_NONTWIDDLED,
+                         texturedata->pvr_format,
                          texturedata->backing_w, texturedata->backing_h,
-                         texturedata->vram, texturedata->filter);
+                         texturedata->sample_vram, texturedata->filter);
         /* SDL's packed vertex color modulates all four sampled channels. */
         context.txr.env = texture_env;
     } else {
@@ -849,6 +850,7 @@ static int DC_PVR_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, Uin
     renderer->GetOutputSize = DC_PVR_GetOutputSize;
     renderer->SupportsBlendMode = DC_PVR_SupportsBlendMode;
     renderer->CreateTexture = DC_PVR_CreateTexture;
+    renderer->CreateDreamcastTexture = DC_PVR_CreateDreamcastTexture;
     renderer->UpdateTexture = DC_PVR_UpdateTexture;
     renderer->LockTexture = DC_PVR_LockTexture;
     renderer->UnlockTexture = DC_PVR_UnlockTexture;

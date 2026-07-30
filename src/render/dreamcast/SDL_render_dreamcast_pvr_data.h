@@ -24,6 +24,7 @@ typedef struct DC_PVR_TextureData
     struct DC_PVR_TextureData *next_deferred;
     void *pixels;
     pvr_ptr_t vram;
+    pvr_ptr_t sample_vram;
     pvr_ptr_t lock_replacement_vram;
     struct DC_PVR_DeferredVRAM *lock_deferred_vram;
     size_t allocation_size;
@@ -41,6 +42,7 @@ typedef struct DC_PVR_TextureData
     SDL_bool dirty;
     SDL_bool referenced_in_scene;
     SDL_bool locked;
+    SDL_bool preformatted;
     SDL_Rect locked_rect;
 #if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
     int rtt_render_w;

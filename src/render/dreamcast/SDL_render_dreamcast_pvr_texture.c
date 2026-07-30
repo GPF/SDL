@@ -103,6 +103,7 @@ static void DC_PVR_CommitVRAMReplacement(DC_PVR_RenderData *renderdata,
                                          DC_PVR_DeferredVRAM *deferred)
 {
     data->vram = replacement;
+    data->sample_vram = replacement;
     data->referenced_in_scene = SDL_FALSE;
     deferred->next = renderdata->deferred_vram;
     renderdata->deferred_vram = deferred;
@@ -159,7 +160,7 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     }
 
     data->sdl_format = texture->format;
-    data->pvr_format = pvr_format;
+    data->pvr_format = pvr_format | PVR_TXRFMT_NONTWIDDLED;
     data->access = texture->access;
     data->logical_w = texture->w;
     data->logical_h = texture->h;
@@ -231,9 +232,78 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
         SDL_free(data);
         return SDL_SetError("Could not allocate Dreamcast PVR texture VRAM");
     }
+    data->sample_vram = data->vram;
 
     texture->driverdata = data;
     texture->pitch = data->cpu_pitch;
+    return 0;
+}
+
+int DC_PVR_CreateDreamcastTexture(SDL_Renderer *renderer, SDL_Texture *texture,
+                                  const SDL_DreamcastTextureData *dt)
+{
+    DC_PVR_TextureData *data;
+    pvr_ptr_t vram;
+
+    (void)renderer;
+    if (!texture || !dt || !dt->payload || dt->payload_size == 0) {
+        return SDL_SetError("Dreamcast .dt texture has invalid native PVR data");
+    }
+    if (texture->access != SDL_TEXTUREACCESS_STATIC ||
+        texture->format != dt->sdl_format || texture->w != (int)dt->width ||
+        texture->h != (int)dt->height) {
+        return SDL_SetError("Dreamcast .dt texture has inconsistent SDL state");
+    }
+
+#if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
+    if (DC_PVR_TestShouldFailAllocation(DC_PVR_TEST_ALLOC_DRIVERDATA)) {
+        return SDL_SetError("Injected Dreamcast PVR texture driver-data allocation failure");
+    }
+#endif
+    data = (DC_PVR_TextureData *)SDL_calloc(1, sizeof(*data));
+    if (!data) {
+        return SDL_OutOfMemory();
+    }
+
+#if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
+    if (DC_PVR_TestShouldFailAllocation(DC_PVR_TEST_ALLOC_VRAM)) {
+        SDL_free(data);
+        return SDL_SetError("Injected Dreamcast PVR texture VRAM allocation failure");
+    }
+#endif
+    vram = pvr_mem_malloc(dt->payload_size);
+    if (!vram) {
+        SDL_free(data);
+        return SDL_SetError("Could not allocate Dreamcast .dt texture VRAM");
+    }
+
+    data->vram = vram;
+    data->sample_vram = vram;
+    if (dt->compressed) {
+        data->sample_vram = (pvr_ptr_t)((Uint8 *)vram - 2048u +
+                                       (size_t)dt->codebook_size * 8u);
+    }
+    data->allocation_size = dt->payload_size;
+    data->sdl_format = dt->sdl_format;
+    data->pvr_format = (int)(dt->pvr_type & 0xfc000000u);
+    data->logical_w = dt->width;
+    data->logical_h = dt->height;
+    data->backing_w = dt->pvr_width;
+    data->backing_h = dt->pvr_height;
+    data->access = SDL_TEXTUREACCESS_STATIC;
+    data->filter = PVR_FILTER_NEAREST;
+    data->uploaded = SDL_TRUE;
+    data->preformatted = SDL_TRUE;
+
+    pvr_txr_load(dt->payload, data->vram, data->allocation_size);
+    texture->driverdata = data;
+    texture->pitch = 0;
+
+    SDL_Log("Dreamcast PVR: loaded .dt texture %ux%u compressed=%d twiddled=%d mipmapped=%d codebook=%u payload=%lu",
+            (unsigned)dt->width, (unsigned)dt->height, (int)dt->compressed,
+            (int)dt->twiddled, (int)dt->mipmapped,
+            (unsigned)dt->codebook_size,
+            (unsigned long)dt->payload_size);
     return 0;
 }
 
@@ -254,6 +324,9 @@ int DC_PVR_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
         return SDL_SetError("Dreamcast PVR target textures cannot be CPU-updated");
     }
 #endif
+    if (data && data->preformatted) {
+        return SDL_SetError("Dreamcast .dt textures are immutable");
+    }
     if (!data || !data->pixels || !data->vram) {
         return SDL_SetError("Dreamcast PVR texture update has invalid backend state");
     }

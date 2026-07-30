@@ -369,10 +369,11 @@ extern DECLSPEC SDL_Texture * SDLCALL SDL_CreateTextureFromSurface(SDL_Renderer 
 
 #ifdef __DREAMCAST__
 /**
- * Load a Dreamcast .dt texture into the OpenGL renderer.
+ * Load a Dreamcast .dt texture into a compatible Dreamcast renderer.
  *
  * This is a Dreamcast-specific native texture loader. The .dt file is expected
- * to contain a pvrtex DcTx header followed by PVR-ready texture data.
+ * to contain a pvrtex DcTx header followed by PVR-ready texture data. The
+ * Dreamcast OpenGL and native PVR renderers support this entry point.
  *
  * \param renderer the rendering context.
  * \param src an SDL_RWops stream containing the .dt file.

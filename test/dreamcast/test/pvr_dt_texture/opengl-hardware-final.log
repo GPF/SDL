@@ -1,0 +1,106 @@
+Connecting to 192.168.0.128...
+dc-load-ip 3.0.1 using Broadband Adapter (HIT-0400)
+Console enabled
+Upload <opengl.elf>
+File format is ELF, start address is 0x8c010000
+Section .text, lma 0x8c010000, size 983848
+Section .init, lma 0x8c102000, size 54
+Section .fini, lma 0x8c102038, size 42
+Section .rodata, lma 0x8c102080, size 148056
+Section .eh_frame, lma 0x8c1262d8, size 360
+Section .ctors, lma 0x8c1264c0, size 8
+Section .dtors, lma 0x8c1264c8, size 8
+Section .data, lma 0x8c1264d0, size 13300
+Section .got, lma 0x8c1298c4, size 12
+Transferred 1145688 bytes at 4278260 bytes / sec
+Executing at 0x8c010000
+Sending execute command (0xac010000, console=1, cdfsredir=0)...argv(1, argv0="opengl.elf")...executing
+
+--
+KallistiOS v2.3.0 [dreamcast/pristine]
+  Git revision: af085653-dirty
+  Mon Jul 27 01:41:26 PM MST 2026
+  gpf@gpf-B550-Phantom-Gaming-4-ac:/opt/toolchains/dc/kos
+  sh-elf-gcc (GCC) 15.3.1 20260705
+maple: active drivers:
+    Dreameye (Camera): Camera
+    Sound Input Peripheral: Microphone
+    PuruPuru (Vibration) Pack: JumpPack
+    VMU Driver: Clock, LCD, MemoryCard
+    Mouse Driver: Mouse
+    Keyboard Driver: Keyboard
+    Controller Driver: Controller
+    Lightgun: LightGun
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+dc-load console support enabled
+maple: attached devices:
+  A0: Dreamcast Controller           (01000000: Controller)
+  A1: Visual Memory                  (0e000000: Clock, LCD, MemoryCard)
+  B0: Dreamcast Controller           (01000000: Controller)
+  B1: Visual Memory                  (0e000000: Clock, LCD, MemoryCard)
+  C0: Keyboard                       (40000000: Keyboard)
+  D0: Dreamcast Mouse                (00020000: Mouse)
+
+PVR .DT TEXTURE PHASE 6.1
+  renderer: opengl
+INFO: SDL2 Dreamcast video initialized: 640x480
+INFO: DREAMCAST_CreateWindow: window 640x480 created with OpenGL flag
+INFO: Display modes for Dreamcast retrieved successfully.
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+INFO: SDL2: Skipping Vulkan/Metal logic for Dreamcast.
+INFO: SDL2: Window already has correct OpenGL context, skipping recreation.
+Initializing SDL2 GLdc...
+
+Welcome to GLdc! Git revision: b482
+
+Creating Dreamcast SDL2 OpenGL context...
+SDL2 GL renderer: EXT FBO enabled gen=0x8c0bcd80 del=0x8c0bbddc attach=0x8c0c7d9c bind=0x8c0c17b0 check=0x8c0c0d94
+CHECK PASS: selected requested renderer
+CHECK PASS: reject bad DcTx magic
+CHECK PASS: reject unsupported DcTx version
+CHECK PASS: reject unsupported YUV .dt format
+CHECK PASS: reject strided .dt layout
+CHECK PASS: reject mismatched .dt payload size
+CHECK PASS: reject truncated .dt payload
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+CHECK PASS: 20 OpenGL loads and destroys complete
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=1 compressed=0 twiddled=1 mipmapped=0
+CHECK PASS: RGB565 twiddled
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=0 twiddled=1 mipmapped=0
+CHECK PASS: ARGB1555 twiddled
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=2 compressed=0 twiddled=1 mipmapped=0
+CHECK PASS: ARGB4444 twiddled
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+CHECK PASS: ARGB1555 VQ full
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=0 compressed=1 twiddled=1 mipmapped=0
+CHECK PASS: ARGB1555 VQ small
+INFO: Dreamcast: loaded .dt texture 64x64 fmt=2 compressed=1 twiddled=1 mipmapped=1
+CHECK PASS: ARGB4444 VQ mip
+CHECK PASS: loader-created .dt textures are immutable
+vid_screen_shot: written to output file '/pc/pvr_dt_texture-phase6_1-opengl.ppm'
+CAPTURE OK: /pc/pvr_dt_texture-phase6_1-opengl.ppm
+SUMMARY checks=15 failures=0 PASS=YES
+Holding final frame for 12000 ms...
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+Returning normally to dc-load-ip
+Program returned 0

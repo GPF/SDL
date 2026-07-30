@@ -140,6 +140,24 @@ typedef enum
     SDL_RENDERLINEMETHOD_GEOMETRY,
 } SDL_RenderLineMethod;
 
+#ifdef __DREAMCAST__
+typedef struct SDL_DreamcastTextureData
+{
+    const void *payload;
+    size_t payload_size;
+    Uint32 pvr_type;
+    Uint16 width;
+    Uint16 height;
+    Uint16 pvr_width;
+    Uint16 pvr_height;
+    Uint16 codebook_size;
+    Uint32 sdl_format;
+    SDL_bool compressed;
+    SDL_bool mipmapped;
+    SDL_bool twiddled;
+} SDL_DreamcastTextureData;
+#endif
+
 /* Define the SDL renderer structure */
 struct SDL_Renderer
 {
@@ -149,6 +167,10 @@ struct SDL_Renderer
     int (*GetOutputSize)(SDL_Renderer *renderer, int *w, int *h);
     SDL_bool (*SupportsBlendMode)(SDL_Renderer *renderer, SDL_BlendMode blendMode);
     int (*CreateTexture)(SDL_Renderer *renderer, SDL_Texture *texture);
+#ifdef __DREAMCAST__
+    int (*CreateDreamcastTexture)(SDL_Renderer *renderer, SDL_Texture *texture,
+                                  const SDL_DreamcastTextureData *data);
+#endif
     int (*QueueSetViewport)(SDL_Renderer *renderer, SDL_RenderCommand *cmd);
     int (*QueueSetDrawColor)(SDL_Renderer *renderer, SDL_RenderCommand *cmd);
     int (*QueueDrawPoints)(SDL_Renderer *renderer, SDL_RenderCommand *cmd, const SDL_FPoint *points,

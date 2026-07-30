@@ -1351,12 +1351,12 @@ static SDL_ScaleMode SDL_GetScaleMode(void)
     }
 }
 
-SDL_Texture *SDL_CreateTexture(SDL_Renderer *renderer, Uint32 format, int access, int w, int h)
+#ifdef __DREAMCAST__
+static SDL_Texture *SDL_AllocateDreamcastTexture(SDL_Renderer *renderer,
+                                                 Uint32 format, int access,
+                                                 int w, int h)
 {
     SDL_Texture *texture;
-    SDL_bool texture_is_fourcc_and_target;
-
-    CHECK_RENDERER_MAGIC(renderer, NULL);
 
     if (!format) {
         format = renderer->info.texture_formats[0];
@@ -1401,6 +1401,71 @@ SDL_Texture *SDL_CreateTexture(SDL_Renderer *renderer, Uint32 format, int access
         renderer->textures->prev = texture;
     }
     renderer->textures = texture;
+
+    return texture;
+}
+#endif
+
+SDL_Texture *SDL_CreateTexture(SDL_Renderer *renderer, Uint32 format, int access, int w, int h)
+{
+    SDL_Texture *texture;
+    SDL_bool texture_is_fourcc_and_target;
+
+    CHECK_RENDERER_MAGIC(renderer, NULL);
+
+#ifdef __DREAMCAST__
+    if (!format) {
+        format = renderer->info.texture_formats[0];
+    }
+    texture = SDL_AllocateDreamcastTexture(renderer, format, access, w, h);
+    if (!texture) {
+        return NULL;
+    }
+#else
+    if (!format) {
+        format = renderer->info.texture_formats[0];
+    }
+    if (SDL_BYTESPERPIXEL(format) == 0) {
+        SDL_SetError("Invalid texture format");
+        return NULL;
+    }
+    if (SDL_ISPIXELFORMAT_INDEXED(format)) {
+        if (!IsSupportedFormat(renderer, format)) {
+            SDL_SetError("Palettized textures are not supported");
+            return NULL;
+        }
+    }
+    if (w <= 0 || h <= 0) {
+        SDL_SetError("Texture dimensions can't be 0");
+        return NULL;
+    }
+    if ((renderer->info.max_texture_width && w > renderer->info.max_texture_width) ||
+        (renderer->info.max_texture_height && h > renderer->info.max_texture_height)) {
+        SDL_SetError("Texture dimensions are limited to %dx%d", renderer->info.max_texture_width, renderer->info.max_texture_height);
+        return NULL;
+    }
+    texture = (SDL_Texture *)SDL_calloc(1, sizeof(*texture));
+    if (!texture) {
+        SDL_OutOfMemory();
+        return NULL;
+    }
+    texture->magic = &texture_magic;
+    texture->format = format;
+    texture->access = access;
+    texture->w = w;
+    texture->h = h;
+    texture->color.r = 255;
+    texture->color.g = 255;
+    texture->color.b = 255;
+    texture->color.a = 255;
+    texture->scaleMode = SDL_GetScaleMode();
+    texture->renderer = renderer;
+    texture->next = renderer->textures;
+    if (renderer->textures) {
+        renderer->textures->prev = texture;
+    }
+    renderer->textures = texture;
+#endif
 
     /* FOURCC format cannot be used directly by renderer back-ends for target texture */
     texture_is_fourcc_and_target = (access == SDL_TEXTUREACCESS_TARGET && SDL_ISPIXELFORMAT_FOURCC(texture->format));
@@ -1460,6 +1525,201 @@ SDL_Texture *SDL_CreateTexture(SDL_Renderer *renderer, Uint32 format, int access
     }
     return texture;
 }
+
+#ifdef __DREAMCAST__
+typedef struct SDL_DreamcastDtHeader
+{
+    char fourcc[4];
+    Uint32 chunk_size;
+    Uint8 version;
+    Uint8 header_size;
+    Uint8 codebook_size;
+    Uint8 colors_used;
+    Uint16 width_pixels;
+    Uint16 height_pixels;
+    Uint32 pvr_type;
+    Uint32 pad1;
+    Uint32 pad2;
+    Uint32 pad3;
+} SDL_DreamcastDtHeader;
+
+SDL_COMPILE_TIME_ASSERT(dreamcast_dt_header_size,
+                        sizeof(SDL_DreamcastDtHeader) == 32);
+
+#define SDL_DC_DT_HEADER_SIZE 32u
+#define SDL_DC_DT_MIPMAP_SHIFT 31
+#define SDL_DC_DT_VQ_SHIFT 30
+#define SDL_DC_DT_PIXEL_FORMAT_SHIFT 27
+#define SDL_DC_DT_PIXEL_FORMAT_MASK 0x7u
+#define SDL_DC_DT_NOT_TWIDDLED_SHIFT 26
+#define SDL_DC_DT_STRIDE_SHIFT 25
+#define SDL_DC_DT_PARTIAL_SHIFT 11
+#define SDL_DC_DT_WIDTH_SHIFT 3
+#define SDL_DC_DT_SIZE_MASK 0x7u
+
+static Uint32 SDL_DreamcastDtSDLFormat(Uint32 dt_format)
+{
+    switch (dt_format) {
+    case 0:
+        return SDL_PIXELFORMAT_ARGB1555;
+    case 1:
+        return SDL_PIXELFORMAT_RGB565;
+    case 2:
+        return SDL_PIXELFORMAT_ARGB4444;
+    default:
+        return SDL_PIXELFORMAT_UNKNOWN;
+    }
+}
+
+SDL_Texture *SDL_LoadDreamcastTexture_RW(SDL_Renderer *renderer, SDL_RWops *src,
+                                         int closeio)
+{
+    SDL_DreamcastDtHeader header;
+    SDL_DreamcastTextureData dt;
+    SDL_Texture *texture = NULL;
+    Uint8 *payload = NULL;
+    Uint32 chunk_size;
+    Uint32 header_size;
+    Uint32 pvr_type;
+    Uint32 dt_format;
+    size_t raw_size;
+    size_t expected_payload_size;
+    int result = -1;
+
+    if (!renderer || renderer->magic != &renderer_magic || renderer->destroyed) {
+        SDL_InvalidParamError("renderer");
+        goto done;
+    }
+    if (!src) {
+        SDL_InvalidParamError("src");
+        goto done;
+    }
+    if (!renderer->CreateDreamcastTexture) {
+        SDL_SetError("Renderer does not support Dreamcast .dt textures");
+        goto done;
+    }
+    if (SDL_RWread(src, &header, sizeof(header), 1) != 1) {
+        SDL_SetError("Could not read Dreamcast .dt header");
+        goto done;
+    }
+    if (SDL_memcmp(header.fourcc, "DcTx", 4) != 0) {
+        SDL_SetError("Invalid Dreamcast .dt texture magic");
+        goto done;
+    }
+    if (header.version != 0) {
+        SDL_SetError("Unsupported Dreamcast .dt version %u",
+                     (unsigned)header.version);
+        goto done;
+    }
+
+    chunk_size = SDL_SwapLE32(header.chunk_size);
+    header_size = ((Uint32)header.header_size + 1u) * SDL_DC_DT_HEADER_SIZE;
+    pvr_type = SDL_SwapLE32(header.pvr_type);
+    SDL_zero(dt);
+    dt.width = SDL_SwapLE16(header.width_pixels);
+    dt.height = SDL_SwapLE16(header.height_pixels);
+    dt.pvr_width = (Uint16)(1u << (((pvr_type >> SDL_DC_DT_WIDTH_SHIFT) &
+                                    SDL_DC_DT_SIZE_MASK) + 3u));
+    dt.pvr_height = (Uint16)(1u << ((pvr_type & SDL_DC_DT_SIZE_MASK) + 3u));
+    dt_format = (pvr_type >> SDL_DC_DT_PIXEL_FORMAT_SHIFT) &
+                SDL_DC_DT_PIXEL_FORMAT_MASK;
+    dt.sdl_format = SDL_DreamcastDtSDLFormat(dt_format);
+    dt.compressed = (SDL_bool)((pvr_type >> SDL_DC_DT_VQ_SHIFT) & 1u);
+    dt.mipmapped = (SDL_bool)((pvr_type >> SDL_DC_DT_MIPMAP_SHIFT) & 1u);
+    dt.twiddled = (SDL_bool)(((pvr_type >> SDL_DC_DT_NOT_TWIDDLED_SHIFT) & 1u) == 0u);
+    dt.codebook_size = dt.compressed ? (Uint16)header.codebook_size + 1u : 0u;
+    dt.pvr_type = pvr_type;
+
+    if (header_size < SDL_DC_DT_HEADER_SIZE || chunk_size <= header_size ||
+        (chunk_size & 31u) != 0u) {
+        SDL_SetError("Invalid Dreamcast .dt texture size");
+        goto done;
+    }
+    if (dt.width < 8 || dt.height < 8 || dt.width > 1024 ||
+        dt.height > 1024 || dt.width != dt.pvr_width ||
+        dt.height != dt.pvr_height) {
+        SDL_SetError("Invalid Dreamcast .dt texture dimensions");
+        goto done;
+    }
+    if (pvr_type & (1u << SDL_DC_DT_STRIDE_SHIFT)) {
+        SDL_SetError("Dreamcast strided .dt textures are not supported yet");
+        goto done;
+    }
+    if (pvr_type & (1u << SDL_DC_DT_PARTIAL_SHIFT)) {
+        SDL_SetError("Dreamcast partial .dt textures are not supported yet");
+        goto done;
+    }
+    if (dt.sdl_format == SDL_PIXELFORMAT_UNKNOWN) {
+        SDL_SetError("Unsupported Dreamcast .dt pixel format %u",
+                     (unsigned)dt_format);
+        goto done;
+    }
+    if ((dt.compressed || dt.mipmapped) && !dt.twiddled) {
+        SDL_SetError("Dreamcast VQ and mipmapped .dt textures must be twiddled");
+        goto done;
+    }
+    if (dt.mipmapped && dt.width != dt.height) {
+        SDL_SetError("Dreamcast mipmapped .dt textures must be square");
+        goto done;
+    }
+
+    raw_size = (size_t)dt.width * (size_t)dt.height * 2u;
+    if (dt.mipmapped) {
+        raw_size = raw_size * 4u / 3u + 6u;
+    }
+    if (dt.compressed) {
+        raw_size = (raw_size + 7u) / 8u + (size_t)dt.codebook_size * 8u;
+    }
+    expected_payload_size = (raw_size + 31u) & ~(size_t)31u;
+    dt.payload_size = (size_t)chunk_size - (size_t)header_size;
+    if (dt.payload_size != expected_payload_size) {
+        SDL_SetError("Dreamcast .dt payload size does not match its header");
+        goto done;
+    }
+
+    if (header_size > SDL_DC_DT_HEADER_SIZE &&
+        SDL_RWseek(src, (Sint64)(header_size - SDL_DC_DT_HEADER_SIZE),
+                   RW_SEEK_CUR) < 0) {
+        SDL_SetError("Could not seek to Dreamcast .dt texture payload");
+        goto done;
+    }
+    payload = (Uint8 *)SDL_malloc(dt.payload_size);
+    if (!payload) {
+        SDL_OutOfMemory();
+        goto done;
+    }
+    if (SDL_RWread(src, payload, 1, dt.payload_size) != dt.payload_size) {
+        SDL_SetError("Could not read Dreamcast .dt texture payload");
+        goto done;
+    }
+    dt.payload = payload;
+
+    texture = SDL_AllocateDreamcastTexture(renderer, dt.sdl_format,
+                                           SDL_TEXTUREACCESS_STATIC,
+                                           dt.width, dt.height);
+    if (!texture) {
+        goto done;
+    }
+    if (renderer->CreateDreamcastTexture(renderer, texture, &dt) < 0) {
+        goto done;
+    }
+
+    result = 0;
+
+done:
+    if (closeio && src) {
+        SDL_RWclose(src);
+    }
+    SDL_free(payload);
+    if (result < 0) {
+        if (texture) {
+            SDL_DestroyTexture(texture);
+        }
+        return NULL;
+    }
+    return texture;
+}
+#endif
 
 SDL_Texture *SDL_CreateTextureFromSurface(SDL_Renderer *renderer, SDL_Surface *surface)
 {

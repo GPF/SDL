@@ -1,0 +1,6 @@
+asset_generator
+*.o
+*.elf
+*.bin
+*.map
+romdisk.img
