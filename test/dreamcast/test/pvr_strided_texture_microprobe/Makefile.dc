@@ -1,0 +1,31 @@
+# Phase 6.2 strided NPOT texture microprobe — standalone KOS/PVR probe.
+# No SDL, no OpenGL, no GLdc dependencies.
+
+TARGET = pvr_strided_texture_microprobe
+OBJS = $(TARGET).o
+
+HARDWARE_SCREENSHOTS ?= 0
+
+ifeq ($(HARDWARE_SCREENSHOTS),1)
+PROBE_CFLAGS += -DHARDWARE_SCREENSHOTS
+endif
+
+all: $(TARGET).bin
+
+.PHONY: clean
+
+include $(KOS_BASE)/Makefile.rules
+
+$(TARGET).o: $(TARGET).c
+	kos-cc -I$(KOS_BASE)/kernel/arch/dreamcast/include \
+		-DDREAMCAST -D__DREAMCAST__ \
+		-Wall -Wextra -Werror $(PROBE_CFLAGS) $(EXTRA_CFLAGS) -c $< -o $@
+
+$(TARGET).elf: $(OBJS)
+	kos-cc -o $(TARGET).elf $(OBJS) -Wl,-Map,$(TARGET).map -lm
+
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin
+
+clean:
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin $(TARGET).map

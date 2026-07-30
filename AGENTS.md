@@ -1086,6 +1086,38 @@ Strided and partial `.dt` layouts, palettes, bump maps, YUV, DMA, list routing,
 and batching remain later work. This increment does not promote the guarded
 render-target prototype or change renderer capability advertising.
 
+### Phase 6.2: strided NPOT texture research and microprobe — done
+
+- KOS exposes one frame-global `PVR_TEXTURE_MODULO` value through
+  `pvr_txr_set_stride()`/`pvr_txr_get_stride()`. Legal widths are multiples of
+  32 through 992. Strided RGB565 textures use `PVR_TXRFMT_X32_STRIDE`, retain
+  POT header dimensions, and allocate/upload `stride * backing_height * 2`.
+- `test/dreamcast/test/pvr_strided_texture_microprobe` is a standalone public
+  KOS/PVR probe with no SDL, OpenGL, or GLdc dependency. Its ten bounded pages
+  cover nearest/bilinear sampling, ordinary POT coexistence, same- and
+  different-stride pairs, opaque/transparent list boundaries, consecutive
+  frames, padded-pitch updates, logical edge probes, and exact VRAM recovery.
+- **Physical-hardware validation (2026-07-29):** Passed on a real Dreamcast at
+  640x480 VGA. All programmed strides read back exactly, ten unique raw PPM
+  captures succeeded, VRAM returned to the post-allocator-warmup baseline of
+  5,789,416 bytes, PVR shut down cleanly, and dc-load reported return zero.
+- Same-stride textures render correctly together. Ordinary POT textures render
+  correctly alongside strided textures and ignore the global stride register.
+  A narrower logical texture can share a wider physical stride when allocation,
+  upload pitch, and UV extent remain distinct.
+- Different strided widths cannot coexist in one frame. Page 5 changes from
+  640 to 384 within one list; page 6 changes across opaque and transparent
+  list boundaries in one scene. Both captures show the earlier 640-pitch panel
+  corrupted and the final 384-pitch panel correct. A list boundary does not
+  latch an independent stride. Changing stride between completed frames works.
+- Implementation policy is one active strided width per frame/scene,
+  same-stride batching, and ordinary POT fallback for conflicting strided
+  widths. Strided `.dt`, DMA, other 16-bit formats, the full 32–992 width
+  range, other video modes, and capacity/stress coverage remain later work.
+- The source-backed design, hardware findings, capture paths, and limitations
+  are recorded in `src/render/dreamcast/PVR_STRIDED_TEXTURE_RESEARCH.md` and
+  the microprobe README. No SDL renderer functionality changes in this phase.
+
 ## Phase 7: hardening and default enablement
 
 - Test VRAM exhaustion and allocation rollback.
