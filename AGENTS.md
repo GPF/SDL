@@ -1209,6 +1209,36 @@ the guarded render-target prototype or change renderer capability advertising.
 - Natural per-texture stride selection, strided `.dt`, DMA, wider video modes,
   and capacity/stress coverage remain Phase 7 or later work.
 
+### Phase 6.4: blocking texture-upload DMA — hardware validated
+
+- Ordinary CPU-staging RGB565, ARGB1555, and ARGB4444 textures allocate their
+  full backing with `aligned_alloc(32, ...)`. Full uploads use blocking
+  `pvr_txr_load_dma()` when source and byte count satisfy KOS's 32-byte
+  requirement; any DMA failure logs the errno and immediately falls back to
+  synchronous store-queue `pvr_txr_load()`. KOS owns DMA initialization and
+  shutdown through `pvr_init()` and `pvr_shutdown()`; the renderer adds no
+  duplicate lifecycle calls.
+- `DC_PVR_FORCE_SQ_FALLBACK=1` is a test/diagnostic hint that bypasses DMA;
+  `DC_PVR_SHOW_UPLOAD_PATH=1` logs DMA or SQ selection. Both are disabled by
+  default. The increment remains blocking: no callbacks, queued uploads,
+  partial VRAM DMA, vertex DMA, `.dt` DMA, or RTT DMA were added.
+- `test/dreamcast/test/pvr_texture_dma` covers the 128-byte minimum and
+  512-byte full backings, static RGB565/ARGB1555/ARGB4444 uploads, padded
+  partial updates, streaming lock/unlock, update-after-scene-reference
+  replacement, forced SQ fallback, destruction, and recovery.
+- **Physical-hardware validation (2026-07-30):** The screenshot-enabled test
+  built against the local native archive with `-Wall -Wextra -Werror`, passed
+  all three pages at 640×480 VGA, wrote unique raw PPMs
+  `pvr_texture_dma-page1.ppm` through `pvr_texture_dma-page3.ppm`, and
+  returned zero normally to dc-load-ip. Direct inspection showed the expected
+  format/backing panels, partial/streaming/replacement panels, and the forced
+  SQ fallback recovery panel. Capture waits three vblanks after presentation
+  because KOS's PVR path is three-buffered.
+- The source audit, KOS API constraints, and deferred DMA scope are in
+  `src/render/dreamcast/PVR_DMA_UPLOAD_RESEARCH.md`. Wider video modes,
+  VRAM-pressure/lifecycle stress, and measured DMA-versus-SQ performance remain
+  Phase 7 hardening before any default-performance claim.
+
 ## Phase 7: hardening and default enablement
 
 - Test VRAM exhaustion and allocation rollback.

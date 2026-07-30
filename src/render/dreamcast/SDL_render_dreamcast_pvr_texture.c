@@ -11,6 +11,12 @@
 
 #include "SDL_render_dreamcast_pvr.h"
 
+#include <errno.h>
+#include <dc/pvr/pvr_dma.h>
+
+/* SDL_GetHintBoolean for diagnostic hints. */
+#include "SDL_hints.h"
+
 #if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
 #include "SDL_hints.h"
 
@@ -109,6 +115,43 @@ static void DC_PVR_CommitVRAMReplacement(DC_PVR_RenderData *renderdata,
     renderdata->deferred_vram = deferred;
     renderdata->header_valid = SDL_FALSE;
     renderdata->header_texture = NULL;
+}
+
+/* Upload data->pixels to VRAM using DMA when source is 32-byte aligned,
+ * falling back to SQ. count must be a multiple of 32. SQ fallback always
+ * succeeds (pvr_txr_load is void).
+ *
+ * Hints:
+ *   DC_PVR_FORCE_SQ_FALLBACK=1 — skip DMA, always use SQ (useful for
+ *   validating the fallback path).
+ *   DC_PVR_SHOW_UPLOAD_PATH=1 — log the upload path (DMA or SQ), byte
+ *   count, and fallback reason on each call. */
+static void DC_PVR_UploadToVRAM(DC_PVR_TextureData *data, pvr_ptr_t dest,
+                                 size_t count)
+{
+    SDL_bool force_sq = SDL_GetHintBoolean("DC_PVR_FORCE_SQ_FALLBACK", SDL_FALSE);
+    SDL_bool show_path = SDL_GetHintBoolean("DC_PVR_SHOW_UPLOAD_PATH", SDL_FALSE);
+
+    if (!force_sq && (uintptr_t)data->pixels % 32 == 0 && (count % 32) == 0) {
+        if (pvr_txr_load_dma(data->pixels, dest, count, true, NULL, 0) == 0) {
+            if (show_path) {
+                SDL_LogDebug(SDL_LOG_CATEGORY_RENDER,
+                    "Dreamcast PVR: DMA upload %lu bytes to vram=%p",
+                    (unsigned long)count, (void *)dest);
+            }
+            return;
+        }
+        SDL_LogDebug(SDL_LOG_CATEGORY_RENDER,
+            "Dreamcast PVR: DMA upload failed (errno=%d), falling back to SQ "
+            "for %lu bytes to vram=%p",
+            errno, (unsigned long)count, (void *)dest);
+    }
+    if (show_path) {
+        SDL_LogDebug(SDL_LOG_CATEGORY_RENDER,
+            "Dreamcast PVR: SQ upload %lu bytes to vram=%p",
+            (unsigned long)count, (void *)dest);
+    }
+    pvr_txr_load(data->pixels, dest, count);
 }
 
 int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
@@ -225,11 +268,14 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
             return SDL_SetError("Injected Dreamcast PVR texture staging allocation failure");
         }
 #endif
-        data->pixels = SDL_calloc(1, data->allocation_size);
+        /* aligned_alloc for DMA compatibility. SDL_calloc alignment is not
+         * guaranteed to be 32 bytes on all platforms. */
+        data->pixels = aligned_alloc(32, data->allocation_size);
         if (!data->pixels) {
             SDL_free(data);
             return SDL_SetError("Could not allocate Dreamcast PVR texture staging memory");
         }
+        SDL_memset(data->pixels, 0, data->allocation_size);
     }
 #if defined(DC_PVR_TEXTURE_FAILURE_INJECTION)
     if (DC_PVR_TestShouldFailAllocation(DC_PVR_TEST_ALLOC_VRAM)) {
@@ -239,9 +285,7 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
             data->vram_next = NULL;
         }
 #endif
-        if (data->pixels) {
-            SDL_free(data->pixels);
-        }
+        free(data->pixels);
         SDL_free(data);
         return SDL_SetError("Injected Dreamcast PVR texture VRAM allocation failure");
     }
@@ -254,9 +298,7 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
             data->vram_next = NULL;
         }
 #endif
-        if (data->pixels) {
-            SDL_free(data->pixels);
-        }
+        free(data->pixels);
         SDL_free(data);
         return SDL_SetError("Could not allocate Dreamcast PVR texture VRAM");
     }
@@ -394,8 +436,9 @@ int DC_PVR_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
     }
 
     data->dirty = SDL_TRUE;
-    /* Upload the complete POT backing store synchronously. */
-    pvr_txr_load(data->pixels, upload_vram, data->allocation_size);
+    /* Upload the complete POT backing store synchronously. Uses DMA when
+     * source is 32-byte aligned; falls back to SQ on failure. */
+    DC_PVR_UploadToVRAM(data, upload_vram, data->allocation_size);
     if (deferred) {
         DC_PVR_CommitVRAMReplacement(renderdata, data, upload_vram, deferred);
     }
@@ -465,7 +508,7 @@ void DC_PVR_UnlockTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     }
     upload_vram = data->lock_replacement_vram ? data->lock_replacement_vram
                                                : data->vram;
-    pvr_txr_load(data->pixels, upload_vram, data->allocation_size);
+    DC_PVR_UploadToVRAM(data, upload_vram, data->allocation_size);
     if (data->lock_deferred_vram) {
         DC_PVR_CommitVRAMReplacement(renderdata, data, upload_vram,
                                      data->lock_deferred_vram);
@@ -543,7 +586,9 @@ void DC_PVR_FreeTextureData(DC_PVR_TextureData *data, SDL_bool free_vram)
         pvr_mem_free(data->lock_replacement_vram);
     }
     SDL_free(data->lock_deferred_vram);
-    SDL_free(data->pixels);
+    if (data->pixels) {
+        free(data->pixels);
+    }
     SDL_free(data);
 }
 
