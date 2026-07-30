@@ -63,5 +63,7 @@ alpha, filtering, flip, and rotation probes. Evidence and exact capture hashes
 are recorded in the test README.
 
 This increment does not change renderer capability advertising and does not
-promote the guarded render-target prototype. Strided NPOT direct textures,
-DMA uploads, list routing, and batching remain later Phase 6 work.
+promote the guarded render-target prototype. Strided NPOT renderer-created
+RGB565 textures were added and hardware-validated in the separate Phase 6.3
+integration. Strided `.dt` payloads, DMA uploads, list routing, and batching
+remain later work.

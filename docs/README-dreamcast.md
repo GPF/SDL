@@ -42,8 +42,8 @@ through `SDL_HINT_RENDER_DRIVER`) and query the created renderer information.
 
 ## Strided RGB565 textures
 
-The native PVR renderer may store eligible static and streaming RGB565
-textures using a Dreamcast strided layout. The layout is selected when the
+The hardware-validated native PVR renderer stores eligible static and streaming
+RGB565 textures using a Dreamcast strided layout. The layout is selected when the
 texture is created; textures that cannot use the renderer's single active
 stride remain POT-backed automatically. This is transparent to SDL callers,
 but all strided textures used in one presented frame must share the same

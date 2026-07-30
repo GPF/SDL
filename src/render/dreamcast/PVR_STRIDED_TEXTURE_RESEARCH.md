@@ -546,7 +546,14 @@ Same-stride batching and POT fallback remain safe.
 
 ---
 
-## 7. Guarded Implementation Plan
+## 7. Guarded Implementation Plan (historical feasibility plan)
+
+The plan in this section predates the implementation. The adopted design is
+the fixed renderer-wide stride class documented in
+`PVR_STRIDED_TEXTURE_INTEGRATION_RESEARCH.md`; that report and the Phase 6.3
+entry in `AGENTS.md` are authoritative for current behavior. The original
+per-texture natural-stride and flush/split alternatives below are retained as
+research history only.
 
 ### 7.1 Files to modify
 
@@ -561,11 +568,13 @@ Same-stride batching and POT fallback remain safe.
 
 ### 7.2 Compile-time guards
 
-All strided texture code must be inside `#if SDL_VIDEO_RENDER_DREAMCAST_PVR`
-and guarded by a new define `DC_PVR_STRIDED_TEXTURES` (disabled by default):
+The implementation is inside the existing
+`#if SDL_VIDEO_RENDER_DREAMCAST_PVR` native-renderer guard. No separate
+cross-platform define is required because the native PVR sources are only
+compiled for Dreamcast builds:
 
 ```c
-#if SDL_VIDEO_RENDER_DREAMCAST_PVR && defined(DC_PVR_STRIDED_TEXTURES)
+#if SDL_VIDEO_RENDER_DREAMCAST_PVR
 // strided texture code
 #endif
 ```
@@ -897,7 +906,7 @@ clear, documented stride mechanism (`pvr_txr_set_stride` +
 textures. The stride register is global per frame, which constrains multi-texture
 coexistence to same-stride or scene-boundary switching.
 
-The recommended path is:
+The original feasibility recommendation was:
 
 1. **Adopt Policy A** (one stride per frame/scene); hardware confirms that
    neither a texture header nor a polygon-list boundary latches the stride.
@@ -907,7 +916,15 @@ The recommended path is:
 5. **Reject strided `.dt`** until a later increment.
 6. Retain the ten passing physical captures as the RGB565 hardware baseline.
 
-The remaining gates are renderer implementation, other 16-bit formats, the
-full legal stride range, additional filtering coordinates, other video modes,
-and stress/capacity coverage. Existing POT-backed NPOT support remains the safe
-fallback for every conflict or unsupported case.
+The implemented Phase 6.3 path narrows this to one renderer-wide fixed stride
+class selected at texture creation, with immutable POT fallback for textures
+that cannot use that class. It does not implement per-texture natural strides,
+flush/split migration, or strided `.dt` payloads.
+
+The renderer-created fixed-class RGB565 increment is now implemented and
+hardware-validated. Remaining gates are other 16-bit formats, the full legal
+stride range, additional filtering coordinates, other video modes, and
+stress/capacity coverage. Existing POT-backed NPOT support remains the safe
+fallback for every conflict or unsupported case. See
+`PVR_STRIDED_TEXTURE_INTEGRATION_RESEARCH.md` for the current implementation
+boundary.

@@ -440,7 +440,7 @@ Both dimensions must independently be powers of two. No rectangular NPOT is vali
 ### 2.5 Stride restrictions
 
 - **Power-of-two stride:** `PVR_TXRFMT_POW2_STRIDE` = `(0 << 25)`. Default. Stride equals backing width (POT).
-- **32-pixel stride:** `PVR_TXRFMT_X32_STRIDE` = `(1 << 25)`. For strided NPOT textures. Requires `pvr_txr_set_stride(width)` before submission. Width must be multiple of 32 and ≤ 992. Twiddled textures cannot use this flag. Deferred to Phase 6.
+- **32-pixel stride:** `PVR_TXRFMT_X32_STRIDE` = `(1 << 25)`. For strided NPOT textures. Requires `pvr_txr_set_stride(width)` before submission. Width must be multiple of 32 and ≤ 992. Twiddled textures cannot use this flag. The fixed-class RGB565 increment is covered by Phase 6.3; other formats remain deferred.
 
 ### 2.6 VRAM alignment
 
@@ -472,7 +472,8 @@ Both dimensions must independently be powers of two. No rectangular NPOT is vali
 - Logical dimensions retained separately for UV scaling.
 - Synchronous upload via `pvr_txr_load`.
 - No DMA.
-- No strided NPOT optimization.
+- Fixed-class RGB565 strided NPOT storage is implemented in the native
+  renderer; this baseline remains POT for other formats and layouts.
 - Non-twiddled (`PVR_TXRFMT_NONTWIDDLED`).
 
 ## 3. Logical dimensions and backing dimensions
@@ -1665,7 +1666,7 @@ Immediate in `UpdateTexture` and `UnlockTexture`. Full backing upload. No deferr
 - Twiddled textures.
 - VQ compression.
 - Mipmaps.
-- Strided NPOT textures.
+- Strided NPOT textures other than the fixed-class RGB565 Phase 6.3 increment.
 - Render targets.
 - YUV formats.
 - Opaque-list routing.
