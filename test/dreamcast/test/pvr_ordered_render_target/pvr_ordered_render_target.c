@@ -385,7 +385,6 @@ int main(int argc, char **argv)
     (void)argv;
 
     SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO");
-    SDL_SetHint(SDL_HINT_DC_PVR_RENDER_TARGETS, "1");
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         printf("FAIL: SDL_Init: %s\n", SDL_GetError());
         return 1;

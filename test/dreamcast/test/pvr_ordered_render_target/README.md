@@ -1,28 +1,23 @@
 # Dreamcast ordered render-target test
 
-This is the focused physical-hardware gate for the experimental
-`DC_PVR_ORDERED_RENDER_TARGETS` build. It validates direct screen rendering,
+This is the focused physical-hardware gate for the native PVR renderer's
+ordered render-target implementation. It validates direct screen rendering,
 ordered target transitions, target-pair preservation, rejection recovery,
-allocation rollback, and incomplete-frame cleanup. It does not replace or
-modify the retained Phase 5 preservation evidence.
+allocation rollback, and incomplete-frame cleanup.
 
-The SDL archive must be compiled with:
+Render targets are always enabled. Create target textures before beginning
+the frame's drawing scene, and render them before the final screen pass.
 
-```text
--DDC_PVR_ORDERED_RENDER_TARGETS
--DDC_PVR_TEXTURE_FAILURE_INJECTION
-```
-
-Set `SDL2_LIBDIR` to that archive directory when building:
+Build:
 
 ```sh
-make -f Makefile.dc SDL2_LIBDIR=/path/to/ordered/archive clean all
+make -f Makefile.dc SDL2_LIBDIR=/path/to/sdl2/archive clean all
 ```
 
 For physical captures:
 
 ```sh
-make -f Makefile.dc SDL2_LIBDIR=/path/to/ordered/archive \
+make -f Makefile.dc SDL2_LIBDIR=/path/to/sdl2/archive \
     HARDWARE_SCREENSHOTS=1 clean all
 kos-tool -t 192.168.0.128 -x pvr_ordered_render_target.elf -m .
 ```

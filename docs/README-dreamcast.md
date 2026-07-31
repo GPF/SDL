@@ -5,6 +5,17 @@
 Select `SDL_DC_DIRECT_VIDEO` before creating the window to use the native PVR
 renderer. The renderer is independent of the GLdc-backed OpenGL renderer.
 
+## Video mode selection
+
+The SDL Dreamcast video driver selects 320x240, 640x480, PAL, and NTSC modes
+via `SDL_HINT_DC_VIDEO_MODE` before window creation. The PVR renderer queries
+the configured output size at creation time and adapts to it. The renderer
+requires a positive width divisible by 32.
+
+320x240 is a supported mode but requires only a smoke test — it is not a
+separate renderer acceptance phase. Wider video-mode coverage and TA/OPB
+capacity/stress remain Phase 7 hardening.
+
 ## Render-target ordering
 
 The Dreamcast PVR renderer requires all texture-target rendering to be
@@ -28,17 +39,12 @@ SDL_RenderPresent(renderer);
 Check every `SDL_SetRenderTarget()` return value. `SDL_RenderFlush()` submits
 work but does not reopen target selection.
 
-The implementation is currently experimental. SDL must be compiled with
-`DC_PVR_ORDERED_RENDER_TARGETS`, and the application must set
-`SDL_HINT_DC_PVR_RENDER_TARGETS` to `"1"` before renderer creation. The hint is
-disabled by default and is intended to be removable after physical-hardware
-validation.
+Render targets are always enabled. Create all target textures before beginning
+the frame's drawing scene, and render texture targets before the final screen
+pass. The renderer does not use a target-texture hint.
 
-The capability is reported on the created renderer instance. Because the
-static driver description remains unchanged while the hint is experimental,
-automatic `SDL_CreateRenderer(window, -1, SDL_RENDERER_TARGETTEXTURE)` driver
-filtering does not discover it. Select the Dreamcast PVR driver explicitly (or
-through `SDL_HINT_RENDER_DRIVER`) and query the created renderer information.
+The renderer advertises `SDL_RENDERER_TARGETTEXTURE`, so normal SDL renderer
+selection can request that capability.
 
 ## Strided 16-bit textures
 

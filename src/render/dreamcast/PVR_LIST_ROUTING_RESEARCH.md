@@ -855,3 +855,41 @@ Direct inspection confirms the leading opaque, textured-NONE boundary, and
 state-only viewport/clip cases. Capture SHA-256 values are recorded in the
 focused test README. This validates the narrow guarded path only; capacity,
 performance, render-target interaction, and punch-through remain deferred.
+
+### Renderer-selection diagnostic correction (2026-07-30)
+
+The first feature-on capacity ELF reported `No Dreamcast PVR driver found`.
+This was not a video-driver registration failure and was unrelated to
+`SDL_OPENGL=ON`: `src/render/SDL_render.c` registers `DC_RenderDriver`
+directly when `SDL_VIDEO_RENDER_DREAMCAST_PVR` is enabled. The failure was
+caused by temporarily changing `DC_RenderDriver.info.name` to
+`"Dreamcast PVR (opaque-prefix routing ON)"` for build diagnostics. SDL's
+renderer-name matching and the capacity test both require an exact
+`"Dreamcast PVR"` name.
+
+The public name is restored. The routing ON/OFF string is now retained as a
+separate renderer-creation diagnostic, so it remains available in the archive
+without changing renderer discovery. The corrected feature-on archive was
+rebuilt with OpenGL enabled and the capacity test compiled and linked against
+it successfully.
+
+### Capacity and performance result (2026-07-30)
+
+The feature-on and feature-off ELFs were compared on physical 640×480 VGA
+hardware:
+
+| Workload | Feature-on | Feature-off | Result |
+| --- | ---: | ---: | --- |
+| Clear only | 7.3 ms/frame | 9.4 ms/frame | 22% faster with routing |
+| 1000 opaque rects | 41.2 ms/frame | 39.7 ms/frame | 4% slower with routing |
+| 1000 translucent rects | 41.8 ms/frame | 40.1 ms/frame | 4% slower with routing |
+| Mixed 1000 rects | 42.0 ms/frame | — | Comparable workload |
+| Mixed capacity | 6000 rects | 6000 rects | Unchanged |
+| Opaque-only capacity | 6000 rects | — | No observed overflow |
+
+The clear improvement is consistent with avoiding transparent-list overhead,
+but it is offset by routing overhead on ordinary geometry. Capacity was
+unchanged. **Recommendation: KEEP the option guarded and OFF by default; do
+not promote the current implementation.** A future promotion would require a
+workload-level benefit that persists beyond the clear-only case, or a revised
+design that removes the per-draw cost.

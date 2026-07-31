@@ -1,25 +1,21 @@
-# Performance comparison: ordinary native Dreamcast PVR renderer
-# versus guarded render-target prototype.
+# Performance comparison: native Dreamcast PVR renderer with ordered
+# render targets.
 #
-# Three separate ELFs are built from the same source:
-#   ordinary  — no DC_PVR_RENDER_TARGET_PROTOTYPE
-#   prototype — DC_PVR_RENDER_TARGET_PROTOTYPE defined
-#   ordered   — DC_PVR_ORDERED_RENDER_TARGETS defined
+# Ordered render targets are always enabled. Create target textures before
+# beginning the frame's drawing scene.
 #
-# Each build links against its own SDL2 archive and is verified via
-# linker-map symbol checks.
+# Single ELF built against the standard SDL2 archive.
 
+TARGET = pvr_render_target_performance
 TARGET_SRC = pvr_render_target_performance.c
 
 # ------------------------------------------------------------------
 # Archive paths
 # ------------------------------------------------------------------
 SDL2_ROOT ?= $(abspath ../../../..)
-SDL2_ORDINARY_LIBDIR ?= $(SDL2_ROOT)/build-scripts/dcbuild
-SDL2_PROTOTYPE_LIBDIR ?= $(SDL2_ROOT)/build-scripts/dcbuild_prototype
-SDL2_ORDERED_LIBDIR ?= $(SDL2_ROOT)/build-scripts/dcbuild_ordered
-SDL2_INCLUDEDIR ?= $(KOS_BASE)/addons/include/SDL2
-SDL2_CONFIG_INCLUDEDIR ?= $(SDL2_INCLUDEDIR)
+SDL2_LIBDIR ?= $(SDL2_ROOT)/build-scripts/dcbuild
+SDL2_INCLUDEDIR ?= $(SDL2_LIBDIR)/include/SDL2
+SDL2_CONFIG_INCLUDEDIR ?= $(SDL2_LIBDIR)/include-config-/SDL2
 
 # ------------------------------------------------------------------
 # Screenshot support
@@ -37,110 +33,46 @@ COMMON_CFLAGS = -I$(SDL2_CONFIG_INCLUDEDIR) -I$(SDL2_INCLUDEDIR) \
 		-DDREAMCAST -D__DREAMCAST__ \
 		-Wall -Wextra -Werror
 
-all: check-ordinary check-prototype \
-	ordinary.elf ordinary.bin \
-	prototype.elf prototype.bin \
-	check-ordered ordered.elf ordered.bin
+all: check-sdl2 $(TARGET).elf $(TARGET).bin
 
 # ------------------------------------------------------------------
-# Ordinary build
+# Build
 # ------------------------------------------------------------------
-ordinary.o: $(TARGET_SRC)
+$(TARGET_SRC:.c=.o): $(TARGET_SRC)
 	kos-cc $(COMMON_CFLAGS) $(SCREENSHOT_CFLAGS) -c $< -o $@
 
-ordinary.elf: ordinary.o
-	kos-cc -o ordinary.elf ordinary.o -Wl,-Map,ordinary.map \
-		$(SDL2_ORDINARY_LIBDIR)/libSDL2.a \
-		$(SDL2_ORDINARY_LIBDIR)/libSDL2main.a \
+$(TARGET).elf: $(TARGET_SRC:.c=.o)
+	kos-cc -o $@ $(TARGET_SRC:.c=.o) -Wl,-Map,$(TARGET).map \
+		$(SDL2_LIBDIR)/libSDL2.a \
+		$(SDL2_LIBDIR)/libSDL2main.a \
 		-lGL -lm -lkosutils -lpthread
 
-ordinary.bin: ordinary.elf
-	$(KOS_OBJCOPY) -O binary ordinary.elf ordinary.bin
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin
 
 # ------------------------------------------------------------------
-# Prototype build
+# Linker-map symbol check
 # ------------------------------------------------------------------
-prototype.o: $(TARGET_SRC)
-	kos-cc $(COMMON_CFLAGS) $(SCREENSHOT_CFLAGS) \
-		-DDC_PVR_RENDER_TARGET_PROTOTYPE -c $< -o $@
-
-prototype.elf: prototype.o
-	kos-cc -o prototype.elf prototype.o -Wl,-Map,prototype.map \
-		$(SDL2_PROTOTYPE_LIBDIR)/libSDL2.a \
-		$(SDL2_PROTOTYPE_LIBDIR)/libSDL2main.a \
-		-lGL -lm -lkosutils -lpthread
-
-prototype.bin: prototype.elf
-	$(KOS_OBJCOPY) -O binary prototype.elf prototype.bin
+.PHONY: check-sdl2
+check-sdl2:
+	@test -f $(SDL2_LIBDIR)/libSDL2.a || \
+		(echo "SDL2 archive not found in $(SDL2_LIBDIR)"; exit 1)
+	@sh-elf-nm $(SDL2_LIBDIR)/libSDL2.a | grep -q '[[:space:]]_DC_RenderDriver$$' || \
+		(echo "Native Dreamcast PVR renderer missing from archive"; exit 1)
+	@sh-elf-nm $(SDL2_LIBDIR)/libSDL2.a | grep -q '[[:space:]]_DC_PVR_PrepareRenderTarget$$' || \
+		(echo "Ordered render-target preparation hook missing from archive"; exit 1)
 
 # ------------------------------------------------------------------
-# Ordered build
+# Hardware launch
 # ------------------------------------------------------------------
-ordered.o: $(TARGET_SRC)
-	kos-cc $(COMMON_CFLAGS) $(SCREENSHOT_CFLAGS) \
-		-DDC_PVR_ORDERED_RENDER_TARGETS -c $< -o $@
-
-ordered.elf: ordered.o
-	kos-cc -o ordered.elf ordered.o -Wl,-Map,ordered.map \
-		$(SDL2_ORDERED_LIBDIR)/libSDL2.a \
-		$(SDL2_ORDERED_LIBDIR)/libSDL2main.a \
-		-lGL -lm -lkosutils -lpthread
-
-ordered.bin: ordered.elf
-	$(KOS_OBJCOPY) -O binary ordered.elf ordered.bin
-
-# ------------------------------------------------------------------
-# Linker-map symbol checks (via sh-elf-nm on the ELF)
-# ------------------------------------------------------------------
-check-ordinary: ordinary.elf
-	@echo "=== ORDINARY ELF SYMBOL CHECK ==="
-	@sh-elf-nm ordinary.elf | grep -q '_DC_RenderDriver' && \
-		echo "  PASS: _DC_RenderDriver found" || \
-		(echo "  FAIL: _DC_RenderDriver NOT found"; exit 1)
-	@sh-elf-nm ordinary.elf | grep -q '_DC_PVR_SetRenderTarget' && \
-		(echo "  FAIL: _DC_PVR_SetRenderTarget unexpectedly found"; exit 1) || \
-		echo "  PASS: _DC_PVR_SetRenderTarget absent"
-
-check-prototype: prototype.elf
-	@echo "=== PROTOTYPE ELF SYMBOL CHECK ==="
-	@sh-elf-nm prototype.elf | grep -q '_DC_RenderDriver' && \
-		echo "  PASS: _DC_RenderDriver found" || \
-		(echo "  FAIL: _DC_RenderDriver NOT found"; exit 1)
-	@sh-elf-nm prototype.elf | grep -q '_DC_PVR_SetRenderTarget' && \
-		echo "  PASS: _DC_PVR_SetRenderTarget found" || \
-		(echo "  FAIL: _DC_PVR_SetRenderTarget NOT found"; exit 1)
-
-check-ordered: ordered.elf
-	@echo "=== ORDERED ELF SYMBOL CHECK ==="
-	@sh-elf-nm ordered.elf | grep -q '_DC_RenderDriver' && \
-		echo "  PASS: _DC_RenderDriver found" || \
-		(echo "  FAIL: _DC_RenderDriver NOT found"; exit 1)
-	@sh-elf-nm ordered.elf | grep -q '_DC_PVR_PrepareRenderTarget' && \
-		echo "  PASS: _DC_PVR_PrepareRenderTarget found" || \
-		(echo "  FAIL: _DC_PVR_PrepareRenderTarget NOT found"; exit 1)
-	@strings ordered.elf | grep -q 'first logical-screen VRAM surface' && \
-		(echo "  FAIL: logical-screen preservation path found"; exit 1) || \
-		echo "  PASS: logical-screen preservation path absent"
-
-# ------------------------------------------------------------------
-# Hardware launch commands
-# ------------------------------------------------------------------
-.PHONY: run-ordinary run-prototype run-ordered
-run-ordinary: ordinary.bin
-	@echo "Upload and run: ordinary.elf"
-	@echo "  kos-tool -t <DC_IP> -x ordinary.elf -m ."
-run-prototype: prototype.bin
-	@echo "Upload and run: prototype.elf"
-	@echo "  kos-tool -t <DC_IP> -x prototype.elf -m ."
-run-ordered: ordered.bin
-	@echo "Upload and run: ordered.elf"
-	@echo "  kos-tool -t <DC_IP> -x ordered.elf -m ."
+.PHONY: run
+run: $(TARGET).bin
+	@echo "Upload and run: $(TARGET).elf"
+	@echo "  kos-tool -t <DC_IP> -x $(TARGET).elf -m ."
 
 # ------------------------------------------------------------------
 # Clean
 # ------------------------------------------------------------------
 .PHONY: clean
 clean:
-	rm -f ordinary.o ordinary.elf ordinary.bin ordinary.map \
-		prototype.o prototype.elf prototype.bin prototype.map \
-		ordered.o ordered.elf ordered.bin ordered.map
+	rm -f $(TARGET_SRC:.c=.o) $(TARGET).elf $(TARGET).bin $(TARGET).map

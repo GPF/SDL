@@ -10,21 +10,13 @@
 
 #include <dc/pvr.h>
 
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE) && defined(DC_PVR_ORDERED_RENDER_TARGETS)
-#error DC_PVR_RENDER_TARGET_PROTOTYPE and DC_PVR_ORDERED_RENDER_TARGETS are mutually exclusive
-#endif
 
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE) || defined(DC_PVR_ORDERED_RENDER_TARGETS)
-#define DC_PVR_RENDER_TARGETS_ENABLED 1
-#endif
 
-#if defined(DC_PVR_ORDERED_RENDER_TARGETS)
 typedef enum DC_PVR_OrderedFrameState
 {
     DC_PVR_TARGETS_ALLOWED = 0,
     DC_PVR_SCREEN_PASS_STARTED
 } DC_PVR_OrderedFrameState;
-#endif
 
 typedef struct DC_PVR_Vertex
 {
@@ -68,13 +60,11 @@ typedef struct DC_PVR_TextureData
     SDL_bool locked;
     SDL_bool preformatted;
     SDL_Rect locked_rect;
-#if defined(DC_PVR_RENDER_TARGETS_ENABLED)
     int rtt_render_w;
     int rtt_render_h;
     int rtt_stride_px;
     pvr_ptr_t vram_next;
     SDL_bool current_valid;
-#endif
 } DC_PVR_TextureData;
 
 typedef struct DC_PVR_DeferredVRAM
@@ -113,29 +103,16 @@ typedef struct DC_PVR_RenderData
     Uint32 stride_generation;
     DC_PVR_TextureData *deferred_textures;
     DC_PVR_DeferredVRAM *deferred_vram;
-#if defined(DC_PVR_RENDER_TARGETS_ENABLED)
     SDL_Texture *current_target;
     SDL_Texture *scene_target;
     int scene_kind;
-#endif
 #if SDL_DC_PVR_OPAQUE_PREFIX_ROUTING
     SDL_bool opaque_prefix_open;
 #endif
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE)
-    pvr_ptr_t screen_vram_current;
-    pvr_ptr_t screen_vram_next;
-    int screen_alloc_size;
-    int screen_stride_px;
-    int screen_backing_w;
-    int screen_backing_h;
-    SDL_bool screen_current_valid;
-#endif
-#if defined(DC_PVR_ORDERED_RENDER_TARGETS)
     SDL_Texture *prepared_target;
     DC_PVR_OrderedFrameState ordered_frame_state;
     SDL_bool ordered_targets_enabled;
     SDL_bool target_transition_prepared;
-#endif
 } DC_PVR_RenderData;
 
 #endif /* SDL_render_dreamcast_pvr_data_h_ */

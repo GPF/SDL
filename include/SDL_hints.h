@@ -2280,21 +2280,6 @@ extern "C" {
 #define SDL_HINT_DC_SCREEN_WIDTH_TEXTURED  "SDL_DC_SCREEN_WIDTH_TEXTURED"
 #define SDL_HINT_DC_SCREEN_HEIGHT_TEXTURED "SDL_DC_SCREEN_HEIGHT_TEXTURED"
 
-#ifdef __DREAMCAST__
-/**
- * \brief Experimental hint enabling ordered render targets in the native
- * Dreamcast PVR renderer.
- *
- * Texture-target rendering must finish before the frame's screen pass. Once a
- * screen clear or draw executes, selecting a texture target fails until the
- * screen is presented.
- *
- * - "0": Disable ordered render targets (default).
- * - "1": Enable ordered render targets when compiled into the PVR renderer.
- */
-#define SDL_HINT_DC_PVR_RENDER_TARGETS "SDL_DC_PVR_RENDER_TARGETS"
-#endif
-
 /**
  * A variable controlling whether the Android / tvOS remotes should be listed
  * as joystick devices, instead of sending keyboard events.

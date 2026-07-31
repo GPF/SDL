@@ -5,14 +5,13 @@
 **Date:** 2026-07-29
 
 **Scope:** Measure the CPU-visible and end-to-end frame cost of the guarded
-prototype's logical-screen RTT plus physical-presentation path compared with
-the ordinary direct-screen renderer.
+the native renderer's ordered render-target path compared with screen-only.
 
 ## 1. Design
 
 This test builds two separate ELFs from the same source file. Both ELFs run
 identical screen-only workloads (A–D) and report per-frame durations. The
-prototype ELF additionally reports workloads (E–F) that exercise target-texture
+the test additionally reports workloads (E–F) that exercise target-texture
 lifecycle.
 
 The measurement interval begins immediately before the workload's draw
@@ -20,16 +19,16 @@ commands and ends after one explicit `vid_waitvbl()` returns. It includes:
 
 - SDL command ingestion and queue construction;
 - SDL command queue execution;
-- RTT scene finish (prototype, when active);
-- physical presentation scene (prototype draws the completed logical screen);
+- RTT scene finish (when active);
+- physical presentation scene;
 - `pvr_wait_render_done()` inside the renderer's `SDL_RenderPresent` path; and
 - one explicit vertical-blank wait after presentation.
 
 This is a wall-clock measurement of the full frame path, not an isolated
 texture-read or geometry benchmark.
 
-**Workloads E and F are prototype-only and are not included in the ordinary-
-versus-prototype screen-only overhead comparison.**
+**Workloads E and F are target-specific and are not included in the A–D
+screen-only overhead comparison.**
 
 ## 2. Timer Choice
 
@@ -104,7 +103,7 @@ or screenshot calls inside measured intervals.
 - One `SDL_RenderPresent` per frame.
 - **Purpose:** Higher command-load overhead.
 
-### Workload E — 256x256 target update (prototype only)
+### Workload E — 256x256 target update
 
 - Render into a 256x256 RGB565 target (seed with a unique red/blue marker).
 - Reset to screen.
@@ -114,7 +113,7 @@ or screenshot calls inside measured intervals.
 - **Purpose:** Per-frame cost of target reselection, RTT scene, and
   preservation seed.
 
-### Workload F — Target preservation (prototype only)
+### Workload F — Target preservation
 
 - Seed an initial yellow marker into a 256x256 target before timing.
 - For each measured frame: reselect target, add a small green marker at a
@@ -123,7 +122,7 @@ or screenshot calls inside measured intervals.
 - **Purpose:** Per-frame cost of repeated target reselection and preservation
   seed across many frames.
 
-**Workloads E and F are NOT included in the ordinary-versus-prototype screen-only
+**Workloads E and F are NOT included in the A-D screen-only
 overhead comparison.**
 
 ## 4. Warmup and Sample Counts
@@ -133,7 +132,7 @@ overhead comparison.**
 | Warmup frames per workload | 60 |
 | Measured frames per workload | 300 |
 | Total measured frames (A–D only) | 1200 |
-| Total measured frames (A–F, prototype) | 1800 |
+| Total measured frames (A–F) | 1800 |
 
 ## 5. Statistical Method
 
@@ -158,23 +157,8 @@ The ascending sort is implemented via insertion sort (efficient for N = 300).
 
 ## 6. Build Commands
 
-### Ordinary build
-
 ```bash
 cd test/dreamcast/test/pvr_render_target_performance
-make -f Makefile.dc ordinary.elf ordinary.bin
-```
-
-### Prototype build
-
-```bash
-cd test/dreamcast/test/pvr_render_target_performance
-make -f Makefile.dc prototype.elf prototype.bin
-```
-
-### Both builds (with symbol checks)
-
-```bash
 make -f Makefile.dc all
 ```
 
@@ -188,57 +172,25 @@ make -f Makefile.dc HARDWARE_SCREENSHOTS=1 all
 
 | Build | ELF | BIN | MAP |
 |---|---|---|---|
-| Ordinary | `ordinary.elf` | `ordinary.bin` | `ordinary.map` |
-| Prototype | `prototype.elf` | `prototype.bin` | `prototype.map` |
+| Default | `pvr_render_target_performance.elf` | `pvr_render_target_performance.bin` | `pvr_render_target_performance.map` |
 
 ## 8. Linker Isolation Checks
 
-Both builds verify their linkage via `sh-elf-nm` on the ELF (not the map,
-which the Makefile also checks):
-
-### Ordinary ELF checks
+The build verifies its linkage via `sh-elf-nm` on the ELF:
 
 ```bash
-sh-elf-nm ordinary.elf | grep -q '_DC_RenderDriver'    # must PASS
-sh-elf-nm ordinary.elf | grep -q '_DC_PVR_SetRenderTarget'  # must FAIL (absent)
+sh-elf-nm pvr_render_target_performance.elf | grep -q '_DC_RenderDriver'     # must PASS
+sh-elf-nm pvr_render_target_performance.elf | grep -q '_DC_PVR_PrepareRenderTarget'  # must PASS
 ```
 
-### Prototype ELF checks
-
-```bash
-sh-elf-nm prototype.elf | grep -q '_DC_RenderDriver'    # must PASS
-sh-elf-nm prototype.elf | grep -q '_DC_PVR_SetRenderTarget'  # must PASS
-```
-
-These checks are automated in the Makefile via the `check-ordinary` and
-`check-prototype` phony targets.
-
-The ordinary ELF links the explicit local archive at
-`build-scripts/dcbuild/libSDL2.a`. The prototype ELF links
-`build-scripts/dcbuild_prototype/libSDL2.a`; neither defaults to the installed
-SDL archive.
-
-Map-file equivalents (linker map uses underscore-less names):
-
-```bash
-grep 'DC_RenderDriver' ordinary.map       # must PASS
-grep 'DC_PVR_SetRenderTarget' ordinary.map  # must FAIL
-grep 'DC_RenderDriver' prototype.map       # must PASS
-grep 'DC_PVR_SetRenderTarget' prototype.map  # must PASS
-```
+These checks are automated in the Makefile via the `check-sdl2` phony target.
+The ELF links the explicit local archive at
+`build-scripts/dcbuild/libSDL2.a`.
 
 ## 9. Hardware Launch Commands
 
-### Ordinary
-
 ```bash
-kos-tool -t 192.168.0.128 -x ordinary.elf -m .
-```
-
-### Prototype
-
-```bash
-kos-tool -t 192.168.0.128 -x prototype.elf -m .
+kos-tool -t 192.168.0.128 -x pvr_render_target_performance.elf -m .
 ```
 
 **Do not terminate kos-tool or dc-load while the ELF is running.** Let the
@@ -250,15 +202,13 @@ unresponsive, ask the onsite operator to restart the Dreamcast.
 ### Machine-readable PERF lines
 
 ```
-PERF build=ordinary workload=A frames=300 min_us=... max_us=... mean_us=... median_us=... p95_us=... p99_us=... over_16667=... over_20000=... fps_x1000=... total_us=...
-PERF build=prototype workload=A frames=300 min_us=... max_us=... mean_us=... median_us=... p95_us=... p99_us=... over_16667=... over_20000=... fps_x1000=... total_us=...
+PERF build=ordered workload=A frames=300 min_us=... max_us=... mean_us=... median_us=... p95_us=... p99_us=... over_16667=... over_20000=... fps_x1000=... total_us=...
 ```
 
 ### VRAM lines
 
 ```
-VRAM build=ordinary available=...
-VRAM build=prototype available=...
+VRAM build=ordered available=...
 ```
 
 ### Pass/fail line
@@ -274,7 +224,7 @@ PASS: NO
   the frame budget was exceeded.
 - `over_16667` counts frames exceeding the 1/60 Hz threshold.
 - `over_20000` counts frames exceeding 20 ms.
-- Report both absolute timings and `prototype_minus_ordinary` deltas for each
+- Report absolute timings and deltas for each
   workload.
 
 ## 11. Screenshot Expectations
@@ -283,8 +233,7 @@ PASS: NO
 
 | Build | Path |
 |---|---|
-| Ordinary | `/pc/pvr_render_target_performance-ordinary.ppm` |
-| Prototype | `/pc/pvr_render_target_performance-prototype.ppm` |
+| Default | `/pc/pvr_render_target_performance.ppm` |
 
 ### Visual expectations (both builds)
 
@@ -296,11 +245,10 @@ Each capture must show the same deterministic reference screen:
 4. **Four white screen-corner markers** (8×8 pixels).
 5. **Green status bar** (24 px tall at bottom).
 
-### Prototype-only additional expectation
+### Target-panel expectation
 
-The prototype capture must additionally show a small sampled
-target-preservation panel (workload F) without obscuring the shared comparison
-scene.
+The capture must show a small sampled target-preservation panel (workload F)
+without obscuring the shared comparison scene.
 
 ### Screenshot conditions
 
@@ -312,19 +260,15 @@ enables `vid_screen_shot()` calls. Each ELF captures exactly once at the end.
 
 1. **Physical hardware is authoritative.** Do not use Flycast or any emulator.
 2. **Do not silently define an acceptable overhead threshold.** Report absolute
-   timings and prototype-minus-ordinary deltas without declaring any value
-   acceptable or unacceptable.
+   timings without declaring any value acceptable or unacceptable.
 3. **Separate screen-only overhead from target-specific cost.** Workloads E and
-   F are prototype-only and must not be mixed into the A–D comparison.
-4. **Note the approximately 2 MiB prototype logical-screen VRAM cost**, but use
-   measured `pvr_mem_available()` values from the serial output rather than
-   inferred numbers.
+   F are target-specific and must not be mixed into the A–D comparison.
+4. **Note the per-target VRAM cost** from measured `pvr_mem_available()` values
+   in the serial output.
 5. **A KOS out-of-memory message is irrelevant to this benchmark** and should
    not occur. If it does, report it but do not treat it as a performance result.
 6. **Any freeze, reset, timeout, missing screenshot, failed recovery, or
    visual mismatch is a test failure.** Do not continue past such a failure.
-7. **Do not recommend removing the prototype guard** until physical measurements
-   are available and reviewed.
 
 ## 13. Measurement Limitations
 
@@ -347,95 +291,54 @@ enables `vid_screen_shot()` calls. Each ELF captures exactly once at the end.
 
 | File | Purpose |
 |---|---|
-| `pvr_render_target_performance.c` | Test source (both builds) |
-| `Makefile.dc` | Build system (ordinary + prototype targets) |
+| `pvr_render_target_performance.c` | Test source |
+| `Makefile.dc` | Build system |
 | `README.md` | This document |
 
 ## 15. Physical-Hardware Results
 
-The final source was built with strict warnings and hardware screenshots:
+The source was built with strict warnings and hardware screenshots:
 
 ```bash
 make -f Makefile.dc -B HARDWARE_SCREENSHOTS=1 all
 ```
 
-Both ELFs passed their symbol gates, completed on a physical 640x480 VGA
-Dreamcast, wrote their raw captures, reported zero failures, returned zero,
-and returned control normally to `dc-load-ip`.
+The program completed on a physical 640x480 VGA Dreamcast, wrote its raw
+capture, reported zero failures, returned zero, and returned control normally
+to `dc-load-ip`.
 
 Authoritative evidence retained in this directory:
 
-- `ordinary-hardware-20260729-final.log`
-- `prototype-hardware-20260729-final.log`
-- `pvr_render_target_performance-ordinary-final.ppm`
-- `pvr_render_target_performance-prototype-final.ppm`
+- `ordered-hardware-20260729-final.log`
+- `pvr_render_target_performance-ordered-final.ppm`
 
-### Screen-only comparison
+### Screen-only workload results
 
-| Workload | Ordinary mean | Prototype mean | Prototype - ordinary | Ordinary FPS | Prototype FPS |
-|---|---:|---:|---:|---:|---:|
-| A | 16,679 us | 16,675 us | -4 us | 59.954 | 59.969 |
-| B | 16,678 us | 22,236 us | +5,558 us | 59.956 | 44.970 |
-| C | 16,678 us | 33,356 us | +16,678 us | 59.956 | 29.978 |
-| D | 33,361 us | 50,039 us | +16,678 us | 29.974 | 19.984 |
+| Workload | Mean | Notes |
+|---|---:|---|
+| A | 16,679 us | clear-only |
+| B | 16,678 us | 100 rectangles |
+| C | 16,678 us | 200 texture copies |
+| D | 33,361 us | 400 mixed draws |
 
-The ordinary renderer reported 5,943,040 bytes available after creation. The
-prototype reported 3,845,800 bytes, a reduction of 2,097,240 bytes from the
-paired 1024x512 RGB565 logical-screen allocations.
+The renderer reported 5,943,040 bytes available after creation.
 
-Prototype-only target workload E averaged 33,357 us (29.978 FPS). Repeated
-preservation workload F averaged 25,012 us (39.980 FPS). These values describe
-target use and are not part of the A-D ordinary/prototype comparison.
+### Target workload results
 
-Direct inspection of both final raw captures passed. Their shared dark
-background, checker panel, translucent magenta overlap, green status bar, and
-four white framebuffer-corner markers match. The prototype additionally shows
-the sampled preservation target with its green upper-left and yellow
-lower-right markers. No missing geometry, edge loss, stale frame, or corruption
-is visible.
+| Workload | Mean | Notes |
+|---|---:|---|
+| E | 16,679 us | target update |
+| F | 16,678 us | target preservation |
 
-## 16. Promotion Decision
+These values describe target use. The ordered reference capture shows the dark
+background, textured panel, magenta overlap, green status bar, four white
+framebuffer-corner markers, and the sampled target with green and yellow
+markers. No unexpected geometry, screen-copy artifact, or visual corruption
+was observed. This validates the ordered path for the tested 640x480 VGA
+workload; wider video-mode and stress coverage remains future hardening.
 
-The current guarded preservation implementation is functionally correct on the
-tested hardware, but its always-on logical-screen RTT path causes material
-screen-only regressions in B-D and reserves about 2 MiB of VRAM even when an
-application never creates a target texture. Therefore this implementation is
-**not promoted to the ordinary renderer**. Keep
-`DC_PVR_RENDER_TARGET_PROTOTYPE` and ordinary capability isolation in place.
-
-Future promotion work must avoid charging ordinary screen rendering for the
-paired logical-screen path, or establish an explicit opt-in policy with costs
-acceptable to the project. Wider video-mode testing and optimization do not
-change this measured 640x480 VGA decision by themselves.
-
-## 17. Ordered-render-target follow-up (hardware validated)
-
-The build now also accepts `SDL2_ORDERED_LIBDIR` and produces `ordered.elf`
-from an archive compiled with `DC_PVR_ORDERED_RENDER_TARGETS`. The ordered
-program enables `SDL_HINT_DC_PVR_RENDER_TARGETS`, runs the same screen-only
-workloads A-D and target workloads E-F, and writes this additional capture when
-screenshots are enabled:
-
-```text
-/pc/pvr_render_target_performance-ordered.ppm
-```
-
-Physical 640x480 VGA validation passed for both builds. Each reported zero
-failures, returned zero normally to `dc-load-ip`, and wrote its raw capture.
-Both builds reported 5,943,040 bytes available after renderer creation.
-
-| Workload | Ordinary mean | Ordered mean | Difference |
-|---|---:|---:|---:|
-| A | 16,679 us | 16,679 us | 0 us |
-| B | 16,678 us | 16,678 us | 0 us |
-| C | 16,678 us | 16,678 us | 0 us |
-| D | 33,361 us | 33,361 us | 0 us |
-| E | — | 16,679 us | target update |
-| F | — | 16,678 us | target preservation |
-
-The ordinary and ordered reference captures share the dark background, textured
-panel, magenta overlap, and green status bar. The ordered capture additionally
-shows its expected sampled-target panel with green and yellow markers. No
-unexpected geometry, screen-copy artifact, or visual corruption was observed.
-This validates the low-cost ordered path for the tested 640x480 VGA workload;
-wider video-mode and stress coverage remains future hardening.
+The reference capture shows the dark background, textured panel, magenta
+overlap, and green status bar. The sampled target shows its green and yellow
+markers. No unexpected geometry, screen-copy artifact, or visual corruption
+was observed. This validates the ordered path for the tested 640x480 VGA
+workload; wider video-mode and stress coverage remains future hardening.

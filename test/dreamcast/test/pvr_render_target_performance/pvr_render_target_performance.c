@@ -1,18 +1,13 @@
 /*
- * Performance comparison between the ordinary native Dreamcast PVR renderer
- * and the guarded render-target prototype.
+ * Performance measurement for the native Dreamcast PVR renderer with ordered
+ * render targets.
+ *
+ * Ordered render targets are always enabled. This test measures the frame
+ * cost of both screen-only workloads (A-D) and target-texture workloads (E-F).
  *
  * Measures end-to-end frame cost (SDL command execution + scene finish +
  * SDL_RenderPresent + pvr_wait_render_done + vsync) using the KOS high-
  * resolution monotonic timer.
- *
- * Builds in three modes:
- *   ordinary  — no DC_PVR_RENDER_TARGET_PROTOTYPE, no target-texture support
- *   prototype — DC_PVR_RENDER_TARGET_PROTOTYPE defined, target-texture support
- *   ordered   — DC_PVR_ORDERED_RENDER_TARGETS defined, direct-screen ordered RTT
- *
- * Workloads A-D are identical for all builds. Workloads E-F are target-build
- * only and reported separately.
  */
 
 #include <SDL.h>
@@ -23,7 +18,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#if defined(DC_PVR_RENDER_TARGET_PROTOTYPE) || defined(DC_PVR_ORDERED_RENDER_TARGETS)
+#if defined(DC_PVR_RENDER_TARGETS_ENABLED)
 #define DC_PVR_PERFORMANCE_HAS_TARGETS 1
 #endif
 
@@ -761,14 +756,8 @@ int main(int argc, char **argv)
     SDL_Texture *test_tex = NULL;
     int workload_result;
 
-    /* Determine build kind from preprocessor */
-#ifdef DC_PVR_RENDER_TARGET_PROTOTYPE
-    const char *build_kind = "prototype";
-#elif defined(DC_PVR_ORDERED_RENDER_TARGETS)
+    /* Ordered render targets are always enabled in the native PVR renderer. */
     const char *build_kind = "ordered";
-#else
-    const char *build_kind = "ordinary";
-#endif
 
     (void)argc;
     (void)argv;
@@ -792,11 +781,9 @@ int main(int argc, char **argv)
            (unsigned long)g_timer_resolution_us);
 
     /* The Dreamcast video path is selected during SDL video
-     * initialization, so set the hint before SDL_Init(). */
+     * initialization, so set the hint before SDL_Init().
+     * Enable ordered render targets for this test. */
     SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO");
-#ifdef DC_PVR_ORDERED_RENDER_TARGETS
-    SDL_SetHint(SDL_HINT_DC_PVR_RENDER_TARGETS, "1");
-#endif
 
     /* SDL init */
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {

@@ -356,8 +356,10 @@ expected ordered `NONE`/`BLEND` overlaps. No PVR-specific coordinate offset or
 clip epsilon was required.
 
 This completes the first pixel-exact clipping increment for the validated
-640x480 VGA path. The broader 320x240, PAL/NTSC, subpixel-position, and stress
-matrix remains Phase 7 hardening rather than a blocker for this increment.
+640x480 VGA path. Video-mode selection and hardware configuration belong to
+the SDL2 Dreamcast video driver; a separate native-renderer 320x240 acceptance
+requirement is not needed. Subpixel-position and stress coverage remain
+optional hardening.
 
 ## Agent physical-hardware validation workflow
 
@@ -813,7 +815,9 @@ the name dependency.
 
 **Test gaps (tracked, not blocking)**
 
-- No 320×240 or PAL/NTSC mode coverage (Phase 7 hardening)
+- 320×240 smoke coverage now passes on physical 320×240 VGA hardware; broader
+  PAL/NTSC characterization remains optional hardening owned by the SDL video
+  mode path.
 - Safe below-boundary TA command-capacity stress now passes at 81.6-84.6% on
   640x480 VGA hardware with retained framebuffer captures. Deliberate boundary
   probing and non-VGA TA/OPB characterization remain Phase 7 hardening.
@@ -916,9 +920,12 @@ stress tests closely match the OpenGL renderer.
   returned zero, and returned control to `dc-load-ip`. Capture paths, hashes,
   and the serial log are recorded in the focused README.
 
-## Phase 5: render-to-texture
+## Phase 5: render-to-texture — promoted to default
 
-Do not advertise `SDL_RENDERER_TARGETTEXTURE` before this phase passes.
+Ordered render targets are always enabled in the native PVR renderer. Clients
+must create target textures before beginning the frame's drawing scene and
+render target work before the final screen pass. There is no RTT enablement
+hint.
 
 Use `pvr_scene_begin_rtt`, not deprecated `pvr_scene_begin_txr`. The current KOS
 implementation expects 16-bit targets, nonzero dimensions, a backing stride at
@@ -1039,21 +1046,17 @@ corrections are recorded in `src/render/dreamcast/PVR_RENDER_TARGET_RESEARCH.md`
   logs, captures, workload definitions, and limitations are under
 `test/dreamcast/test/pvr_render_target_performance/`.
 
-### Phase 5.3: guarded ordered RTT implementation — hardware validated
+### Phase 5.3: ordered RTT implementation — promoted to default
 
-- A private `DC_PVR_ORDERED_RENDER_TARGETS` build implements the lower-cost
-  Dreamcast ordering contract: all texture-target work precedes the final
-  physical-screen pass. The screen renders directly to the framebuffer; this
-  path allocates no logical-screen current/next pair and performs no final
-  logical-screen copy. Individual RGB565 targets retain paired current/next
-  allocations and the validated preservation seed/swap behavior.
-- The experimental `SDL_HINT_DC_PVR_RENDER_TARGETS` creation-time opt-in is
-  disabled by default. Opted-in renderer instances install the target
-  callbacks and report `SDL_RENDERER_TARGETTEXTURE`. The static driver
-  description intentionally remains unchanged, so automatic driver selection
-  requested with `SDL_RENDERER_TARGETTEXTURE` cannot discover the experimental
-  instance capability; applications must select the Dreamcast PVR renderer
-  explicitly during this guarded increment.
+- Ordered render targets are now enabled by default. The lower-cost
+  Dreamcast ordering contract is in place: all texture-target work precedes
+  the final physical-screen pass. The screen renders directly to the
+  framebuffer; this path allocates no logical-screen current/next pair and
+  performs no final logical-screen copy. Individual RGB565 targets retain
+  paired current/next allocations and the validated preservation seed/swap
+  behavior.
+- `SDL_RENDERER_TARGETTEXTURE` is advertised by the static driver description,
+  so normal SDL renderer selection can request target-texture support.
 - A Dreamcast-only pre-transition callback in `SDL_SetRenderTarget` flushes
   queued work, validates ordering, and prepares the backend transition before
   SDL mutates its target, viewport, or clip state. After the first executed
@@ -1071,9 +1074,9 @@ corrections are recorded in `src/render/dreamcast/PVR_RENDER_TARGET_RESEARCH.md`
   destruction, incomplete-frame destruction, exact paired allocation cost,
   and injected second-allocation rollback. The performance comparison also has
   an ordered build for ordinary screen-only and RTT workloads.
-- Static Dreamcast builds pass for ordered, ordinary, full-preservation
-  prototype, and native-renderer opt-out configurations. The focused test and
-  ordered performance test compile with `-Wall -Wextra -Werror`.
+- Static Dreamcast builds pass for the promoted ordered configuration and
+  native-renderer opt-out. The focused test and ordered performance test
+  compile with `-Wall -Wextra -Werror`.
 - **Physical-hardware validation (2026-07-29):** Passed on a real 640x480 VGA
   Dreamcast. The focused test reported 23 checks and zero failures, captured
   all five pages, and returned zero. All ordering rejection, recovery,
@@ -1087,9 +1090,8 @@ corrections are recorded in `src/render/dreamcast/PVR_RENDER_TARGET_RESEARCH.md`
   builds, with ordered target workloads E/F at 16,679/16,678 us. The ordered
   reference adds only its expected sampled-target panel; shared screen content
   matches the ordinary capture. This validates the low-cost path for the
-  tested 640x480 VGA mode. Wider video-mode, VRAM-pressure, and stress coverage
-  remain Phase 7 hardening, and the mode remains experimental rather than
-  default-enabled.
+  tested 640x480 VGA mode. Wider VRAM-pressure and stress coverage remain
+  Phase 7 hardening.
 
 ## Phase 6: Dreamcast-specific optimization
 
@@ -1313,13 +1315,35 @@ the guarded render-target prototype or change renderer capability advertising.
   broader video modes, and stress testing remain deferred. See
   `src/render/dreamcast/PVR_LIST_ROUTING_RESEARCH.md` and
   `PVR_LIST_ROUTING_FAILURE_RESEARCH.md` for the design and resolved failure.
+- **Registration diagnostic correction (2026-07-30):** the feature-on archive
+  initially reported no PVR driver because its temporary build diagnostic was
+  placed in `DC_RenderDriver.info.name`. SDL's renderer-name selection and the
+  focused capacity test compare that field exactly with `"Dreamcast PVR"`.
+  The public name is now stable again; the ON/OFF routing diagnostic remains a
+  separate string logged during renderer creation. The feature-on archive
+  rebuilds with `SDL_OPENGL=ON`, contains `DC_RenderDriver`, and the capacity
+  test links cleanly against it. No hardware capacity/performance result is
+  inferred from this compile/link check.
+- **Capacity/performance comparison (2026-07-30):** physical 640×480 VGA
+  testing measured 6000 mixed rectangles in both configurations and 6000
+  opaque-only rectangles with routing enabled. Clear-only time improved from
+  9.4 ms to 7.3 ms per frame (22% faster), while 1000 opaque and translucent
+  rectangle workloads were 41.2/41.8 ms versus 39.7/40.1 ms (about 4%
+  slower). The mixed 1000-rectangle workload measured 42.0 ms with routing.
+  Capacity was unchanged and the net gain is not meaningful. **Recommendation:
+  KEEP guarded, do not promote or enable by default.** Revisit only with a
+  workload showing a durable benefit or a narrower optimization that avoids
+  per-draw routing overhead.
 
 ## Phase 7: hardening and default enablement
 
 - Test VRAM exhaustion and allocation rollback.
 - Verify renderer creation failure leaves the video subsystem usable.
 - Stress repeated texture creation, destruction, locking, and updating.
-- Test 320x240 and 640x480 modes and PAL, NTSC, and VGA where available.
+- Video mode configuration belongs to SDL2's Dreamcast video driver. The
+  native renderer queries the configured output size and adapts to it; a
+  separate native-renderer 320x240 requirement is not needed. PAL/NTSC mode
+  behavior remains the responsibility of the SDL video-mode path.
 - Record frame time, upload time, VRAM use, polygon count, and list overflow.
 - Compare the native renderer with GLdc using many small sprites, a full-screen
   streaming texture, an alpha-heavy UI, geometry-heavy scenes, and RTT.
