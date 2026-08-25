@@ -462,7 +462,7 @@ bool DREAMCAST_CreateWindowTexture(SDL_VideoDevice *_this, SDL_Window *window, S
     sdl_dc_tex_bytes = tex_size;
     sdl_dc_txr_format = PVR_TXRFMT_RGB565 | PVR_TXRFMT_NONTWIDDLED;
     if (sdl_dc_strided) {
-        sdl_dc_txr_format |= PVR_TXRFMT_X32_STRIDE;
+        sdl_dc_txr_format |= (1 << 25);
     }
 
     sdl_dc_memtex = pvr_mem_malloc(tex_size);
