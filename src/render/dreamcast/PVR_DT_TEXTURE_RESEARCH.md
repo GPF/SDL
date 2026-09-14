@@ -62,8 +62,9 @@ formats, full VQ, reduced-codebook VQ, and VQ mipmaps, including modulation,
 alpha, filtering, flip, and rotation probes. Evidence and exact capture hashes
 are recorded in the test README.
 
-This increment does not change renderer capability advertising and does not
-promote the guarded render-target prototype. Strided NPOT renderer-created
-RGB565 textures were added and hardware-validated in the separate Phase 6.3
-integration. Strided `.dt` payloads, DMA uploads, list routing, and batching
-remain later work.
+This increment does not change renderer capability advertising. Ordered
+render-target support was subsequently promoted to the default native PVR
+path in commit `916df8fbf`; this `.dt` loader remains independent of that
+change. Strided NPOT renderer-created textures were added and hardware-
+validated in the separate Phase 6.3 integration. Strided `.dt` payloads,
+non-blocking DMA, list routing, and batching remain later work.

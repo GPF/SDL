@@ -1,10 +1,11 @@
 # Dreamcast Ordered Render-Target Research
 
-> **Status (2026-07-30):** The guarded ordered RTT prototype described here is
-> implemented and hardware-validated at 640x480 VGA. The design conclusions
-> remain current; the implementation is still experimental and opt-in via
-> `DC_PVR_ORDERED_RENDER_TARGETS` and `SDL_HINT_DC_PVR_RENDER_TARGETS`.
-> Wider video modes, VRAM-pressure, and stress validation remain pending.
+> **Status (2026-09-13):** The guarded ordered RTT prototype described here
+> was promoted to the default native PVR renderer path in commit
+> `916df8fbf`. The ordering contract and design conclusions remain current,
+> but the old compile-time guard and hint are retired. Physical validation,
+> including VRAM rollback and recovery, passed at 640x480 VGA. Wider video
+> modes and additional stress characterization remain hardening work.
 
 ## 1. Executive verdict
 
@@ -26,11 +27,10 @@ queue does not begin the final screen pass. A screen clear does begin it, as
 does any screen geometry command, even if clipping, alpha, or coordinates make
 the result invisible.
 
-The recommended prototype therefore has these properties:
+The promoted implementation has these properties:
 
-- it is protected by a Dreamcast compile-time guard;
-- it is enabled explicitly before renderer creation by a Dreamcast-specific
-  hint;
+- it is part of the native Dreamcast PVR renderer when that renderer is
+  compiled in;
 - the physical screen is rendered directly, with no paired logical-screen
   textures and no final full-screen preservation copy;
 - it retains the validated paired allocation scheme for individual render
@@ -39,8 +39,8 @@ The recommended prototype therefore has these properties:
   `renderer->target` or its associated viewport/clip state;
 - it reports a clear SDL error and leaves the screen selected and usable;
 - it treats a target-selected `SDL_RenderPresent()` as an error; and
-- it advertises `SDL_RENDERER_TARGETTEXTURE` only on the opted-in renderer
-  instance, with the ordering restriction documented as a Dreamcast extension.
+- it advertises `SDL_RENDERER_TARGETTEXTURE`, with the ordering restriction
+  documented as a Dreamcast extension.
 
 This is not a recommendation to promote the expensive compatibility prototype
 or to enable restricted target behavior by default. If this project requires
