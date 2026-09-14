@@ -804,7 +804,7 @@ int main(int argc, char **argv)
     cont_btn_callback(0, CONT_START | CONT_A | CONT_B | CONT_X | CONT_Y,
                       (cont_btn_callback_t)arch_exit);
     SDL_zero(stats);
-    SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO");
+    SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DREAMCAST_PVR_VIDEO");
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         printf("FAIL: SDL_Init: %s\n", SDL_GetError());
         return 1;

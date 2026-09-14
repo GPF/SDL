@@ -2275,6 +2275,8 @@ extern "C" {
  * - "SDL_DC_TEXTURED_STRIDED_VIDEO": Uses a strided non-twiddled PVR texture.
  *    SDL_HINT_DC_SCREEN_WIDTH_TEXTURED and SDL_HINT_DC_SCREEN_HEIGHT_TEXTURED
  *    should match the logical surface size, and width should be 32-byte aligned.
+ * - "SDL_DC_DREAMCAST_PVR_VIDEO": Uses the native Dreamcast PVR SDL renderer.
+ *    This is a non-OpenGL mode and does not create a software framebuffer.
  */
 #define SDL_HINT_DC_VIDEO_MODE "SDL_DC_VIDEO_MODE"
 #define SDL_HINT_DC_SCREEN_WIDTH_TEXTURED  "SDL_DC_SCREEN_WIDTH_TEXTURED"

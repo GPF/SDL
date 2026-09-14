@@ -1004,8 +1004,8 @@ int main(int argc, char **argv)
     cont_btn_callback(0, CONT_START | CONT_A | CONT_B | CONT_X | CONT_Y,
                       (cont_btn_callback_t)arch_exit);
 
-    if (SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO") != SDL_TRUE) {
-        printf("FAIL: could not select SDL_DC_DIRECT_VIDEO\n");
+    if (SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DREAMCAST_PVR_VIDEO") != SDL_TRUE) {
+        printf("FAIL: could not select SDL_DC_DREAMCAST_PVR_VIDEO\n");
         return 1;
     }
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -1017,7 +1017,7 @@ int main(int argc, char **argv)
         printf("FAIL: SDL_GetCurrentVideoDriver returned NULL\n");
         goto done;
     }
-    printf("Selected video driver: %s (mode SDL_DC_DIRECT_VIDEO)\n",
+    printf("Selected video driver: %s (mode SDL_DC_DREAMCAST_PVR_VIDEO)\n",
            video_driver);
 
     driver = find_pvr_driver();

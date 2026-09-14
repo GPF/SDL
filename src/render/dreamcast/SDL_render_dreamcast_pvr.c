@@ -861,8 +861,8 @@ static int DC_PVR_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window, Uin
         return SDL_SetError("Dreamcast PVR is not a software renderer");
     }
     video_mode = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
-    if (!video_mode || SDL_strcmp(video_mode, "SDL_DC_DIRECT_VIDEO") != 0) {
-        return SDL_SetError("Dreamcast PVR requires SDL_HINT_DC_VIDEO_MODE=SDL_DC_DIRECT_VIDEO before window creation");
+    if (!video_mode || SDL_strcmp(video_mode, "SDL_DC_DREAMCAST_PVR_VIDEO") != 0) {
+        return SDL_SetError("Dreamcast PVR requires SDL_HINT_DC_VIDEO_MODE=SDL_DC_DREAMCAST_PVR_VIDEO before window creation");
     }
     if (SDL_GetWindowFlags(window) & SDL_WINDOW_OPENGL) {
         return SDL_SetError("Dreamcast PVR cannot use an OpenGL window");

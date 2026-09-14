@@ -149,6 +149,7 @@ static SDL_VideoDevice *DREAMCAST_CreateDevice(void)
     SDL_VideoDevice *device;
     const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
     int use_opengl = (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") == 0);
+    int use_native_pvr = (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DREAMCAST_PVR_VIDEO") == 0);
 
     if (!DREAMCAST_Available()) {
         SDL_SetError("Dreamcast video driver is not available.");
@@ -186,7 +187,7 @@ static SDL_VideoDevice *DREAMCAST_CreateDevice(void)
         device->GL_SwapWindow = DREAMCAST_GL_SwapBuffers;
         device->GL_CreateContext = DREAMCAST_GL_CreateContext;
         device->GL_DeleteContext = DREAMCAST_GL_DeleteContext;
-    } else {
+    } else if (!use_native_pvr) {
         device->CreateWindowFramebuffer = SDL_DREAMCAST_CreateWindowFramebuffer;
         device->UpdateWindowFramebuffer = SDL_DREAMCAST_UpdateWindowFramebuffer;
         device->DestroyWindowFramebuffer = SDL_DREAMCAST_DestroyWindowFramebuffer;
@@ -324,6 +325,7 @@ int DREAMCAST_SetDisplayMode(_THIS, SDL_VideoDisplay *display, SDL_DisplayMode *
     const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
     const char *double_buffer_hint = SDL_GetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER);
     int use_opengl = (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") == 0);
+    int use_native_pvr = (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DREAMCAST_PVR_VIDEO") == 0);
 
     if (video_mode_hint != NULL &&
         (strcmp(video_mode_hint, "SDL_DC_TEXTURED_VIDEO") == 0 ||
@@ -336,7 +338,7 @@ int DREAMCAST_SetDisplayMode(_THIS, SDL_VideoDisplay *display, SDL_DisplayMode *
         mode->h = 480;
     }
 
-    if (use_opengl) {
+    if (use_opengl || use_native_pvr) {
         mode->w = 640;
         mode->h = 480;
         mode->format = SDL_PIXELFORMAT_RGB565;

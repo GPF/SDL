@@ -59,9 +59,13 @@ int DREAMCAST_CreateWindow(_THIS, SDL_Window * window)
     // Only set OpenGL flag when explicitly requested via hint
     const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
     int use_opengl = (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") == 0);
+    int use_native_pvr = (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DREAMCAST_PVR_VIDEO") == 0);
     if (use_opengl) {
         window->flags |= SDL_WINDOW_OPENGL;
         SDL_Log("DREAMCAST_CreateWindow: window %dx%d created with OpenGL flag", window->w, window->h);
+    } else if (use_native_pvr) {
+        window->flags &= ~SDL_WINDOW_OPENGL;
+        SDL_Log("DREAMCAST_CreateWindow: window %dx%d created for native PVR renderer", window->w, window->h);
     } else {
         window->flags &= ~SDL_WINDOW_OPENGL;
         SDL_Log("DREAMCAST_CreateWindow: window %dx%d created with framebuffer", window->w, window->h);

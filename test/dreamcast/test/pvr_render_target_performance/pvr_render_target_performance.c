@@ -783,7 +783,7 @@ int main(int argc, char **argv)
     /* The Dreamcast video path is selected during SDL video
      * initialization, so set the hint before SDL_Init().
      * Enable ordered render targets for this test. */
-    SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO");
+    SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DREAMCAST_PVR_VIDEO");
 
     /* SDL init */
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {

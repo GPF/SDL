@@ -333,7 +333,7 @@ int main(int argc, char **argv)
     renderer_name = "Dreamcast PVR";
     capture_path = "/pc/pvr_dt_texture-phase6_1-native.ppm";
     window_flags = 0;
-    SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DIRECT_VIDEO");
+    SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DREAMCAST_PVR_VIDEO");
 #else
     native = SDL_FALSE;
     renderer_name = "opengl";
