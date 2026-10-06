@@ -1090,7 +1090,14 @@ static bool GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture, SDL_P
 }
 
 #ifdef SDL_PLATFORM_DREAMCAST
-SDL_Texture *SDL_LoadDreamcastTexture_IO(SDL_Renderer *renderer, SDL_IOStream *src, bool closeio)
+#if defined(SDL_VIDEO_RENDER_DREAMCAST_PVR)
+#include "../dreamcast/SDL_render_dreamcast_pvr.h"
+SDL_Texture *SDL_GL_LoadDreamcastTexture_IO(SDL_Renderer *renderer,
+                                           SDL_IOStream *src, bool closeio)
+#else
+SDL_Texture *SDL_LoadDreamcastTexture_IO(SDL_Renderer *renderer,
+                                         SDL_IOStream *src, bool closeio)
+#endif
 {
     SDL_DreamcastDtHeader header;
     SDL_Texture *texture = NULL;

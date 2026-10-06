@@ -1,4 +1,4 @@
-/* Guarded Phase 1 hardware gate: RGB565 target preservation and SDL3 ordering. */
+/* Phase 1 hardware gate: RGB565 target preservation and SDL3 ordering. */
 #include <SDL3/SDL.h>
 #include "../pvr_phase0_screenshot.h"
 

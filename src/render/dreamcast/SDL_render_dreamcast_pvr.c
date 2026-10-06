@@ -329,7 +329,8 @@ bool DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture,
         }
         pvr_poly_cxt_txr(&context, list_type, texturedata->pvr_format,
                          texturedata->backing_w, texturedata->backing_h,
-                         texturedata->vram, filter);
+                         texturedata->sample_vram ? texturedata->sample_vram : texturedata->vram,
+                         filter);
     } else {
         filter = PVR_FILTER_NEAREST;
         if (data->header_valid &&

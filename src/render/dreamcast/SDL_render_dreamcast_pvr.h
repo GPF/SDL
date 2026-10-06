@@ -79,6 +79,12 @@ bool DC_PVR_RunGeometryCommand(SDL_Renderer *renderer,
 
 bool DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
                           SDL_PropertiesID create_props);
+SDL_Texture *DC_PVR_LoadDreamcastTexture_IO(SDL_Renderer *renderer,
+                                           SDL_IOStream *src, bool closeio);
+#if defined(SDL_VIDEO_RENDER_OGL)
+SDL_Texture *SDL_GL_LoadDreamcastTexture_IO(SDL_Renderer *renderer,
+                                           SDL_IOStream *src, bool closeio);
+#endif
 bool DC_PVR_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
                           const SDL_Rect *rect, const void *pixels, int pitch);
 bool DC_PVR_LockTexture(SDL_Renderer *renderer, SDL_Texture *texture,

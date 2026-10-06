@@ -29,12 +29,21 @@ pixel by vblanks 2 and 3; vblank 1 may show the preceding page because of the
 established presentation/capture timing behavior. Do not add production sleeps
 or extra presents to address it.
 
+Native PVR sampled-texture `.dt` loading now passes its first physical hardware
+gate (2026-10-06). The gate loaded and sampled a 256×256 RGB565 VQ texture with a
+full codebook, rejected a malformed chunk, and returned a 640×480 VGA capture.
+The parser additionally accepts version-zero direct 16-bit formats, reduced VQ
+codebooks, and square mip chains by the established SDL2 PVR payload contract;
+those variants have not yet received this SDL3 hardware gate. Strided, partial,
+paletted, bump-map, and YUV `.dt` payloads remain rejected.
+
 ## Promoted capability
 
 - RGB565 render targets with paired-buffer preservation.
 - Screen/target switching and sampling of completed targets.
 - Hardware-validated NPOT target edges.
 - SDL3 target-switch rollback for target/view, viewport, clip, and color state.
+- Static sampled `.dt` textures with strict PVR payload-size validation.
 - Failure injection remains available only in a dedicated build with
   `SDL_VIDEO_RENDER_DREAMCAST_PVR_TESTS`; it is off in ordinary builds.
 
@@ -42,6 +51,8 @@ or extra presents to address it.
 
 - ARGB1555, ARGB4444, PAL8, or converted-format targets.
 - `.dt` integration with targets; PAL8 targets.
+- Hardware coverage for direct-format, reduced-codebook, and mipmapped `.dt`
+  variants beyond the full-codebook RGB565 VQ fixture.
 - DMA, partial, or strided target-specific work.
 - `RenderReadPixels` and texture address-mode emulation.
 - Unrelated blend modes, list-routing optimization, FSAA, and other unvalidated
@@ -49,12 +60,12 @@ or extra presents to address it.
 
 ## Next bounded task
 
-Implement and hardware-validate `.dt` texture loading for the existing native
-PVR renderer using `SDL_LoadDreamcastTexture_IO`. Limit the work to ordinary
-sampled textures: preserve current target-format rejection, avoid target
-integration, and add one fixture covering valid `.dt` load/sample plus malformed
-input rejection. First inspect the existing loader and SDL2 reference; do not
-start PAL8 targets, DMA, or broader texture-path changes in that task.
+Audit SDL3 blend-mode semantics against native PVR capability advertising.
+Keep the task to the currently advertised `SDL_BLENDMODE_NONE` and
+`SDL_BLENDMODE_BLEND` paths: add focused hardware coverage for alpha and color
+modulation, and correct advertising or implementation only if the PVR result
+differs from SDL3 semantics. Keep ADD, MOD, MUL, PAL8, target-format expansion,
+DMA, and unrelated renderer work deferred.
 
 ## Hardware rules
 

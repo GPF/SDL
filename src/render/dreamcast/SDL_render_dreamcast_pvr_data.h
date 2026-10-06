@@ -39,6 +39,7 @@ typedef struct DC_PVR_TextureData
     struct DC_PVR_TextureData *next_deferred;
     void *pixels;                 /* CPU staging backing store */
     pvr_ptr_t vram;               /* PVR VRAM backing store */
+    pvr_ptr_t sample_vram;         /* PVR sampling address (VQ codebook offset) */
     pvr_ptr_t vram_next;          /* Preservation destination for render targets */
     size_t allocation_size;
     SDL_PixelFormat sdl_format;

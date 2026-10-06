@@ -3,8 +3,8 @@
   Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
   Native Dreamcast PVR texture allocation and update paths. RGB565 render
-  targets use paired VRAM preservation; .dt loading, palettes, strided layouts,
-  and DMA upload remain deferred.
+  targets use paired VRAM preservation; palettes, strided layouts, and DMA
+  upload remain deferred.
 */
 
 #include "../../SDL_internal.h"
@@ -116,8 +116,190 @@ DC_PVR_AllocTextureVRAM(renderer, data->allocation_size);
     }
 
     texture->internal = data;
+    data->sample_vram = data->vram;
     texture->pitch = data->cpu_pitch;
     return true;
+}
+
+typedef struct DC_PVR_DtHeader
+{
+    char fourcc[4];
+    Uint32 chunk_size;
+    Uint8 version, header_size, codebook_size, colors_used;
+    Uint16 width_pixels, height_pixels;
+    Uint32 pvr_type, pad1, pad2, pad3;
+} DC_PVR_DtHeader;
+
+SDL_COMPILE_TIME_ASSERT(dc_pvr_dt_header_size, sizeof(DC_PVR_DtHeader) == 32);
+
+SDL_Texture *DC_PVR_LoadDreamcastTexture_IO(SDL_Renderer *renderer,
+                                           SDL_IOStream *src, bool closeio)
+{
+    DC_PVR_DtHeader header;
+    SDL_Texture *texture = NULL;
+    DC_PVR_TextureData *data = NULL;
+    Uint32 chunk_size, header_size, pvr_type, width, height, pixel_format;
+    Uint32 backing_w, backing_h;
+    size_t raw_size, expected_size, payload_size;
+    Uint8 *payload = NULL;
+    bool vq, mipmapped, twiddled;
+    bool success = false;
+
+    if (!renderer || !src) {
+        SDL_InvalidParamError(!renderer ? "renderer" : "src");
+        goto done;
+    }
+    if (SDL_ReadIO(src, &header, sizeof(header)) != sizeof(header)) {
+        SDL_SetError("Could not read Dreamcast .dt header");
+        goto done;
+    }
+    if (SDL_memcmp(header.fourcc, "DcTx", 4) != 0 || header.version != 0) {
+        SDL_SetError("Invalid or unsupported Dreamcast .dt header");
+        goto done;
+    }
+    chunk_size = SDL_Swap32LE(header.chunk_size);
+    pvr_type = SDL_Swap32LE(header.pvr_type);
+    width = SDL_Swap16LE(header.width_pixels);
+    height = SDL_Swap16LE(header.height_pixels);
+    header_size = ((Uint32)header.header_size + 1u) * 32u;
+    backing_w = 1u << (((pvr_type >> 3) & 7u) + 3u);
+    backing_h = 1u << ((pvr_type & 7u) + 3u);
+    pixel_format = (pvr_type >> 27) & 7u;
+    vq = (pvr_type & (1u << 30)) != 0;
+    mipmapped = (pvr_type & (1u << 31)) != 0;
+    twiddled = (pvr_type & (1u << 26)) == 0;
+
+    if (header_size < 32u || chunk_size <= header_size || (chunk_size & 31u)) {
+        SDL_SetError("Invalid Dreamcast .dt texture size");
+        goto done;
+    }
+    if (width < 8u || height < 8u || width > 1024u || height > 1024u ||
+        width != backing_w || height != backing_h) {
+        SDL_SetError("Invalid Dreamcast .dt texture dimensions");
+        goto done;
+    }
+    if ((pvr_type & ((1u << 25) | (1u << 11))) != 0) {
+        SDL_SetError("Strided and partial Dreamcast .dt textures are unsupported");
+        goto done;
+    }
+    if (pixel_format > 2u) {
+        SDL_SetError("Unsupported Dreamcast .dt pixel format %u", (unsigned int)pixel_format);
+        goto done;
+    }
+    if ((vq || mipmapped) && !twiddled) {
+        SDL_SetError("Dreamcast VQ and mipmapped .dt textures must be twiddled");
+        goto done;
+    }
+    if (mipmapped && width != height) {
+        SDL_SetError("Dreamcast mipmapped .dt textures must be square");
+        goto done;
+    }
+    raw_size = (size_t)width * height * 2u;
+    if (mipmapped) {
+        raw_size = raw_size * 4u / 3u + 6u;
+    }
+    if (vq) {
+        raw_size = (raw_size + 7u) / 8u + ((size_t)header.codebook_size + 1u) * 8u;
+    }
+    expected_size = (raw_size + 31u) & ~(size_t)31u;
+    payload_size = (size_t)chunk_size - header_size;
+    if (payload_size != expected_size) {
+        SDL_SetError("Dreamcast .dt payload size does not match its header");
+        goto done;
+    }
+    if (header_size > 32u && SDL_SeekIO(src, header_size, SDL_IO_SEEK_SET) < 0) {
+        SDL_SetError("Could not seek to Dreamcast .dt payload");
+        goto done;
+    }
+    payload = (Uint8 *)SDL_malloc(payload_size);
+    if (!payload) {
+        SDL_OutOfMemory();
+        goto done;
+    }
+    if (SDL_ReadIO(src, payload, payload_size) != payload_size) {
+        SDL_SetError("Could not read Dreamcast .dt payload");
+        goto done;
+    }
+
+    {
+        SDL_PixelFormat format = pixel_format == 0 ? SDL_PIXELFORMAT_ARGB1555 :
+                                 pixel_format == 1 ? SDL_PIXELFORMAT_RGB565 :
+                                                    SDL_PIXELFORMAT_ARGB4444;
+        texture = SDL_CreateTexture(renderer, format, SDL_TEXTUREACCESS_STATIC,
+                                    (int)width, (int)height);
+    }
+    if (!texture) {
+        goto done;
+    }
+    data = (DC_PVR_TextureData *)texture->internal;
+    if (!data || texture->access != SDL_TEXTUREACCESS_STATIC) {
+        SDL_SetError("Dreamcast .dt texture has invalid PVR state");
+        goto done;
+    }
+
+    /* Replace the ordinary linear backing with the validated native payload. */
+    if (data->vram) {
+        pvr_mem_free(data->vram);
+        data->vram = NULL;
+    }
+    free(data->pixels);
+    data->pixels = NULL;
+    data->vram = pvr_mem_malloc(payload_size);
+    if (!data->vram) {
+        SDL_SetError("Could not allocate Dreamcast .dt texture VRAM");
+        goto done;
+    }
+    data->sample_vram = data->vram;
+    if (vq) {
+        data->sample_vram = (pvr_ptr_t)((Uint8 *)data->vram - 2048u +
+                                        ((size_t)header.codebook_size + 1u) * 8u);
+    }
+    data->allocation_size = payload_size;
+    data->pvr_format = (int)(pvr_type & 0xfc000000u);
+    data->backing_w = (int)backing_w;
+    data->backing_h = (int)backing_h;
+    data->cpu_pitch = 0;
+    data->uploaded = true;
+    pvr_txr_load(payload, data->vram, payload_size);
+    texture->pitch = 0;
+    success = true;
+
+done:
+    if (closeio && src) {
+        SDL_CloseIO(src);
+    }
+    SDL_free(payload);
+    if (!success) {
+        if (texture) {
+            SDL_DestroyTexture(texture);
+        }
+        return NULL;
+    }
+    return texture;
+}
+
+SDL_Texture *SDL_LoadDreamcastTexture_IO(SDL_Renderer *renderer,
+                                        SDL_IOStream *src, bool closeio)
+{
+    if (renderer && renderer->name &&
+        SDL_strcmp(renderer->name, DC_PVR_RENDERER_NAME) == 0) {
+        return DC_PVR_LoadDreamcastTexture_IO(renderer, src, closeio);
+    }
+#if defined(SDL_VIDEO_RENDER_OGL)
+    return SDL_GL_LoadDreamcastTexture_IO(renderer, src, closeio);
+#else
+    if (!renderer) {
+        SDL_InvalidParamError("renderer");
+    } else if (!src) {
+        SDL_InvalidParamError("src");
+    } else {
+        SDL_SetError("Dreamcast .dt textures require the native PVR renderer");
+    }
+    if (closeio && src) {
+        SDL_CloseIO(src);
+    }
+    return NULL;
+#endif
 }
 
 bool DC_PVR_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,

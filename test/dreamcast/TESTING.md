@@ -157,7 +157,8 @@ the other two showed the final scene immediately. This reproduces the capture
 timing issue and demonstrates that target contents render correctly after real
 exhaustion/reallocation. P1-C passes with this fixed capture procedure; retain
 the earlier stale-page result as a presentation/capture timing observation.
-Target support remains guarded pending separate promotion review.
+At the time of this prototype test record, target support remained guarded;
+the later promotion and post-promotion smoke are recorded below.
 
 KOS completion semantics were checked in its PVR implementation: normal
 `pvr_list_finish()` and `pvr_scene_finish()` return success after submission;
@@ -459,13 +460,44 @@ converted formats, `.dt` target integration, DMA/partial/strided target work,
 list-routing optimization, and FSAA remain deferred. The renderer does not
 advertise those target formats.
 
+## Native PVR sampled `.dt` textures
+
+`SDL_LoadDreamcastTexture_IO` routes `.dt` files to the native PVR renderer when
+the selected renderer is `Dreamcast PVR`; the existing GLdc upload path remains
+in place for OpenGL. PVR builds also provide the public loader when OpenGL is
+disabled. The PVR loader creates immutable static sampled textures
+and validates the version-zero `DcTx` header, power-of-two dimensions, format,
+flags, and exact 32-byte-aligned payload length before allocating VRAM.
+
+Accepted PVR payload layouts are direct ARGB1555, RGB565, and ARGB4444; VQ
+payloads (including reduced codebooks); and square twiddled mip chains. VQ or
+mipmapped payloads must be twiddled. Strided and partial layouts, PAL8,
+bump-map, YUV, and target textures are unsupported. SDL-created target formats
+remain restricted to RGB565, independent of `.dt` sampled-texture formats.
+
+Build the focused fixture against the writable local SDL3 install after
+`./dreamcast.sh --prefix "$PWD/local-install"` and `./dreamcast.sh install`:
+
+```sh
+cd test/dreamcast/pvr_dt_texture
+make -f Makefile.dc SCREENSHOT=1
+```
+
+The fixture asserts the native renderer, loads and samples the 256×256
+full-codebook RGB565 VQ fixture from the existing ROM disk, rejects a malformed
+chunk, and captures `/pc/pvr_dt_texture.ppm`. Launch only through the locked
+console wrapper. The 2026-10-06 physical VGA gate passed; the log and capture
+are retained in `results/pvr-dt-texture.md` and `results/pvr_dt_texture.ppm`.
+That gate covers the full-codebook RGB565 VQ case only. Direct formats, reduced
+codebooks, and mipmapped payloads are accepted by the parser but still need
+separate SDL3 hardware coverage. The GLdc route was not changed semantically.
+
 ## What Phase 0 does not cover
 
 These are not tested because they are not implemented, and a pass on an
 emulator for any of them is not coverage of this backend:
 
 - target formats other than RGB565 and the deferred target work listed above;
-- `.dt` texture loading;
 - PAL8/palette textures;
 - strided textures and partial upload;
 - DMA upload;
