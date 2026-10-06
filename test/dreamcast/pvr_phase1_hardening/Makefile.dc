@@ -1,0 +1,170 @@
+TARGET = pvr_phase1_hardening
+OBJS = $(TARGET).o
+SDL3_PREFIX ?= $(KOS_BASE)/addons
+SDL3_INCLUDEDIR ?= $(SDL3_PREFIX)/include
+SDL3_CONFIG_INCLUDEDIR ?=
+SDL3_LIBDIR ?= $(SDL3_PREFIX)/lib/dreamcast
+SDL3_LIBRARY ?= $(SDL3_LIBDIR)/libSDL3.a
+
+all: $(TARGET).bin
+
+include $(KOS_BASE)/Makefile.rules
+
+CPPFLAGS += -I$(SDL3_INCLUDEDIR)
+ifneq ($(SDL3_CONFIG_INCLUDEDIR),)
+CPPFLAGS += -I$(SDL3_CONFIG_INCLUDEDIR)
+endif
+ifeq ($(SCREENSHOT),1)
+CPPFLAGS += -DPVR_PHASE0_HARDWARE_SCREENSHOT
+endif
+
+clean:
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin $(TARGET)_p1a.o $(TARGET)_p1a.elf $(TARGET)_p1a.bin $(TARGET)_p1b.o $(TARGET)_p1b.elf $(TARGET)_p1b.bin $(TARGET)_p1c.o $(TARGET)_p1c.elf $(TARGET)_p1c.bin $(TARGET)_p1c_control.o $(TARGET)_p1c_control.elf $(TARGET)_p1c_control.bin $(TARGET)_p1c_pressure_2.o $(TARGET)_p1c_pressure_2.elf $(TARGET)_p1c_pressure_2.bin $(TARGET)_p1c_pressure_3.o $(TARGET)_p1c_pressure_3.elf $(TARGET)_p1c_pressure_3.bin $(TARGET)_p1c_diag2_control.o $(TARGET)_p1c_diag2_control.elf $(TARGET)_p1c_diag2_control.bin $(TARGET)_p1c_diag2_pressure.o $(TARGET)_p1c_diag2_pressure.elf $(TARGET)_p1c_diag2_pressure.bin $(TARGET)_p1c_diag3_control.o $(TARGET)_p1c_diag3_control.elf $(TARGET)_p1c_diag3_control.bin $(TARGET)_p1c_diag3_pressure.o $(TARGET)_p1c_diag3_pressure.elf $(TARGET)_p1c_diag3_pressure.bin $(TARGET)_p1c_repeat_control.o $(TARGET)_p1c_repeat_control.elf $(TARGET)_p1c_repeat_control.bin $(TARGET)_p1c_repeat_pressure_1.o $(TARGET)_p1c_repeat_pressure_1.elf $(TARGET)_p1c_repeat_pressure_1.bin $(TARGET)_p1c_repeat_pressure_2.o $(TARGET)_p1c_repeat_pressure_2.elf $(TARGET)_p1c_repeat_pressure_2.bin $(TARGET)_p1c_repeat_pressure_3.o $(TARGET)_p1c_repeat_pressure_3.elf $(TARGET)_p1c_repeat_pressure_3.bin
+
+$(TARGET).elf: $(OBJS)
+	kos-cc -o $(TARGET).elf $(OBJS) $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin
+
+p1a: $(TARGET)_p1a.bin
+p1b: $(TARGET)_p1b.bin
+p1c: $(TARGET)_p1c.bin
+p1c_control: $(TARGET)_p1c_control.bin
+p1c_pressure_2: $(TARGET)_p1c_pressure_2.bin
+p1c_pressure_3: $(TARGET)_p1c_pressure_3.bin
+p1c_diag2_control: $(TARGET)_p1c_diag2_control.bin
+p1c_diag2_pressure: $(TARGET)_p1c_diag2_pressure.bin
+p1c_diag3_control: $(TARGET)_p1c_diag3_control.bin
+p1c_diag3_pressure: $(TARGET)_p1c_diag3_pressure.bin
+p1c_repeat_control: $(TARGET)_p1c_repeat_control.bin
+p1c_repeat_pressure_1: $(TARGET)_p1c_repeat_pressure_1.bin
+p1c_repeat_pressure_2: $(TARGET)_p1c_repeat_pressure_2.bin
+p1c_repeat_pressure_3: $(TARGET)_p1c_repeat_pressure_3.bin
+
+$(TARGET)_p1a.o: $(TARGET).c
+	kos-cc $(CFLAGS) $(CPPFLAGS) -DPVR_PHASE1_P1A_ONLY -c $< -o $@
+
+$(TARGET)_p1b.o: $(TARGET).c
+	kos-cc $(CFLAGS) $(CPPFLAGS) -DPVR_PHASE1_P1B_ONLY -c $< -o $@
+
+$(TARGET)_p1c_control.o: $(TARGET).c
+	kos-cc $(CFLAGS) $(CPPFLAGS) -DPVR_PHASE1_P1C_CONTROL_ONLY -DP1C_RUN_CONTROL -c $< -o $@
+
+$(TARGET)_p1c.o: $(TARGET).c
+	kos-cc $(CFLAGS) $(CPPFLAGS) -DPVR_PHASE1_P1C_ONLY -DP1C_RUN_PRESSURE_1 -c $< -o $@
+
+$(TARGET)_p1c_pressure_2.o: $(TARGET).c
+	kos-cc $(CFLAGS) $(CPPFLAGS) -DPVR_PHASE1_P1C_ONLY -DP1C_RUN_PRESSURE_2 -c $< -o $@
+
+$(TARGET)_p1c_pressure_3.o: $(TARGET).c
+	kos-cc $(CFLAGS) $(CPPFLAGS) -DPVR_PHASE1_P1C_ONLY -DP1C_RUN_PRESSURE_3 -c $< -o $@
+
+$(TARGET)_p1c_diag2_control.o: $(TARGET).c
+	kos-cc $(CFLAGS) $(CPPFLAGS) -DPVR_PHASE1_P1C_CONTROL_ONLY -DP1C_RUN_DIAG2_CONTROL -c $< -o $@
+
+$(TARGET)_p1c_diag2_pressure.o: $(TARGET).c
+	kos-cc $(CFLAGS) $(CPPFLAGS) -DPVR_PHASE1_P1C_ONLY -DP1C_RUN_DIAG2_PRESSURE -c $< -o $@
+
+$(TARGET)_p1c_diag3_control.o: $(TARGET).c
+	kos-cc $(CFLAGS) $(CPPFLAGS) -DPVR_PHASE1_P1C_CONTROL_ONLY -DP1C_RUN_DIAG3_CONTROL -DP1C_CAPTURE_FINAL_VBLANKS -c $< -o $@
+
+$(TARGET)_p1c_diag3_pressure.o: $(TARGET).c
+	kos-cc $(CFLAGS) $(CPPFLAGS) -DPVR_PHASE1_P1C_ONLY -DP1C_RUN_DIAG3_PRESSURE -DP1C_CAPTURE_FINAL_VBLANKS -c $< -o $@
+
+$(TARGET)_p1c_repeat_control.o: $(TARGET).c
+	kos-cc $(CFLAGS) $(CPPFLAGS) -DPVR_PHASE1_P1C_CONTROL_ONLY -DP1C_RUN_REPEAT_CONTROL -DP1C_CAPTURE_FINAL_VBLANKS -c $< -o $@
+
+$(TARGET)_p1c_repeat_pressure_1.o: $(TARGET).c
+	kos-cc $(CFLAGS) $(CPPFLAGS) -DPVR_PHASE1_P1C_ONLY -DP1C_RUN_REPEAT_PRESSURE_1 -DP1C_CAPTURE_FINAL_VBLANKS -c $< -o $@
+
+$(TARGET)_p1c_repeat_pressure_2.o: $(TARGET).c
+	kos-cc $(CFLAGS) $(CPPFLAGS) -DPVR_PHASE1_P1C_ONLY -DP1C_RUN_REPEAT_PRESSURE_2 -DP1C_CAPTURE_FINAL_VBLANKS -c $< -o $@
+
+$(TARGET)_p1c_repeat_pressure_3.o: $(TARGET).c
+	kos-cc $(CFLAGS) $(CPPFLAGS) -DPVR_PHASE1_P1C_ONLY -DP1C_RUN_REPEAT_PRESSURE_3 -DP1C_CAPTURE_FINAL_VBLANKS -c $< -o $@
+
+$(TARGET)_p1a.elf: $(TARGET)_p1a.o
+	kos-cc -o $@ $< $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET)_p1b.elf: $(TARGET)_p1b.o
+	kos-cc -o $@ $< $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET)_p1c.elf: $(TARGET)_p1c.o
+	kos-cc -o $@ $< $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET)_p1c_control.elf: $(TARGET)_p1c_control.o
+	kos-cc -o $@ $< $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET)_p1c_pressure_2.elf: $(TARGET)_p1c_pressure_2.o
+	kos-cc -o $@ $< $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET)_p1c_pressure_3.elf: $(TARGET)_p1c_pressure_3.o
+	kos-cc -o $@ $< $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET)_p1c_diag2_control.elf: $(TARGET)_p1c_diag2_control.o
+	kos-cc -o $@ $< $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET)_p1c_diag2_pressure.elf: $(TARGET)_p1c_diag2_pressure.o
+	kos-cc -o $@ $< $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET)_p1c_diag3_control.elf: $(TARGET)_p1c_diag3_control.o
+	kos-cc -o $@ $< $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET)_p1c_diag3_pressure.elf: $(TARGET)_p1c_diag3_pressure.o
+	kos-cc -o $@ $< $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET)_p1c_repeat_control.elf: $(TARGET)_p1c_repeat_control.o
+	kos-cc -o $@ $< $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET)_p1c_repeat_pressure_1.elf: $(TARGET)_p1c_repeat_pressure_1.o
+	kos-cc -o $@ $< $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET)_p1c_repeat_pressure_2.elf: $(TARGET)_p1c_repeat_pressure_2.o
+	kos-cc -o $@ $< $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET)_p1c_repeat_pressure_3.elf: $(TARGET)_p1c_repeat_pressure_3.o
+	kos-cc -o $@ $< $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET)_p1a.bin: $(TARGET)_p1a.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+$(TARGET)_p1b.bin: $(TARGET)_p1b.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+$(TARGET)_p1c.bin: $(TARGET)_p1c.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+$(TARGET)_p1c_control.bin: $(TARGET)_p1c_control.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+
+$(TARGET)_p1c_pressure_2.bin: $(TARGET)_p1c_pressure_2.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+$(TARGET)_p1c_pressure_3.bin: $(TARGET)_p1c_pressure_3.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+$(TARGET)_p1c_diag2_control.bin: $(TARGET)_p1c_diag2_control.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+$(TARGET)_p1c_diag2_pressure.bin: $(TARGET)_p1c_diag2_pressure.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+$(TARGET)_p1c_diag3_control.bin: $(TARGET)_p1c_diag3_control.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+$(TARGET)_p1c_diag3_pressure.bin: $(TARGET)_p1c_diag3_pressure.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+$(TARGET)_p1c_repeat_control.bin: $(TARGET)_p1c_repeat_control.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+$(TARGET)_p1c_repeat_pressure_1.bin: $(TARGET)_p1c_repeat_pressure_1.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+$(TARGET)_p1c_repeat_pressure_2.bin: $(TARGET)_p1c_repeat_pressure_2.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+$(TARGET)_p1c_repeat_pressure_3.bin: $(TARGET)_p1c_repeat_pressure_3.elf
+	$(KOS_OBJCOPY) -O binary $< $@

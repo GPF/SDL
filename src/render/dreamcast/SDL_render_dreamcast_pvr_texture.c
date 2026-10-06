@@ -2,9 +2,9 @@
   Simple DirectMedia Layer
   Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
 
-  Native Dreamcast PVR renderer, Phase 0: static/streaming 16-bit textures.
-  Render targets, .dt loading, palettes, strided layouts and DMA upload are
-  later phases.
+  Native Dreamcast PVR texture allocation and update paths. RGB565 render
+  targets use paired VRAM preservation; .dt loading, palettes, strided layouts,
+  and DMA upload remain deferred.
 */
 
 #include "../../SDL_internal.h"
@@ -16,6 +16,25 @@
 #include <errno.h>
 #include <dc/pvr/pvr_txr.h>
 
+#if SDL_VIDEO_RENDER_DREAMCAST_PVR
+static pvr_ptr_t DC_PVR_AllocTextureVRAM(SDL_Renderer *renderer, size_t size)
+{
+#ifdef SDL_VIDEO_RENDER_DREAMCAST_PVR_TESTS
+    SDL_PropertiesID props = SDL_GetRendererProperties(renderer);
+    Sint64 count = SDL_GetNumberProperty(props, DC_PVR_TEST_VRAM_ALLOCATION_COUNT, 0) + 1;
+    Sint64 fail_at = SDL_GetNumberProperty(props, DC_PVR_TEST_FAIL_VRAM_ALLOCATION, 0);
+    SDL_SetNumberProperty(props, DC_PVR_TEST_VRAM_ALLOCATION_COUNT, count);
+    if (fail_at > 0 && count == fail_at) {
+        SDL_ClearProperty(props, DC_PVR_TEST_FAIL_VRAM_ALLOCATION);
+        return NULL;
+    }
+#else
+    (void)renderer;
+#endif
+    return pvr_mem_malloc(size);
+}
+#endif
+
 bool DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
                           SDL_PropertiesID create_props)
 {
@@ -25,17 +44,10 @@ bool DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
     (void)create_props;
 
     if (texture->access == SDL_TEXTUREACCESS_TARGET) {
-#if SDL_VIDEO_RENDER_DREAMCAST_PVR_TARGETS
-        if (!renderer->SetRenderTarget) {
-            return SDL_SetError("Dreamcast PVR render targets are not enabled");
-        }
         if (texture->format != SDL_PIXELFORMAT_RGB565) {
             return SDL_SetError("Dreamcast PVR target textures require RGB565 format");
         }
         pvr_format = PVR_TXRFMT_RGB565;
-#else
-        return SDL_SetError("Dreamcast PVR render targets are not enabled");
-#endif
     } else {
         if (texture->access != SDL_TEXTUREACCESS_STATIC &&
             texture->access != SDL_TEXTUREACCESS_STREAMING) {
@@ -75,7 +87,8 @@ bool DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
     data->uploaded = false;
 
     if (texture->access == SDL_TEXTUREACCESS_TARGET) {
-        data->vram_next = pvr_mem_malloc(data->allocation_size);
+        data->vram_next =
+DC_PVR_AllocTextureVRAM(renderer, data->allocation_size);
         if (!data->vram_next) {
             SDL_free(data);
             return SDL_SetError("Could not allocate Dreamcast PVR target preservation VRAM");
@@ -91,7 +104,8 @@ bool DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
         SDL_memset(data->pixels, 0, data->allocation_size);
     }
 
-    data->vram = pvr_mem_malloc(data->allocation_size);
+    data->vram =
+DC_PVR_AllocTextureVRAM(renderer, data->allocation_size);
     if (!data->vram) {
         if (data->vram_next) {
             pvr_mem_free(data->vram_next);

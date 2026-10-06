@@ -14,7 +14,7 @@ ENABLE_TEST_LIBRARY=OFF
 ENABLE_EXAMPLES=OFF
 ENABLE_OPENGL=ON
 ENABLE_GPU=OFF
-ENABLE_PVR_TARGETS=OFF
+ENABLE_PVR_TESTS=OFF
 ENABLE_CAMERA=OFF
 ENABLE_DIALOG=OFF
 ENABLE_TRAY=OFF
@@ -40,7 +40,7 @@ Feature options:
   --enable-examples | --disable-examples
   --enable-opengl | --disable-opengl
   --enable-gpu | --disable-gpu
-  --enable-pvr-targets | --disable-pvr-targets (experimental)
+  --enable-pvr-tests | --disable-pvr-tests (failure injection only)
   --enable-camera | --disable-camera
   --enable-dialog | --disable-dialog
   --enable-tray | --disable-tray
@@ -109,8 +109,8 @@ while [[ "$#" -gt 0 ]]; do
         --disable-opengl) ENABLE_OPENGL=OFF ;;
         --enable-gpu) ENABLE_GPU=ON ;;
         --disable-gpu) ENABLE_GPU=OFF ;;
-        --enable-pvr-targets) ENABLE_PVR_TARGETS=ON ;;
-        --disable-pvr-targets) ENABLE_PVR_TARGETS=OFF ;;
+        --enable-pvr-tests) ENABLE_PVR_TESTS=ON ;;
+        --disable-pvr-tests) ENABLE_PVR_TESTS=OFF ;;
         --enable-camera) ENABLE_CAMERA=ON ;;
         --disable-camera) ENABLE_CAMERA=OFF ;;
         --enable-dialog) ENABLE_DIALOG=ON ;;
@@ -172,6 +172,7 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 kos-cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
+    -U SDL_VIDEO_RENDER_DREAMCAST_PVR_TARGETS \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
     -DCMAKE_INSTALL_LIBDIR="$INSTALL_LIBDIR" \
     -DCMAKE_INSTALL_INCLUDEDIR="$INSTALL_INCLUDEDIR" \
@@ -181,7 +182,8 @@ kos-cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
     -DSDL_EXAMPLES:BOOL="$ENABLE_EXAMPLES" \
     -DSDL_OPENGL:BOOL="$ENABLE_OPENGL" \
     -DSDL_GPU:BOOL="$ENABLE_GPU" \
-    -DSDL_VIDEO_RENDER_DREAMCAST_PVR_TARGETS:BOOL="$ENABLE_PVR_TARGETS" \
+    -DSDL_VIDEO_RENDER_DREAMCAST_PVR:BOOL=ON \
+    -DSDL_VIDEO_RENDER_DREAMCAST_PVR_TESTS:BOOL="$ENABLE_PVR_TESTS" \
     -DSDL_CAMERA:BOOL="$ENABLE_CAMERA" \
     -DSDL_DIALOG:BOOL="$ENABLE_DIALOG" \
     -DSDL_TRAY:BOOL="$ENABLE_TRAY" \

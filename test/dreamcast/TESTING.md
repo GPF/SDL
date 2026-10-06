@@ -95,6 +95,79 @@ hold the captured frame for three seconds. For a captured frame, build with
 before the fixture exits. Without capture, the result is a log/API gate and does
 not pause for manual inspection.
 
+## Phase 1 hardening fixture
+
+Build `pvr_phase1_hardening` against a normal PVR library. Allocation-failure
+injection requires a separate library configured with
+`SDL_VIDEO_RENDER_DREAMCAST_PVR_TESTS=ON` (or `./dreamcast.sh --enable-pvr-tests`).
+Build with `SCREENSHOT=1` and
+`make -f Makefile.dc p1a p1b` for separate gate ELFs and captures. Launch
+`pvr_phase1_hardening_p1a.elf` and then
+`pvr_phase1_hardening_p1b.elf` through separate locked console runs. P1-A
+exercises 64 finite
+`A → B → screen → B → A → screen` cycles with persistent screen/A/B markers,
+distinct A/B viewport and clip settings left installed across switches, state
+assertions after each reselect, and repeated post-switch target sampling.
+P1-B injects failure at logical-screen allocation 1 and 2 and target allocation
+1 and 2; every failure is followed by a normal allocation, draw, and screen
+present.
+
+The fixture uses the same three rendered-frame capture warmup as the earlier
+Phase 1 gate because first-frame black captures are already documented for
+this PVR presentation path. The stress result itself is captured after its
+64-cycle pass.
+
+Expected P1-A markers include `switch_stress=PASS cycles=64`, `result=PASS`,
+and `Program returned 0`. P1-B prints the screen and target allocation steps,
+`allocation_fail_recovery=PASS`, `screen_after_failure=PASS`, and the same
+clean exit. Captures: `/pc/pvr_phase1_hardening_stress.ppm` and
+`/pc/pvr_phase1_hardening_recovery.ppm`.
+
+P1-C's canonical replacement scene is defined in
+`pvr_phase1_hardening.c`. It uses three 64x64 RGB565 targets: retained red,
+freed/reallocated magenta, and fresh yellow. Each target is cleared black and
+gets an 18x18 marker at (4,4). The logical-screen scene clears black, samples
+those textures in that order into 96x96 rectangles at (32,48), (168,48), and
+(304,48), then draws an untextured cyan 96x96 rectangle at (440,48). The target
+viewports are default and clipping is disabled. The only render presents are
+the three fixed white-square warmups and one final scene present. The canonical
+repeated fixture captures the physical framebuffer after each of the first
+three vblanks following that present. These are capture-only checkpoints and
+do not submit additional render presents. Control and pressure use identical
+scene setup and draw code.
+
+Build the no-exhaustion control and three uniquely labeled pressure ELFs with
+`make ... p1c_repeat_control p1c_repeat_pressure_1 p1c_repeat_pressure_2 p1c_repeat_pressure_3`. Each pressure run uses
+uniform RGB565 targets to reach actual allocator failure (320-success cap),
+keeps the same three marked targets, frees the rest, reallocates the freed
+count, marks the first reallocated target magenta, frees the remaining
+reallocated targets, and marks one fresh target yellow. The API sequence then
+draws the exact same final scene as the control. KOS's allocator warning at
+deliberate exhaustion is expected. Each ELF uses distinct capture and log
+names under `results/phase1-captures/`.
+
+The earlier single-capture pressure runs returned the preceding white-square
+warmup page. Pixel comparison showed those captures exactly match the
+pre-final framebuffer and lack all four final-scene markers. The canonical
+multi-vblank fixture captured the final scene at vblanks 2 and 3 in all four
+pressure runs (one diagnostic run plus three repeats); the three repeated
+pressure captures also match their control pixel-for-pixel at vblanks 2 and 3.
+One of the three repeated runs still showed the warmup page at vblank 1, while
+the other two showed the final scene immediately. This reproduces the capture
+timing issue and demonstrates that target contents render correctly after real
+exhaustion/reallocation. P1-C passes with this fixed capture procedure; retain
+the earlier stale-page result as a presentation/capture timing observation.
+Target support remains guarded pending separate promotion review.
+
+KOS completion semantics were checked in its PVR implementation: normal
+`pvr_list_finish()` and `pvr_scene_finish()` return success after submission;
+the list error is an invalid/unopened-list debug check. `pvr_wait_render_done()`
+can time out. The backend marks that path failed before the current/next swap,
+keeps the old allocation authoritative, and rejects subsequent rendering. That
+wait timeout is the meaningful observable completion failure; forcing hardware
+to wedge is not a useful deterministic fixture. Therefore Gate P1-D is a
+source-level invariant review, not a fabricated hardware failure injection.
+
 ## Gate 1 — opt-in driver selection and PVR lifecycle
 
 ```bash
@@ -360,50 +433,38 @@ expected and observed values, and the fixture that produced the first
 divergence. Do not re-run until the first divergence is understood — a second
 run on hardware can change what you see.
 
-## Experimental Phase 1 — RGB565 render target preservation
+## Promoted Phase 1 — RGB565 render target preservation
 
-This prototype is behind `SDL_VIDEO_RENDER_DREAMCAST_PVR_TARGETS`, default OFF.
-Enable it explicitly when configuring the Dreamcast build:
+RGB565 render targets are part of every normal Dreamcast PVR build. No target
+feature flag is needed. Configure and build normally, then build the focused
+fixture against that library. Test-only allocation and target-switch failure
+injection is disabled by default; use `./dreamcast.sh --enable-pvr-tests` only
+for dedicated recovery tests.
 
-```bash
-cd build-scripts
-./dreamcast.sh --enable-pvr-targets
-```
+The `test/dreamcast/pvr_phase1_targets` fixture asserts the `Dreamcast PVR`
+renderer and checks screen → target → screen preservation, A → B → A switching,
+completed-target sampling, 127×93 NPOT edges, SDL3 selected-target present
+rejection and continued use, plus failed-switch rollback. The promotion smoke
+used this fixture against the normal, injection-free library and passed on
+physical hardware. The hardening P1-A gate also passed with 64 switching cycles
+and viewport/clip restoration. P1-B passed paired allocation-failure recovery
+in the separate test build. All physical captures are visual evidence rather
+than renderer readback. See
+`results/phase1-captures/pvr_phase1_promotion_smoke.log` and
+`results/phase1-targets-prototype.md` for the results and captures.
 
-The target callback and RGB565 target allocations are available only in that
-build. This does not promote target support for normal builds. Build the
-`test/dreamcast/pvr_phase1_targets` fixture against the same experimental SDL3
-archive. From the fixture directory, source KOS's environment and link directly
-against the generated archive:
-
-```bash
-source /opt/toolchains/dc/kos/environ.sh
-make -B -f Makefile.dc SCREENSHOT=1 \
-  SDL3_INCLUDEDIR=../../../include \
-  SDL3_CONFIG_INCLUDEDIR=../../../build-scripts/dcbuild/include-config-relwithdebinfo \
-  SDL3_LIBDIR=../../../build-scripts/dcbuild \
-  SDL3_LIBRARY=../../../build-scripts/dcbuild/libSDL3.a
-```
-
-Then run it with the locked loader and `-m .` from the repository root.
-The fixture asserts `renderer=Dreamcast PVR` and checks screen → target → screen,
-A → B → A, completed-target sampling, 127×93 NPOT edges, SDL3's selected-target
-present rejection and continued target use, plus a rejected target switch that
-must restore SDL target/view/color-scale state.
-
-Observed on physical hardware: all fixture checks passed with exit code 0.
-Captured pages are in `results/phase1-captures/`; page 1's gray patch is RGB
-128, and page 3 shows red, green, blue, and white edge texels. These captures
-are visual evidence, not renderer readback. Repeated switch stress and VRAM
-allocation failure/recovery are still pending. Keep the build guard opt-in and
-do not advertise render-target capability until those tests pass.
+Only RGB565 target textures are supported. ARGB1555, ARGB4444, PAL8, other
+converted formats, `.dt` target integration, DMA/partial/strided target work,
+`RenderReadPixels`, address-mode emulation, unsupported blend modes,
+list-routing optimization, and FSAA remain deferred. The renderer does not
+advertise those target formats.
 
 ## What Phase 0 does not cover
 
 These are not tested because they are not implemented, and a pass on an
 emulator for any of them is not coverage of this backend:
 
-- general render-target support (only the guarded RGB565 prototype above exists);
+- target formats other than RGB565 and the deferred target work listed above;
 - `.dt` texture loading;
 - PAL8/palette textures;
 - strided textures and partial upload;

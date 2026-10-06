@@ -526,7 +526,7 @@ bool DC_PVR_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
     if (!DC_PVR_ValidateQueuedBlend(cmd)) {
         return false;
     }
-#if SDL_VIDEO_RENDER_DREAMCAST_PVR_TARGETS
+#if SDL_VIDEO_RENDER_DREAMCAST_PVR
     if (texture && texture == ((DC_PVR_RenderData *)renderer->internal)->current_target) {
         return SDL_SetError("Dreamcast PVR does not support sampling the active render target");
     }
@@ -636,7 +636,7 @@ bool DC_PVR_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
                 return SDL_SetError("Dreamcast PVR geometry has invalid texture dimensions");
             }
             SDL_memcpy(source_uv, (const Uint8 *)uv + uv_offset, sizeof(source_uv));
-#if SDL_VIDEO_RENDER_DREAMCAST_PVR_TARGETS
+#if SDL_VIDEO_RENDER_DREAMCAST_PVR
             if (texturedata->access == SDL_TEXTUREACCESS_TARGET) {
                 if (!texturedata->current_valid) {
                     return SDL_SetError("Dreamcast PVR render target has no completed contents");

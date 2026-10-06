@@ -10,8 +10,11 @@
 
 #include <dc/pvr.h>
 
-#if SDL_VIDEO_RENDER_DREAMCAST_PVR_TARGETS
+#ifdef SDL_VIDEO_RENDER_DREAMCAST_PVR_TESTS
 #define DC_PVR_TEST_FAIL_NEXT_TARGET_SWITCH "SDL.renderer.dreamcast.pvr.test_fail_next_target_switch"
+#define DC_PVR_TEST_FAIL_VRAM_ALLOCATION "SDL.renderer.dreamcast.pvr.test_fail_vram_allocation"
+#define DC_PVR_TEST_VRAM_ALLOCATION_COUNT "SDL.renderer.dreamcast.pvr.test_vram_allocation_count"
+#define DC_PVR_TEST_FAIL_SCREEN_ALLOCATION "SDL.renderer.dreamcast.pvr.test_fail_screen_allocation"
 #endif
 
 /* Renderer-owned compact vertex.
@@ -74,7 +77,7 @@ typedef struct DC_PVR_RenderData
     int render_w;
     int render_h;
 
-#if SDL_VIDEO_RENDER_DREAMCAST_PVR_TARGETS
+#if SDL_VIDEO_RENDER_DREAMCAST_PVR
     SDL_Texture *current_target;
     SDL_Texture *scene_target;
     DC_PVR_SceneKind scene_kind;

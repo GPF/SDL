@@ -43,6 +43,7 @@ int main(int argc, char **argv)
     SDL_Window *window = NULL;
     SDL_Renderer *renderer = NULL;
     SDL_Texture *a = NULL, *b = NULL, *npot = NULL, *rollback_target = NULL;
+    SDL_Texture *unsupported_target = NULL;
     SDL_PropertiesID target_props = 0;
     bool ok = false;
     (void)argc;
@@ -59,6 +60,14 @@ int main(int argc, char **argv)
         SDL_Log("pvr_targets renderer=FAIL %s", SDL_GetError());
         goto done;
     }
+    unsupported_target = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB1555,
+                                           SDL_TEXTUREACCESS_TARGET, 32, 32);
+    if (unsupported_target) {
+        SDL_Log("pvr_targets unsupported_target_format=FAIL accepted ARGB1555");
+        goto done;
+    }
+    SDL_ClearError();
+    SDL_Log("pvr_targets unsupported_target_format=PASS rejected ARGB1555");
     target_props = SDL_CreateProperties();
     if (!target_props ||
         !SDL_SetNumberProperty(target_props, SDL_PROP_TEXTURE_CREATE_FORMAT_NUMBER,
@@ -97,6 +106,7 @@ int main(int argc, char **argv)
     SDL_Log("pvr_targets warmup=PASS frames=3");
 
     /* Exercise SDL core rollback when the backend rejects a switch. */
+#ifdef PVR_PHASE1_TEST_INJECTION
     if (!SDL_SetBooleanProperty(SDL_GetRendererProperties(renderer),
                                 "SDL.renderer.dreamcast.pvr.test_fail_next_target_switch",
                                 true)) {
@@ -113,6 +123,9 @@ int main(int argc, char **argv)
     }
     SDL_ClearError();
     SDL_Log("pvr_targets failed_switch_rollback=PASS target=screen");
+#else
+    SDL_Log("pvr_targets failed_switch_rollback=SKIP injection disabled");
+#endif
 
     /* Screen S1 survives an excursion to A; S2 is drawn after returning. */
     if (!color(renderer, 0, 0, 0) || !SDL_RenderClear(renderer) ||
@@ -193,6 +206,7 @@ done:
     if (b) SDL_DestroyTexture(b);
     if (a) SDL_DestroyTexture(a);
     if (rollback_target) SDL_DestroyTexture(rollback_target);
+    if (unsupported_target) SDL_DestroyTexture(unsupported_target);
     if (target_props) SDL_DestroyProperties(target_props);
     if (renderer) SDL_DestroyRenderer(renderer);
     if (window) SDL_DestroyWindow(window);

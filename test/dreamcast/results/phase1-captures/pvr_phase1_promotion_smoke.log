@@ -1,0 +1,46 @@
+SDL3 Dreamcast PVR RGB565 promotion smoke
+Date: 2026-10-06
+Console: physical Dreamcast, 192.168.0.128
+Launch: tools/dc-load/kos-tool-locked.sh with shared mGBADC lock
+
+Normal build: SDL_VIDEO_RENDER_DREAMCAST_PVR=1
+Normal build: SDL_VIDEO_RENDER_DREAMCAST_PVR_TESTS undefined
+pvr_targets renderer=Dreamcast PVR
+pvr_targets unsupported_target_format=PASS rejected ARGB1555
+pvr_targets warmup=PASS frames=3
+pvr_targets failed_switch_rollback=SKIP injection disabled
+pvr_targets screen_target_screen=PASS
+pvr_targets target_a_b_a_sample=PASS
+pvr_targets npot_edges=PASS
+pvr_targets selected_target_present_rejected=PASS
+pvr_targets target_usable_after_rejection=PASS
+pvr_targets result=PASS (inspect pages 1-4)
+Program returned 0
+
+Normal build P1-A viewport/clip and switching fixture:
+pvr_hardening renderer=Dreamcast PVR
+pvr_hardening capture_warmup=PASS frames=3
+pvr_hardening switch_stress=PASS cycles=64 destinations=screen,A,B
+pvr_hardening result=PASS
+Program returned 0
+
+Separate SDL_VIDEO_RENDER_DREAMCAST_PVR_TESTS=1 allocation-failure build P1-B:
+pvr_hardening screen_allocation_fail=PASS step=1
+pvr_hardening screen_allocation_fail=PASS step=2
+pvr_hardening allocation_fail_recovery=PASS steps=1,2
+pvr_hardening screen_after_failure=PASS
+pvr_hardening result=PASS
+Program returned 0
+
+Framebuffer captures (PPM):
+- pvr_phase1_promotion_targets_page1.ppm: screen/target/screen preservation
+- pvr_phase1_promotion_targets_page2.ppm: completed A/B target sampling
+- pvr_phase1_promotion_targets_page3.ppm: 127x93 NPOT edge texels
+- pvr_phase1_promotion_targets_page4.ppm: target remains usable after present rejection
+- pvr_phase1_promotion_switch_stress.ppm: 64-cycle screen/A/B stress
+- pvr_phase1_promotion_allocation_recovery.ppm: post-failure recovery target
+
+Target pages were captured after the fixture's three-frame warmup. P1-A and
+P1-B used their established warmup/capture procedure. The first-vblank page
+timing observation remains separate; no extra production presents or delays
+were used.

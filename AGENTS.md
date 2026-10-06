@@ -19,16 +19,15 @@ Current Dreamcast surface:
 - `.dt` / pvrtex loading via `SDL_LoadDreamcastTexture_IO`.
 
 A native KallistiOS/PVR `SDL_Renderer` backend exists under
-`src/render/dreamcast/`. It is selected with `SDL_HINT_DC_VIDEO_MODE` and covers
-the Phase 0 geometry and texture paths; Gates 1–9 have passed on physical
-hardware. An experimental RGB565 target-preservation prototype is available
-only with `SDL_VIDEO_RENDER_DREAMCAST_PVR_TARGETS=ON`, which defaults OFF. Its
-initial hardware matrix passed, but stress and failure-recovery coverage remains
-before target support can be promoted. See `test/dreamcast/TESTING.md`,
-`test/dreamcast/results/phase0-baseline.md`, and
-`test/dreamcast/results/phase1-targets-prototype.md`. The SDL2 tree
-(`/home/gpf/code/dreamcast/SDL2`) is the historical algorithmic reference; SDL3
-core remains authoritative for SDL-facing behavior.
+`src/render/dreamcast/`. It is selected with `SDL_HINT_DC_VIDEO_MODE`; Phase 0
+Gates 1–9 and the RGB565 render-target preservation path have passed physical
+hardware validation. Normal PVR builds support RGB565 targets with paired-buffer
+preservation, switching, sampling, validated NPOT edges, and SDL3 rollback.
+Other target formats remain unsupported. Failure-injection hooks are excluded
+from normal builds and can be enabled with `SDL_VIDEO_RENDER_DREAMCAST_PVR_TESTS`
+for dedicated test builds. See `test/dreamcast/TESTING.md` and the Phase 1
+results. The SDL2 tree (`/home/gpf/code/dreamcast/SDL2`) is the historical
+algorithmic reference; SDL3 core remains authoritative for SDL-facing behavior.
 
 ## Build and test
 

@@ -1536,6 +1536,18 @@ SDL_Texture *SDL_CreateTextureWithProperties(SDL_Renderer *renderer, SDL_Propert
         format = renderer->texture_formats[0];
     }
 
+#ifdef SDL_VIDEO_RENDER_DREAMCAST_PVR
+    /* PVR render targets are native RGB565 allocations. SDL's normal closest-
+     * format wrapper would otherwise make an unsupported target appear usable
+     * while silently changing its representation. */
+    if (access == SDL_TEXTUREACCESS_TARGET && renderer->name &&
+        SDL_strcmp(renderer->name, DC_PVR_RENDERER_NAME) == 0 &&
+        format != SDL_PIXELFORMAT_RGB565) {
+        SDL_SetError("Dreamcast PVR render targets require RGB565 format");
+        return NULL;
+    }
+#endif
+
     CHECK_PARAM(SDL_BYTESPERPIXEL(format) == 0) {
         SDL_SetError("Invalid texture format");
         return NULL;
