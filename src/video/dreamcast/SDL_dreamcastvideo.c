@@ -228,13 +228,30 @@ static bool DREAMCAST_VideoInit(SDL_VideoDevice *_this) {
         }
     }
 
+    /* The PVR renderer is opt-in: it is only selected when the application
+     * asks for the PVR video mode. Changing the default video mode would also
+     * change the display configuration for applications that request OpenGL by
+     * name, so the video-mode policy stays coordinated with GLdc separately. */
+    if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DREAMCAST_PVR_VIDEO") == 0 &&
+        SDL_GetHint(SDL_HINT_RENDER_DRIVER) == NULL) {
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "Dreamcast PVR");
+    }
+
     // Initialize default display mode
     SDL_zero(mode);
     mode.pixel_density = 1.0f;
     mode.refresh_rate = __sdl_dc_is_60hz ? 60.0f : 50.0f;
 
     // Set pixel format and default resolution based on video mode
-    if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DMA_VIDEO") == 0) {
+    if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DREAMCAST_PVR_VIDEO") == 0) {
+        SDL_Log("Initializing %s mode", video_mode_hint);
+        /* The PVR renderer owns the PVR and draws directly, so this mode must
+         * not take the textured-framebuffer path that calls pvr_init_defaults(). */
+        pixel_mode = PM_RGB565;
+        mode.format = SDL_PIXELFORMAT_RGB565;
+        default_w = 640;
+        default_h = 480;
+    } else if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DMA_VIDEO") == 0) {
         SDL_Log("SDL_DC_DMA_VIDEO selected — forcing double buffering");
         SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");
         pixel_mode = PM_RGB888; // For BGR888 BMP

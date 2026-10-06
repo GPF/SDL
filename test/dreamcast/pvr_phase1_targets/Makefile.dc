@@ -1,0 +1,29 @@
+TARGET = pvr_phase1_targets
+OBJS = $(TARGET).o
+SDL3_PREFIX ?= $(KOS_BASE)/addons
+SDL3_INCLUDEDIR ?= $(SDL3_PREFIX)/include
+SDL3_CONFIG_INCLUDEDIR ?=
+SDL3_LIBDIR ?= $(SDL3_PREFIX)/lib/dreamcast
+SDL3_LIBRARY ?= $(SDL3_LIBDIR)/libSDL3.a
+
+all: $(TARGET).bin
+
+include $(KOS_BASE)/Makefile.rules
+
+CPPFLAGS += -I$(SDL3_INCLUDEDIR) -I$(SDL3_CONFIG_INCLUDEDIR)
+
+ifeq ($(SCREENSHOT),1)
+CPPFLAGS += -DPVR_PHASE0_HARDWARE_SCREENSHOT
+endif
+
+clean:
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin
+
+$(TARGET).elf: $(OBJS)
+	kos-cc -o $(TARGET).elf $(OBJS) $(SDL3_LIBRARY) -lGL -lm -lpthread -lsh4zam
+
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin
+
+run: $(TARGET).bin
+	$(KOS_LOADER) $(TARGET).bin

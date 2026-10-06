@@ -382,6 +382,8 @@ dep_option(SDL_RENDER_GPU          "Enable the SDL_GPU render driver" ON "SDL_RE
 dep_option(SDL_VIVANTE             "Use Vivante EGL video driver" ON "${UNIX_SYS};SDL_CPU_ARM32" OFF)
 dep_option(SDL_VULKAN              "Enable Vulkan support" "${SDL_VULKAN_DEFAULT}" "SDL_VIDEO;ANDROID OR APPLE OR LINUX OR FREEBSD OR OPENBSD OR WINDOWS OR CYGWIN" OFF)
 dep_option(SDL_RENDER_VULKAN       "Enable the Vulkan render driver" ON "SDL_RENDER;SDL_VULKAN" OFF)
+dep_option(SDL_VIDEO_RENDER_DREAMCAST_PVR "Enable the native Dreamcast PVR render driver" ON "SDL_RENDER;PLATFORM_DREAMCAST" OFF)
+dep_option(SDL_VIDEO_RENDER_DREAMCAST_PVR_TARGETS "Enable experimental native Dreamcast PVR RGB565 render-target preservation" OFF "SDL_VIDEO_RENDER_DREAMCAST_PVR" OFF)
 dep_option(SDL_METAL               "Enable Metal support" ON "APPLE" OFF)
 set_option(SDL_OPENVR              "Use OpenVR video driver" OFF)
 dep_option(SDL_KMSDRM              "Use KMS DRM video driver" ${UNIX_SYS} "SDL_VIDEO" OFF)
@@ -3445,6 +3447,14 @@ elseif(PLATFORM_DREAMCAST)
     sdl_glob_sources("${SDL3_SOURCE_DIR}/src/video/dreamcast/*.c") 
     set(HAVE_SDL_VIDEO TRUE)
  
+    if(SDL_VIDEO_RENDER_DREAMCAST_PVR)
+      # src/render/dreamcast/*.c is picked up by the src/render/*/*.c glob.
+      set(SDL_VIDEO_RENDER_DREAMCAST_PVR 1)
+      if(SDL_VIDEO_RENDER_DREAMCAST_PVR_TARGETS)
+        set(SDL_VIDEO_RENDER_DREAMCAST_PVR_TARGETS 1)
+      endif()
+    endif()
+
     if(SDL_OPENGL)
       set(SDL_VIDEO_OPENGL 1)
       set(SDL_VIDEO_RENDER_OGL 1)

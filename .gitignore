@@ -171,3 +171,7 @@ test/torturethread
 docs/output
 SDL.tag
 doxygen_warn.txt
+
+# Dreamcast hardware test build products
+/test/dreamcast/**/*.elf
+/test/dreamcast/**/*.bin

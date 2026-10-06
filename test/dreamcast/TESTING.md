@@ -1,0 +1,416 @@
+# Testing the SDL3 Dreamcast PVR renderer
+
+This document describes reproducible procedures for the native Dreamcast PVR
+renderer. Durable hardware results live in [`results/`](results/); current state
+lives in the project status notes.
+
+**Hardware is the correctness authority.** A successful host compile is not a
+pass, and a flycast pass is not a hardware pass. Emulators hide alignment,
+cache, DMA, PVR/TA flag, and timing bugs that real hardware shows.
+
+## Hardware quick reference
+
+The dc-load-ip console is `192.168.0.128`:
+
+```bash
+ping -c 2 -W 2 192.168.0.128
+ps aux | grep -i 'kos-tool\|sh-elf-gdb' | grep -v grep
+```
+
+Before a launch, ensure no old loader or GDB process is using the session. All
+agents and scripts must use `tools/dc-load/kos-tool-locked.sh` with a task
+label; this serializes launches using the shared console lock. The wrapper
+records its owner and refuses concurrent launches. It removes the lock after the
+loader exits. If a session times out, do not clear the lock or kill `kos-tool`:
+exit the console program with Start+A+B+X+Y, wait for the loader to return, then
+clear a genuinely stale lock only with `--clear-stale` (which refuses while any
+`kos-tool` process exists).
+
+mGBADC uses its own lock path. If both projects may touch the same console,
+point this wrapper at the same lock so the two repositories serialize:
+
+```bash
+DC_CONSOLE_LOCK=/tmp/mgbadc-dreamcast-console.lock SDL_DC_LOCK_TASK=pvr-gate \
+  tools/dc-load/kos-tool-locked.sh -t 192.168.0.128 -x test/dreamcast/pvr_phase0_lifecycle/pvr_phase0_lifecycle.elf
+```
+
+**Restricted agent-shell limitation (observed in mGBADC, applies here too):** the
+default agent command shell may deny `AF_INET` socket creation with `EPERM`, so
+`kos-tool` reports `Failed to create UDP sockets` before it contacts the console.
+That is an execution-environment restriction, not a Dreamcast, route, or
+`kos-tool` regression. Run the same locked command in a network-enabled shell.
+
+## Build
+
+```bash
+cd build-scripts
+./dreamcast.sh              # configure + build
+./dreamcast.sh install      # install library and headers into the KOS addon tree
+```
+
+Then build a test target:
+
+```bash
+cd test/dreamcast/pvr_phase0_lifecycle
+make -f Makefile.dc
+```
+
+For physical framebuffer evidence on the visual gates, rebuild with optional
+capture enabled:
+
+```bash
+make -B -f Makefile.dc SCREENSHOT=1
+```
+
+After the last presented frame and a vblank wait, the fixture saves a raw PPM
+under `/pc/`. Launch it through `tools/dc-load/kos-tool-locked.sh` with `-m .`
+from the repository root to return the PPM to the host. The lifecycle gate
+captures its clear frame; the textured-quad gate captures its final nearest and
+linear frames separately. Screenshot capture is not part of the default build.
+
+The KOS environment must be sourced (`environ.sh`) so `kos-cc` and `KOS_BASE`
+resolve. `PLATFORM_DREAMCAST` comes from the KOS CMake platform module, so
+`SDL_VIDEO_RENDER_DREAMCAST_PVR` defaults ON for Dreamcast builds.
+After changing SDL library sources, run `./dreamcast.sh install` before rebuilding
+fixtures: each fixture links the SDL3 archive installed in the KOS addon tree.
+
+## Test ladder
+
+Use the same ladder as the rest of the Dreamcast work:
+
+1. host build + `git diff --check`;
+2. one hardware gate (`pvr_phase0_lifecycle`);
+3. small smoke slice (clear/solid geometry, textured quad, coordinates);
+4. boundary and rejection fixtures (`pvr_phase0_boundary`);
+5. pressure fixtures (list capacity, vertex buffer overflow) — not in Phase 0.
+
+Report each level separately. A test that passes only through the software
+renderer fallback is not PVR coverage: every gate asserts the renderer name and
+aborts if it is not `Dreamcast PVR`, so a PASS from a fixture is only valid as
+PVR coverage when its `renderer=` line says `Dreamcast PVR`.
+
+Fixtures exit automatically after presenting their final frame. Gates 8 and 9
+hold the captured frame for three seconds. For a captured frame, build with
+`SCREENSHOT=1` and launch with `-m .`; the screenshot is saved under `/pc/`
+before the fixture exits. Without capture, the result is a log/API gate and does
+not pause for manual inspection.
+
+## Gate 1 — opt-in driver selection and PVR lifecycle
+
+```bash
+SDL_DC_LOCK_TASK=pvr-gate tools/dc-load/kos-tool-locked.sh -t 192.168.0.128 \
+  -x test/dreamcast/pvr_phase0_lifecycle/pvr_phase0_lifecycle.elf
+```
+
+Expected log:
+
+```
+pvr_gate renderer=Dreamcast PVR
+pvr_gate vsync=PASS default=0 toggle=0,1,0
+pvr_gate vsync_interval_rejected=PASS value=2
+pvr_gate output=640x480
+pvr_gate format[0]=SDL_PIXELFORMAT_RGB565
+pvr_gate format[1]=SDL_PIXELFORMAT_ARGB1555
+pvr_gate format[2]=SDL_PIXELFORMAT_ARGB4444
+pvr_gate clear_present=PASS
+pvr_gate destroy_returned=PASS
+pvr_gate lifecycle=PASS
+Program returned 0
+```
+
+Pass criteria:
+
+- `renderer=Dreamcast PVR` with no driver name passed to `SDL_CreateRenderer`,
+  after the test selects `SDL_DC_DREAMCAST_PVR_VIDEO`. The PVR renderer is
+  opt-in: the default Dreamcast video mode is still OpenGL, so a fixture that
+  does not select the PVR mode is not exercising the PVR path.
+- `Program returned 0` in the same session. `destroy_returned=PASS` only records
+  that destruction returned; the lifecycle criterion is the clean exit code plus
+  the absence of a hang. A hang means scene/list lifetime is unbalanced or
+  `pvr_init()` was already owned by the video layer.
+- A clean crash prints `Program returned 1`. A hang has no software interrupt
+  path; use the controller chord briefly, then power-cycle.
+- The VSync markers verify SDL3's API state: intervals 0 and 1 are accepted and
+  interval 2 is rejected. Interval 0 disables SDL's simulated pacing; the video
+  layer still flips the display page at vblank.
+
+## Gate 2 — float color policy and solid geometry
+
+```bash
+SDL_DC_LOCK_TASK=pvr-smoke1 tools/dc-load/kos-tool-locked.sh -t 192.168.0.128 \
+  -x test/dreamcast/pvr_phase0_clear_triangle/pvr_phase0_clear_triangle.elf
+```
+
+Golden packed colors the backend must produce (`color_scale = 1.0`, nearest
+integer, clamped, never wrapped):
+
+| input | expected bytes |
+| --- | --- |
+| 0.25, 0.50, 0.75 | 64, 128, 191 |
+| 0.75, 0.50, 0.25 | 191, 128, 64 |
+| 0.50, 0.25, 0.75 | 128, 64, 191 |
+| 0.10, 0.20, 0.30 (clear) | 26, 51, 77 |
+
+The display quantizes to RGB565, so on-screen values are the 565 approximation
+of those bytes, not the bytes themselves. Compare the *pattern*, not exact
+channel values.
+
+Geometry: apex at pixel `(320,120)`, base corners `(160,360)` and `(480,360)`.
+
+Failure signatures:
+
+- banding or flat facets → shading/interpolation flag wrong;
+- triangle offset by a whole viewport → coordinate contract wrong;
+- colors one LSB low → nearest-integer policy became truncation.
+
+## Gate 3 — textured quad
+
+```bash
+SDL_DC_LOCK_TASK=pvr-smoke2 tools/dc-load/kos-tool-locked.sh -t 192.168.0.128 \
+  -x test/dreamcast/pvr_phase0_textured_quad/pvr_phase0_textured_quad.elf
+```
+
+Expected: 128x128 checkerboard quad at pixel `(256,176)`, red/blue alternating,
+nearest on even frames and bilinear on odd frames.
+
+Failure signatures:
+
+- black quad → texture never uploaded, or the VRAM pointer is wrong;
+- quad drawn in the flat draw color → texture env flag wrong;
+- checkerboard sheared → twiddling/format mismatch;
+- the printed `texture_format=` line is the core's conversion, not what the test
+  asked for. Check it before blaming the backend.
+
+## Gate 4 — coordinate transform
+
+```bash
+SDL_DC_LOCK_TASK=pvr-smoke3 tools/dc-load/kos-tool-locked.sh -t 192.168.0.128 \
+  -x test/dreamcast/pvr_phase0_coordinates/pvr_phase0_coordinates.elf
+```
+
+Logical presentation 320x240 on a 640x480 output, so `current_scale` is 2.0.
+
+| block | logical input | expected pixel |
+| --- | --- | --- |
+| red | (0, 0) | (0, 0) |
+| green | (310, 230) | (620, 460) |
+| blue | (160, 120) | (320, 240) |
+| yellow | viewport origin (100, 100) | (200, 200) |
+| cyan | viewport-relative (50, 50), inside clip | (300, 300) |
+| magenta | viewport-relative (95, 95), outside clip | not drawn |
+
+Failure signatures:
+
+- blocks at half distance → `current_scale` applied twice, or not applied;
+- yellow at `(100,100)` instead of `(200,200)` → pixel viewport origin not added
+  at emission;
+- magenta visible → clip rect treated as framebuffer-relative instead of
+  viewport-relative.
+
+## Gate 5 — rejection fixtures
+
+```bash
+SDL_DC_LOCK_TASK=pvr-boundary tools/dc-load/kos-tool-locked.sh -t 192.168.0.128 \
+  -x test/dreamcast/pvr_phase0_boundary/pvr_phase0_boundary.elf
+```
+
+Expected:
+
+```
+case target_texture=PASS
+case lock_static_texture=PASS
+case blend_mod_rejected=PASS
+case update_while_scene_open=PASS
+case update_after_present_allowed=PASS
+case non_triangle_geometry=PASS
+case non_finite_geometry=PASS
+pvr_boundary result=PASS cases=7
+```
+
+Case 3 verifies the PVR-specific SDL core gate rejects `MOD` from
+`SDL_SetRenderDrawBlendMode`. SDL3 keeps required built-in blend support for
+other renderer identities. The backend also retains a queue-time guard in case
+an unsupported mode reaches command emission through another path.
+
+Case 7 is the `-ffast-math` proof: the release build folds `isfinite()` to true,
+so the backend checks IEEE-754 exponent bits. A FAIL here means the guard was
+optimized away.
+
+## Gate 6 — texture copy, rotation, and flip
+
+```bash
+make -B -f Makefile.dc SCREENSHOT=1 -C test/dreamcast/pvr_phase0_copy_transform
+SDL_DC_LOCK_TASK=pvr-copy-transform tools/dc-load/kos-tool-locked.sh -m . \
+  -t 192.168.0.128 -x test/dreamcast/pvr_phase0_copy_transform/pvr_phase0_copy_transform.elf
+```
+
+The fixture draws a four-color texture as a plain copy, a 90-degree clockwise
+rotation, a horizontal flip, and a vertical flip. Expected corner colors
+(`TL/TR` on the first line, `BL/BR` on the second):
+
+```
+case      TL      TR      BL      BR
+copy      red     green   blue    yellow
+rotate90  blue    red     yellow  green
+flip_h    green   red     yellow  blue
+flip_v    blue    yellow  red     green
+```
+
+The fixture presents three frames before capture to avoid capturing the stale
+page on initial presentation. Confirm the renderer line and inspect
+`results/phase0-captures/pvr_phase0_copy_transform.ppm`; command success alone
+does not verify UV orientation.
+
+## Gate 7 — scale-1 points and line-method rejection
+
+```bash
+make -B -f Makefile.dc SCREENSHOT=1 -C test/dreamcast/pvr_phase0_point_line
+SDL_DC_LOCK_TASK=pvr-point-line tools/dc-load/kos-tool-locked.sh -m . \
+  -t 192.168.0.128 -x test/dreamcast/pvr_phase0_point_line/pvr_phase0_point_line.elf
+```
+
+The fixture sets `SDL_HINT_RENDER_LINE_METHOD=2` before renderer creation,
+verifies render scale is exactly `1.0,1.0` with logical presentation disabled,
+then draws colored points and submits a line. At scale 1.0 SDL3 sends the points
+to `QueueDrawPoints`; a scaled-presentation fallback would instead convert them
+to fill rectangles. Method 2 sends the line to `QueueDrawLines`, which must
+reject it at queue time.
+
+Expected log markers:
+
+```
+pvr_point_line renderer=Dreamcast PVR
+pvr_point_line line_method=2 scale=1.0,1.0 logical_presentation=disabled
+pvr_point_line points_scale1=PASS
+pvr_point_line line_method2_rejected=PASS (...)
+pvr_point_line result=PASS (visual point check and line rejection)
+Program returned 0
+```
+
+Inspect `results/phase0-captures/pvr_phase0_point_line.ppm` for the red, green,
+and blue dotted blocks. Gate 9 separately captures the default line-method path.
+
+## Gate 8 — deferred texture destruction
+
+```bash
+make -B -f Makefile.dc SCREENSHOT=1 -C test/dreamcast/pvr_phase0_deferred_texture
+SDL_DC_LOCK_TASK=pvr-deferred-texture tools/dc-load/kos-tool-locked.sh -m . \
+  -t 192.168.0.128 -x test/dreamcast/pvr_phase0_deferred_texture/pvr_phase0_deferred_texture.elf
+```
+
+The fixture uploads two checkers and presents three textured warmup frames. It
+then queues both draws, destroys the red/blue source texture before
+`SDL_RenderPresent`, and captures immediately after presentation. SDL3 core
+flushes the queued draw as part of `SDL_DestroyTexture`; the backend must keep
+the source VRAM alive until PVR render completion. The retained green/yellow
+texture is a visual control.
+
+Expected markers include:
+
+```
+pvr_deferred_texture renderer=Dreamcast PVR
+pvr_deferred_texture warmup=PASS frames=3
+pvr_deferred_texture destroyed_before_present=PASS
+pvr_deferred_texture present_after_destroy=PASS
+pvr_deferred_texture result=PASS (inspect retained textured draw)
+Program returned 0
+```
+
+Inspect `results/phase0-captures/pvr_phase0_deferred_texture.ppm` for both
+checkerboards. API markers alone do not prove the submitted texture remained
+visible. The fixture holds the frame for three seconds after capture.
+
+## Gate 9 — default line method
+
+```bash
+make -B -f Makefile.dc SCREENSHOT=1 -C test/dreamcast/pvr_phase0_default_lines
+SDL_DC_LOCK_TASK=pvr-default-lines tools/dc-load/kos-tool-locked.sh -m . \
+  -t 192.168.0.128 -x test/dreamcast/pvr_phase0_default_lines/pvr_phase0_default_lines.elf
+```
+
+The fixture requires `SDL_HINT_RENDER_LINE_METHOD` to be unset, selects no
+explicit renderer name, and asserts the result is `Dreamcast PVR`. It verifies
+scale `1.0,1.0` and disabled logical presentation, then draws forward and
+reversed horizontal/vertical lines, shallow and steep diagonals (including a
+reversed diagonal), an isolated zero-length line, and a connected translucent
+polyline. At this scale SDL3's default POINTS method expands horizontal and
+vertical segments to one-pixel rectangles and diagonals to Bresenham points;
+the connected joints should receive single coverage.
+
+Expected markers include:
+
+```
+pvr_default_lines line_method_hint=unset (SDL3 default POINTS)
+pvr_default_lines renderer=Dreamcast PVR
+pvr_default_lines view=PASS scale=1.0,1.0 logical_presentation=disabled
+pvr_default_lines cases=PASS horizontal vertical shallow steep reversed zero_length connected
+pvr_default_lines result=PASS (inspect rasterization)
+Program returned 0
+```
+
+Inspect `results/phase0-captures/pvr_phase0_default_lines.ppm` for colored
+single-pixel lines, the isolated white zero-length pixel, and the connected
+translucent zigzag without brighter shared joints. The fixture holds the frame
+for three seconds after capture.
+
+## Preserving a failure
+
+When a gate fails, keep: the exact log, the test binary, the frame number, the
+expected and observed values, and the fixture that produced the first
+divergence. Do not re-run until the first divergence is understood — a second
+run on hardware can change what you see.
+
+## Experimental Phase 1 — RGB565 render target preservation
+
+This prototype is behind `SDL_VIDEO_RENDER_DREAMCAST_PVR_TARGETS`, default OFF.
+Enable it explicitly when configuring the Dreamcast build:
+
+```bash
+cd build-scripts
+./dreamcast.sh --enable-pvr-targets
+```
+
+The target callback and RGB565 target allocations are available only in that
+build. This does not promote target support for normal builds. Build the
+`test/dreamcast/pvr_phase1_targets` fixture against the same experimental SDL3
+archive. From the fixture directory, source KOS's environment and link directly
+against the generated archive:
+
+```bash
+source /opt/toolchains/dc/kos/environ.sh
+make -B -f Makefile.dc SCREENSHOT=1 \
+  SDL3_INCLUDEDIR=../../../include \
+  SDL3_CONFIG_INCLUDEDIR=../../../build-scripts/dcbuild/include-config-relwithdebinfo \
+  SDL3_LIBDIR=../../../build-scripts/dcbuild \
+  SDL3_LIBRARY=../../../build-scripts/dcbuild/libSDL3.a
+```
+
+Then run it with the locked loader and `-m .` from the repository root.
+The fixture asserts `renderer=Dreamcast PVR` and checks screen → target → screen,
+A → B → A, completed-target sampling, 127×93 NPOT edges, SDL3's selected-target
+present rejection and continued target use, plus a rejected target switch that
+must restore SDL target/view/color-scale state.
+
+Observed on physical hardware: all fixture checks passed with exit code 0.
+Captured pages are in `results/phase1-captures/`; page 1's gray patch is RGB
+128, and page 3 shows red, green, blue, and white edge texels. These captures
+are visual evidence, not renderer readback. Repeated switch stress and VRAM
+allocation failure/recovery are still pending. Keep the build guard opt-in and
+do not advertise render-target capability until those tests pass.
+
+## What Phase 0 does not cover
+
+These are not tested because they are not implemented, and a pass on an
+emulator for any of them is not coverage of this backend:
+
+- general render-target support (only the guarded RGB565 prototype above exists);
+- `.dt` texture loading;
+- PAL8/palette textures;
+- strided textures and partial upload;
+- DMA upload;
+- `RenderReadPixels`;
+- HDR rendering and color spaces;
+- texture address modes (the PVR always wraps, so `CLAMP` is not honored);
+- `ADD`/`MOD`/`MUL` blend modes;
+- opaque and modifier list routing;
+- FSAA.

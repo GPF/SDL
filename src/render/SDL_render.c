@@ -29,6 +29,10 @@
 #include "../video/SDL_pixels_c.h"
 #include "../video/SDL_video_c.h"
 
+#ifdef SDL_VIDEO_RENDER_DREAMCAST_PVR
+#include "dreamcast/SDL_render_dreamcast_pvr.h"
+#endif
+
 #ifdef SDL_PLATFORM_ANDROID
 #include "../core/android/SDL_android.h"
 #include "../video/android/SDL_androidevents.h"
@@ -146,6 +150,13 @@ static const SDL_RenderDriver *render_drivers[] = {
 #endif
 #ifdef SDL_VIDEO_RENDER_GPU
     &GPU_RenderDriver,
+#endif
+#ifdef SDL_VIDEO_RENDER_DREAMCAST_PVR
+    /* Placed after the other hardware drivers so a window on a non-PVR video
+     * mode is not disturbed. The Dreamcast video layer sets
+     * SDL_HINT_RENDER_DRIVER for SDL_DC_DREAMCAST_PVR_VIDEO, which is how the
+     * PVR renderer is selected for that mode. */
+    &DC_PVR_RenderDriver,
 #endif
 #ifdef SDL_VIDEO_RENDER_SW
     &SW_RenderDriver,
@@ -1425,6 +1436,16 @@ static bool IsSupportedBlendMode(SDL_Renderer *renderer, SDL_BlendMode blendMode
     case SDL_BLENDMODE_ADD_PREMULTIPLIED:
     case SDL_BLENDMODE_MOD:
     case SDL_BLENDMODE_MUL:
+#ifdef SDL_VIDEO_RENDER_DREAMCAST_PVR
+        /* Phase 0 PVR supports only NONE and BLEND. Keep SDL's required-mode
+         * guarantee for every other renderer, but let this backend reject
+         * unsupported built-ins before a draw is queued. */
+        if (renderer->name &&
+            SDL_strcmp(renderer->name, DC_PVR_RENDERER_NAME) == 0 &&
+            renderer->SupportsBlendMode) {
+            return renderer->SupportsBlendMode(renderer, blendMode);
+        }
+#endif
         return true;
 
     default:
@@ -2820,10 +2841,14 @@ bool SDL_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
         return true;
     }
 
-    FlushRenderCommands(renderer); // time to send everything to the GPU!
+    if (!FlushRenderCommands(renderer)) {
+        return false;
+    }
 
     SDL_LockMutex(renderer->target_mutex);
 
+    SDL_Texture *previous_target = renderer->target;
+    SDL_RenderViewState *previous_view = renderer->view;
     renderer->target = texture;
     if (texture) {
         renderer->view = &texture->view;
@@ -2833,6 +2858,9 @@ bool SDL_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
     UpdateColorScale(renderer);
 
     if (!renderer->SetRenderTarget(renderer, texture)) {
+        renderer->target = previous_target;
+        renderer->view = previous_view;
+        UpdateColorScale(renderer);
         SDL_UnlockMutex(renderer->target_mutex);
         return false;
     }

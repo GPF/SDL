@@ -385,6 +385,7 @@ extern SDL_RenderDriver GLES2_RenderDriver;
 extern SDL_RenderDriver METAL_RenderDriver;
 extern SDL_RenderDriver NGAGE_RenderDriver;
 extern SDL_RenderDriver VULKAN_RenderDriver;
+extern SDL_RenderDriver DC_PVR_RenderDriver;
 extern SDL_RenderDriver PS2_RenderDriver;
 extern SDL_RenderDriver PSP_RenderDriver;
 extern SDL_RenderDriver SW_RenderDriver;

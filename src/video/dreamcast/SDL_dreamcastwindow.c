@@ -56,6 +56,8 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
         !video_mode_hint ||
         SDL_strcmp(video_mode_hint, "SDL_DC_DIRECT_VIDEO") == 0;
     bool opengl_video = DREAMCAST_IsOpenGLVideoMode(video_mode_hint);
+    bool pvr_video = video_mode_hint &&
+        SDL_strcmp(video_mode_hint, "SDL_DC_DREAMCAST_PVR_VIDEO") == 0;
 
     DCWIN_PROBE("CreateWindow enter window=0x%08lx internal=0x%08lx flags=0x%08lx size=%dx%d pending=%dx%d\n",
                 (unsigned long)window,
@@ -90,7 +92,7 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
         target_h = requested_h;
         SDL_Log("DREAMCAST_CreateWindow: Keeping logical resolution %dx%d for %s",
                 target_w, target_h, video_mode_hint);
-    } else if (direct_video) {
+    } else if (direct_video || pvr_video) {
         if (__sdl_dc_is_60hz) {
             if (requested_w == 320 && requested_h == 240) {
                 target_w = 320;
@@ -136,8 +138,8 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
     } else if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DMA_VIDEO") == 0) {
         disp_mode = __sdl_dc_is_60hz ? DM_640x480 : DM_640x480_PAL_IL;
         pixel_mode = PM_RGB888;
-    } else if (direct_video) {
-        pixel_mode = PM_RGB555;
+    } else if (direct_video || pvr_video) {
+        pixel_mode = pvr_video ? PM_RGB565 : PM_RGB555;
 
         if (__sdl_dc_is_60hz) {
             if (target_w == 320 && target_h == 240) {
@@ -252,6 +254,7 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
     mode.w = target_w;
     mode.h = target_h;
     mode.format =
+        (pvr_video) ? SDL_PIXELFORMAT_RGB565 :
         (DREAMCAST_IsTexturedVideoMode(video_mode_hint)) ? SDL_PIXELFORMAT_RGB565 :
         (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DMA_VIDEO") == 0) ? SDL_PIXELFORMAT_XRGB8888 :
         SDL_PIXELFORMAT_ARGB1555;
@@ -289,6 +292,8 @@ void DREAMCAST_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
         !video_mode_hint ||
         SDL_strcmp(video_mode_hint, "SDL_DC_DIRECT_VIDEO") == 0;
     bool opengl_video = DREAMCAST_IsOpenGLVideoMode(video_mode_hint);
+    bool pvr_video = video_mode_hint &&
+        SDL_strcmp(video_mode_hint, "SDL_DC_DREAMCAST_PVR_VIDEO") == 0;
 
     int requested_w = window->pending.w;
     int requested_h = window->pending.h;
@@ -306,7 +311,7 @@ void DREAMCAST_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
         // Keep logical size for textured video; hardware scaler handles upscale to 640x480
         target_w = requested_w;
         target_h = requested_h;
-    } else if (direct_video) {
+    } else if (direct_video || pvr_video) {
         if (__sdl_dc_is_60hz) {
             if (requested_w == 320 && requested_h == 240) {
                 target_w = 320;

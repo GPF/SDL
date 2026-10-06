@@ -1,0 +1,22 @@
+TARGET = pvr_phase0_boundary
+OBJS = $(TARGET).o
+
+all: $(TARGET).bin
+
+include $(KOS_BASE)/Makefile.rules
+
+ifeq ($(SCREENSHOT),1)
+KOS_CFLAGS += -DPVR_PHASE0_HARDWARE_SCREENSHOT
+endif
+
+clean:
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin
+
+$(TARGET).elf: $(OBJS)
+	kos-cc -o $(TARGET).elf $(OBJS) -lSDL3 -lGL -lm -lpthread -lsh4zam
+
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin
+
+run: $(TARGET).bin
+	$(KOS_LOADER) $(TARGET).bin
