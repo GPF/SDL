@@ -492,6 +492,27 @@ That gate covers the full-codebook RGB565 VQ case only. Direct formats, reduced
 codebooks, and mipmapped payloads are accepted by the parser but still need
 separate SDL3 hardware coverage. The GLdc route was not changed semantically.
 
+## Native PVR `NONE` and `BLEND` audit
+
+The native PVR renderer accepts `SDL_BLENDMODE_NONE` and
+`SDL_BLENDMODE_BLEND` for both draw commands and texture copies. The focused
+`pvr_blend_modes` fixture also checks that an unsupported `ADD` request fails
+without changing the previous mode. Its left capture panel draws directly to
+the screen; the right panel renders the same scene into an RGB565 target and
+samples that target back to the screen. Each panel has rows for untextured
+`NONE`, untextured `BLEND`, textured `NONE`, and textured `BLEND`; each row
+shows alpha modulation at 0, 128, and 255 over a blue destination. The white
+RGB565 source texture is color-modulated to (255, 128, 64).
+
+Build with `make -f Makefile.dc SCREENSHOT=1` in
+`test/dreamcast/pvr_blend_modes`, then launch the ELF through the shared locked
+console wrapper. The 2026-10-06 hardware capture confirmed `NONE` writes source
+RGB at all alpha values, while `BLEND` preserves blue at alpha 0, mixes source
+and blue at 128, and writes source RGB at 255. The screen and sampled-target
+panels matched for every tested draw and texture-copy row after RGB565
+quantizing. The strict fixture compile passed `-Wall -Wextra -Werror`; see
+`results/pvr-blend-modes.md` for the measured pixels and retained capture.
+
 ## What Phase 0 does not cover
 
 These are not tested because they are not implemented, and a pass on an

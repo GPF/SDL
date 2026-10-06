@@ -37,6 +37,12 @@ codebooks, and square mip chains by the established SDL2 PVR payload contract;
 those variants have not yet received this SDL3 hardware gate. Strided, partial,
 paletted, bump-map, and YUV `.dt` payloads remain rejected.
 
+The PVR blend audit passed on physical hardware (2026-10-06). `NONE` and
+`BLEND` setters accepted both draw and texture modes; alpha values 0, 128, and
+255 plus texture color modulation produced the expected RGB in screen and
+RGB565 target destinations. The PVR-specific SDL3 core gate rejected `ADD`
+without changing the prior mode. See `test/dreamcast/results/pvr-blend-modes.md`.
+
 ## Promoted capability
 
 - RGB565 render targets with paired-buffer preservation.
@@ -60,12 +66,12 @@ paletted, bump-map, and YUV `.dt` payloads remain rejected.
 
 ## Next bounded task
 
-Audit SDL3 blend-mode semantics against native PVR capability advertising.
-Keep the task to the currently advertised `SDL_BLENDMODE_NONE` and
-`SDL_BLENDMODE_BLEND` paths: add focused hardware coverage for alpha and color
-modulation, and correct advertising or implementation only if the PVR result
-differs from SDL3 semantics. Keep ADD, MOD, MUL, PAL8, target-format expansion,
-DMA, and unrelated renderer work deferred.
+Add physical hardware coverage for direct 16-bit `.dt` sampled textures in
+ARGB1555, RGB565, and ARGB4444. Generate the assets with the active KOS
+`pvrtex`, render and inspect each format, and keep the parser unchanged unless
+the hardware evidence exposes a concrete mismatch. Do not combine reduced-VQ
+or mipmapped `.dt` coverage, target integration, PAL8, DMA, or unrelated
+renderer work into that task.
 
 ## Hardware rules
 

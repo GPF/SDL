@@ -28,9 +28,12 @@ validates version-zero payload sizes, accepts 16-bit direct/VQ/mipmap layouts,
 and rejects strided, partial, and paletted payloads. Its first SDL3 hardware
 gate passed with a full-codebook RGB565 VQ texture; see
 `test/dreamcast/results/pvr-dt-texture.md`. Other target formats remain
-unsupported. Failure-injection hooks are excluded from normal builds and can be
-enabled with `SDL_VIDEO_RENDER_DREAMCAST_PVR_TESTS` for dedicated test builds.
-See `test/dreamcast/TESTING.md` and the Phase 1 results. The SDL2 tree
+unsupported. The native renderer accepts `SDL_BLENDMODE_NONE` and
+`SDL_BLENDMODE_BLEND`; screen and RGB565 target paths passed alpha and color
+modulation checks on hardware. Failure-injection hooks are excluded from normal
+builds and can be enabled with `SDL_VIDEO_RENDER_DREAMCAST_PVR_TESTS` for
+dedicated test builds. See `test/dreamcast/TESTING.md` and the Phase 1 results.
+The SDL2 tree
 (`/home/gpf/code/dreamcast/SDL2`) is the historical algorithmic reference; SDL3
 core remains authoritative for SDL-facing behavior.
 

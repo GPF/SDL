@@ -1,0 +1,24 @@
+TARGET = pvr_blend_modes
+OBJS = $(TARGET).o
+SDL3_PREFIX ?= ../../../build-scripts/local-install
+KOS_CFLAGS += -I$(SDL3_PREFIX)/include
+
+ifeq ($(SCREENSHOT),1)
+KOS_CFLAGS += -DPVR_PHASE0_HARDWARE_SCREENSHOT
+endif
+
+all: $(TARGET).bin
+
+include $(KOS_BASE)/Makefile.rules
+
+clean:
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin
+
+$(TARGET).elf: $(OBJS)
+	kos-cc -o $(TARGET).elf $(OBJS) $(SDL3_PREFIX)/lib/dreamcast/libSDL3.a -lGL -lm -lpthread -lsh4zam
+
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin
+
+run: $(TARGET).bin
+	$(KOS_LOADER) $(TARGET).bin
