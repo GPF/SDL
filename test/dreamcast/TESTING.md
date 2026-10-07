@@ -492,6 +492,33 @@ That gate covers the full-codebook RGB565 VQ case only. Direct formats, reduced
 codebooks, and mipmapped payloads are accepted by the parser but still need
 separate SDL3 hardware coverage. The GLdc route was not changed semantically.
 
+### Direct 16-bit `.dt` coverage
+
+`test/dreamcast/pvr_dt_direct/` covers direct ARGB1555, RGB565, and ARGB4444
+sampled payloads. Assets are regenerated with the active KOS `pvrtex`; the
+`.dt` parser is unchanged.
+
+Status on physical hardware (2026-10-06, VGA): **the gate passes.** All six
+panels (direct and sampled-target) match 6400/6400, 0 of 38400 pixels outside
+tolerance, `compare_capture.py` exit 0, against the reinstalled `local-install`
+(`results/phase1-captures/pvr_dt_direct_gate_reinstalled.log`). The loader
+rejects the malformed chunk. The earlier black target row and one-pixel skew had
+two causes: a wrong-page capture (`vid_screen_shot()` reads `vram_l`, not the PVR
+front page) and a stale library. Any earlier "pass" for this fixture was against
+the stale artifact and does not count.
+
+RGB565 direct textures must use `SDL_BLENDMODE_NONE`; ARGB1555 and ARGB4444 must
+use `SDL_BLENDMODE_BLEND`. Draws must be confirmed by inspecting captured pixels,
+not by draw-success logs.
+
+Findings and the full investigation are in
+[`results/pvr-dt-direct-16bit.md`](results/pvr-dt-direct-16bit.md).
+
+Two build rules matter for this fixture: `CPPFLAGS` must reach the compiler, and
+an empty `SDL3_CONFIG_INCLUDEDIR` swallows `-DPVR_PHASE0_HARDWARE_SCREENSHOT` as
+an `-I` argument. Delete the previous capture before a run so a stale file cannot
+be read as a fresh one.
+
 ## Native PVR `NONE` and `BLEND` audit
 
 The native PVR renderer accepts `SDL_BLENDMODE_NONE` and
@@ -528,3 +555,34 @@ emulator for any of them is not coverage of this backend:
 - `ADD`/`MOD`/`MUL` blend modes;
 - opaque and modifier list routing;
 - FSAA.
+
+
+## Capture helper and target-switch trace
+
+- `pvr_phase0_capture()` (`pvr_phase0_screenshot.h`) reads the PVR front page via
+  `pvr_get_front_buffer()` (RGB565 only). `vid_screen_shot()` reads `vram_l`,
+  which is not the displayed page when the PVR flips pages. `vid_waitvbl()` only
+  waits for the display (framebuffer) vblank, not PVR rendering.
+- Pixel verification belongs to the host: run `compare_capture.py <capture.ppm>`
+  (exit status nonzero on mismatch). Fixture `TARGET SUBMIT OK` lines mean only
+  that the SDL calls succeeded.
+- Optional trace: build the library with `-DDC_PVR_TRACE_TARGETS` into a
+  **separate** build dir and prefix (e.g. `build-scripts/dcbuild-trace`,
+  `local-install-trace`), never over `local-install`. It logs `PVRTRACE switch`
+  lines (target vram/vram_next/sample_vram/current_valid and screen buffers) at
+  each `SDL_SetRenderTarget`. No behavior change when the macro is off.
+
+## Re-baseline after the front-buffer capture fix (2026-10-06)
+
+Re-run against the reinstalled `local-install` with the front-buffer helper:
+
+- `pvr_phase1_targets` (promotion fixture): `result=PASS`; pages 1-4 are
+  pixel-identical to the stored captures (0 differing pixels), so its earlier
+  evidence stands (`pvr_phase1_targets_rerun*`).
+- Hardening P1-A, P1-C repeat control and repeat pressure 1: all PASS.
+  New control and pressure captures are pixel-identical at all three captures.
+  Versus the stored captures there is a constant 1-pixel horizontal offset of the
+  untextured cyan rectangle (new x=440..535, stored 441..536; 249 px), and
+  stored pressure vblank-1 was the stale warmup page. The new geometry is the
+  specified one; the stored captures came from the stale library. Stored
+  captures are kept; new ones are `rebaseline_*` under `results/phase1-captures/`.

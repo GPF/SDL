@@ -1,0 +1,54 @@
+Connecting to 192.168.0.128...
+dc-load-ip 3.0.1 using Broadband Adapter (HIT-0400)
+Console enabled
+Upload <test/dreamcast/pvr_dt_direct/pvr_dt_diag.elf>
+File format is ELF, start address is 0x8c010000
+Section .text, lma 0x8c010000, size 1042076
+Section .init, lma 0x8c110000, size 54
+Section .fini, lma 0x8c110038, size 42
+Section .rodata, lma 0x8c110080, size 776912
+Section .eh_frame, lma 0x8c1cdb50, size 460
+Section .ctors, lma 0x8c1cdd9c, size 12
+Section .dtors, lma 0x8c1cdda8, size 8
+Section .data, lma 0x8c1cddb0, size 13500
+Section .got, lma 0x8c1d126c, size 12
+Transferred 1833076 bytes at 5193115 bytes / sec
+Executing at 0x8c010000
+Sending execute command (0xac010000, console=1, cdfsredir=0)...argv(1, argv0="pvr_dt_diag.elf")...executing
+
+--
+KallistiOS v2.3.0 [dreamcast/pristine]
+  Git revision: cf190e23
+  Tue Sep 29 03:56:19 PM MST 2026
+  gpf@gpf-B550-Phantom-Gaming-4-ac:/opt/toolchains/dc/kos
+  sh-elf-gcc (GCC) 17.0.0 20260703 (experimental)
+maple: active drivers:
+    Dreameye (Camera): Camera
+    Sound Input Peripheral: Microphone
+    PuruPuru (Vibration) Pack: JumpPack
+    VMU Driver: Clock, LCD, MemoryCard
+    Mouse Driver: Mouse
+    Keyboard Driver: Keyboard
+    Controller Driver: Controller
+    Lightgun: LightGun
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+dc-load console support enabled
+maple: attached devices:
+  B0: Dreamcast Controller           (01000000: Controller)
+  B1: Visual Memory                  (0e000000: Clock, LCD, MemoryCard)
+
+Initializing SDL_DC_DREAMCAST_PVR_VIDEO mode
+SDL3 Dreamcast video initialized: 640x480 (default), texture hints: (null)x(null)
+[dcwin_probe] CreateWindow enter window=0x8c1f06a8 internal=0x00000000 flags=0x00000008 size=640x480 pending=0x0
+DREAMCAST_CreateWindow: Client requested window at 0,0 with size 640x480
+[dcwin_probe] CreateWindow using target=640x480 requested=640x480
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+[dcwin_probe] CreateWindow vid_set_mode final disp=4097 pixel=1
+[dcwin_probe] CreateWindow return true window=0x8c1f06a8 internal=0x8c1f0ae8 flags=0x00000608 size=640x480
+renderer=Dreamcast PVR
+PVRTRACE switch prev=0x0(vram=0x0 next=0x0 sample=0x0 valid=-1) -> new=0x8c1f14d0(vram=0xa4457180 next=0xa4455160 sample=0xa4457180 valid=0) screen(vram=0xa4255120 next=0xa4355140 valid=0)
+PVRTRACE switch prev=0x8c1f14d0(vram=0xa4455160 next=0xa4457180 sample=0xa4455160 valid=1) -> new=0x0(vram=0x0 next=0x0 sample=0x0 valid=-1) screen(vram=0xa4255120 next=0xa4355140 valid=0)
+vid_screen_shot: written to output file '/pc/pvr_dt_diag_marker_run.ppm'
+Saved hardware screenshot to /pc/pvr_dt_diag_marker_run.ppm
+DIAG pot panel at (16,16) 64x64; white marker at (300,300); rename capture per run
+Program returned 0
