@@ -790,16 +790,35 @@ the fps lines printed by the SDL test programs, was not wall-clock.
 ## PVR texture churn
 
 `pvr_texture_churn` repeats the gate 8 scene (two 64x64 ARGB1555 checker textures, the
-first destroyed before `SDL_RenderPresent`, after three warm-up presents) 40 times in
+first destroyed before `SDL_RenderPresent`, after three warm-up presents) 100 times in
 one process and checks each iteration's destroyed-texture quad and control quad against
-the expected checker after the frame is displayed. It prints `pvr_texture_churn
-result=PASS` or `FAIL` and returns 0 or 1. Build it like the other fixtures against the
-library under test (`make -f Makefile.dc SDL3_PREFIX=<prefix>
-SDL3_CONFIG_INCLUDEDIR=<prefix>/include`, with `KOS_CFLAGS`/`KOS_LDFLAGS` pointing at the
-same prefix) and run it through the locked launcher.
+the expected checker after the frame is displayed. It also checks reclamation: free VRAM
+(`pvr_mem_available()`) after the loop and a few empty presents must be back to its value
+before the loop (within 64 KiB), so a scheme that retires texture VRAM neither frees it
+early nor leaks it. It prints `pvr_texture_churn result=PASS` or `FAIL` and returns 0 or
+1. Build it like the other fixtures against the library under test (`make -f Makefile.dc
+SDL3_PREFIX=<prefix> SDL3_CONFIG_INCLUDEDIR=<prefix>/include`, with
+`KOS_CFLAGS`/`KOS_LDFLAGS` pointing at the same prefix) and run it through the locked
+launcher.
 
-Purpose: a lifetime race that depends on timing is exercised 40 times per run instead of
+Purpose: a lifetime race that depends on timing is exercised 100 times per run instead of
 once, and any scheme that frees or reuses texture VRAM must keep it at zero bad
 iterations. On the racy original (no `pvr_wait_ready()`) every iteration fails with the
-16 corner pixels; on the committed fix it passes. See
+16 corner pixels; on the committed sleeping fix it passes. See
 `results/pvr-scene-completion-design.md`.
+
+## PVR texture upload race
+
+`pvr_texture_update_race` covers the other lifetime hazard: a CPU upload into texture VRAM
+that a recent scene is still sampling. Each frame it draws a streaming texture 40 times
+into a render target (a render that lasts a while), switches back to the screen, and
+**immediately** uploads the next frame's colour, then draws the target to the screen with
+an 8-bit frame-number marker and samples the displayed page. The marker names the frame on
+screen and the quad must show that frame's colour; a wrong colour means the upload landed
+while the target scene was being rendered. It prints the frame time, `result=PASS` or
+`FAIL`, and returns 0 or 1.
+
+Uploads after `RenderPresent` returns are not the hazard: the presentation scene's TA
+entry already waits for the frame scene's render to complete (single vertex buffer).
+Validated on hardware: the racy original fails every frame (242 of 242, both runs), the
+committed sleeping fix passes.

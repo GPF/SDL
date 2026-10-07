@@ -8,12 +8,16 @@
  * and compare the destroyed texture's quad (and the control's) with the expected
  * checker. When a block is freed while the PVR has not started reading it, the
  * allocator's free-list pointers overwrite the first texels (the gate 8 corner).
+ *
+ * It also checks reclamation: free VRAM after the loop (and a few empty presents to
+ * advance the scene generation) must return to what it was before, so retired
+ * textures are neither freed early nor leaked.
  */
 #include <SDL3/SDL.h>
 #include <dc/pvr.h>
 #include <stdint.h>
 
-#define ITERATIONS 40
+#define ITERATIONS 100
 #define WARMUPS 3
 
 static const SDL_FRect dst = { 128.0f, 176.0f, 128.0f, 128.0f };
@@ -80,6 +84,7 @@ int main(int argc, char **argv)
     }
     const SDL_Rect full = { 0, 0, 64, 64 };
     int dead_bad_iterations = 0, control_bad_iterations = 0, total_bad = 0;
+    const size_t vram_before = pvr_mem_available();
 
     for (int it = 0; it < ITERATIONS; ++it) {
         SDL_Texture *tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB1555, SDL_TEXTUREACCESS_STATIC, 64, 64);
@@ -123,11 +128,24 @@ int main(int argc, char **argv)
         SDL_DestroyTexture(ctl);
     }
 
-    SDL_Log("pvr_texture_churn iterations=%d bad_iterations=%d (corner-only-or-more) control_bad_iterations=%d total_bad_px=%d",
-            ITERATIONS, dead_bad_iterations, control_bad_iterations, total_bad);
-    SDL_Log("pvr_texture_churn result=%s", (dead_bad_iterations || control_bad_iterations) ? "FAIL" : "PASS");
-    SDL_Delay(300);
-    SDL_DestroyRenderer(renderer);
-    SDL_Quit();
-    return (dead_bad_iterations || control_bad_iterations) ? 1 : 0;
+    for (int i = 0; i < 6; ++i) { /* advance the scene generation so retired VRAM is released */
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        SDL_RenderPresent(renderer);
+    }
+    {
+        const size_t vram_after = pvr_mem_available();
+        const long lost = (long)vram_before - (long)vram_after;
+        const int leaked = lost > 65536; /* allocator metadata and staging noise only */
+
+        SDL_Log("pvr_texture_churn vram_before=%lu vram_after=%lu lost=%ld %s", (unsigned long)vram_before,
+                (unsigned long)vram_after, lost, leaked ? "FAIL (leak)" : "PASS");
+        SDL_Log("pvr_texture_churn iterations=%d bad_iterations=%d (corner-only-or-more) control_bad_iterations=%d total_bad_px=%d",
+                ITERATIONS, dead_bad_iterations, control_bad_iterations, total_bad);
+        SDL_Log("pvr_texture_churn result=%s", (dead_bad_iterations || control_bad_iterations || leaked) ? "FAIL" : "PASS");
+        SDL_Delay(300);
+        SDL_DestroyRenderer(renderer);
+        SDL_Quit();
+        return (dead_bad_iterations || control_bad_iterations || leaked) ? 1 : 0;
+    }
 }
