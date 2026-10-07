@@ -55,10 +55,10 @@ static bool DC_PVR_EmitPreservationSeed(SDL_Renderer *renderer,
     pvr_poly_cxt_t context;
     pvr_poly_hdr_t header;
     pvr_vertex_t vertex;
-    const float u_max = logical_w <= 1 ? 0.0f :
-                        (float)(logical_w - 1) / (float)backing_w;
-    const float v_max = logical_h <= 1 ? 0.0f :
-                        (float)(logical_h - 1) / (float)backing_h;
+    /* The seed is a 1:1 copy, so the UVs must span the full texel edges
+     * (w, not w-1) or nearest sampling duplicates a column and a row. */
+    const float u_max = (float)logical_w / (float)backing_w;
+    const float v_max = (float)logical_h / (float)backing_h;
     const float x[4] = { 0.0f, (float)dest_w, 0.0f, (float)dest_w };
     const float y[4] = { 0.0f, 0.0f, (float)dest_h, (float)dest_h };
     const float u[4] = { 0.0f, u_max, 0.0f, u_max };
@@ -247,6 +247,7 @@ static bool DC_PVR_FinishActiveScene(SDL_Renderer *renderer)
         pvr_ptr_t temp = texturedata->vram;
         texturedata->vram = texturedata->vram_next;
         texturedata->vram_next = temp;
+        texturedata->sample_vram = texturedata->vram;
         texturedata->current_valid = true;
     } else if (data->scene_kind == DC_PVR_SCENE_LOGICAL_SCREEN) {
         pvr_ptr_t temp = data->screen_vram;
@@ -555,6 +556,21 @@ static bool DC_PVR_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
         return false;
     }
 
+#ifdef DC_PVR_TRACE_TARGETS
+    /* Diagnostic only: compile with -DDC_PVR_TRACE_TARGETS. No behavior change. */
+    {
+        SDL_Texture *prev = data->current_target;
+        DC_PVR_TextureData *pd = prev ? (DC_PVR_TextureData *)prev->internal : NULL;
+        DC_PVR_TextureData *nd = texture ? (DC_PVR_TextureData *)texture->internal : NULL;
+        SDL_Log("PVRTRACE switch prev=%p(vram=%p next=%p sample=%p valid=%d) -> new=%p(vram=%p next=%p sample=%p valid=%d) screen(vram=%p next=%p valid=%d)",
+                (void *)prev, pd ? (void *)pd->vram : NULL, pd ? (void *)pd->vram_next : NULL,
+                pd ? (void *)pd->sample_vram : NULL, pd ? pd->current_valid : -1,
+                (void *)texture, nd ? (void *)nd->vram : NULL, nd ? (void *)nd->vram_next : NULL,
+                nd ? (void *)nd->sample_vram : NULL, nd ? nd->current_valid : -1,
+                (void *)data->screen_vram, (void *)data->screen_vram_next,
+                data->screen_current_valid);
+    }
+#endif
     data->current_target = texture;
     data->render_w = texture ? texture->w : data->output_w;
     data->render_h = texture ? texture->h : data->output_h;
