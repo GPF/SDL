@@ -10,7 +10,7 @@ NAMES = [
     "DC_PVR_ClipPlaneContains", "DC_PVR_AppendClippedVertex", "DC_PVR_ClipAgainstPlane",
     "DC_PVR_ClipTriangle", "DC_PVR_FloatIsFinite", "DC_PVR_DoubleIsFinite",
     "DC_PVR_VertexIsFinite", "DC_PVR_TriangleInsideBounds", "DC_PVR_EmitClippedTriangle",
-    "DC_PVR_QuadIntersectsBounds", "DC_PVR_EmitClippedQuad", "DC_PVR_EmitRectQuad",
+    "DC_PVR_QuadIntersectsBounds", "DC_PVR_RectQuadFastPath", "DC_PVR_EmitClippedQuad",
 ]
 
 

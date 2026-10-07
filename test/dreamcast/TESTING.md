@@ -870,3 +870,31 @@ path. Hardware (`pvr_geometry_bench`), microseconds per primitive before / after
 75.7 / 53.2, 4x4 fill rect 37.9 / 15.4, point 37.3 / 14.5, line pixel 37.4 / 14.6,
 triangle 24.2 / 12.8; the `testsprite`-like frame 57.3 / 29.2 ms (OpenGL: 30.0). Captures
 of all geometry fixtures, `pvr_texture_churn` and `pvr_texture_update_race` are unchanged.
+
+Fast path for axis-aligned rectangles: points and fill rects always build an exactly
+axis-aligned rectangle with positive width and height. When it also lies entirely inside the
+bounds, `DC_PVR_EmitClippedQuad` emits the two triangles `[q0, q1, q2]` and `[q0, q2, q3]`
+directly, with no per-triangle finiteness, inside, anchor or area checks, because for such a
+rectangle the lowest vertex of both triangles is `q0` and both areas are width * height > 0.
+Anything else (touching or crossing a bound, rounded-away width, non-finite) takes the
+existing path. `pvr_geometry_equivalence` also compares the old and new quad emission over
+random rectangles (points, rounded-away widths, whole-bounds, NaN, huge values): 0 mismatches
+in 6,000,000 rectangles, and a deliberately broken second triangle is flagged on every
+fast-path input (153,376 of 1,000,000). Hardware, microseconds per primitive before / after
+this step: 4x4 fill rect 15.4 / 7.4, point 14.5 / 6.5, line pixel 14.6 / 6.6; sprites and
+triangles are unchanged (53 and 12.8); the `testsprite`-like frame 29.2 / 21.2 ms. All 31
+captures of the geometry fixtures and the hardening gates are identical to the previous
+step; gate 8, `pvr_texture_churn` and `pvr_texture_update_race` pass.
+
+Tried and dropped: staging rectangles as 4-vertex strips in an aligned array and sending
+them with one `pvr_prim()` per batch of 64 (the approach DCSinge uses). With the same two
+triangles in the strip, only the submission changes. A temporary probe around the emission
+call measured 6.5 / 5.9 us per rectangle, about 9%, for static state and a submitted vertex
+sequence that no longer matches the unbatched path, so it was not kept. The per-vertex
+`pvr_prim()` call is not the main remaining cost; the per-primitive setup in
+`RunGeometryCommand` is. Not tried: float instead of double for the area test (small gain,
+and it changes which near-degenerate triangles are dropped).
+
+What is left is mostly sprites, at 53 us each: the SDL core's per-call work plus
+`DC_PVR_QueueGeometry` (an earlier probe build measured about 25 us per call) rather than
+emission, which is where to look next.

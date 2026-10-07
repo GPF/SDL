@@ -754,10 +754,41 @@ static bool DC_PVR_QuadIntersectsBounds(const DC_PVR_Vertex quad[4],
             quad[2].x > (float)bounds->left && quad[2].y > (float)bounds->top);
 }
 
+/* True for an exactly axis-aligned rectangle with positive width and height, lying
+ * entirely inside the bounds, with finite coordinates. The only caller builds quads
+ * from finite x, y, width, height (and u = v = 0), so u and v need no check here.
+ * Such a quad splits into the two triangles [q0, q1, q2] and [q0, q2, q3]: the lowest
+ * vertex of each is q0 (q1 is to its right, q2 and q3 below), their areas are
+ * width * height > 0, and nothing needs clipping, so the generic per-triangle
+ * checks and the clipper would reproduce exactly this sequence. */
+static bool DC_PVR_RectQuadFastPath(const DC_PVR_Vertex quad[4],
+                                    const DC_PVR_GeometryBounds *bounds)
+{
+    const DC_PVR_Vertex *top_left = &quad[0];
+    const DC_PVR_Vertex *bottom_right = &quad[2];
+
+    return quad[1].x == bottom_right->x && quad[1].y == top_left->y &&
+           quad[3].x == top_left->x && quad[3].y == bottom_right->y &&
+           bottom_right->x > top_left->x && bottom_right->y > top_left->y &&
+           DC_PVR_FloatIsFinite(top_left->x) && DC_PVR_FloatIsFinite(top_left->y) &&
+           DC_PVR_FloatIsFinite(bottom_right->x) && DC_PVR_FloatIsFinite(bottom_right->y) &&
+           top_left->x >= (float)bounds->left && top_left->y >= (float)bounds->top &&
+           bottom_right->x < (float)bounds->right && bottom_right->y < (float)bounds->bottom;
+}
+
 static bool DC_PVR_EmitClippedQuad(const DC_PVR_Vertex quad[4],
                                    const DC_PVR_GeometryBounds *bounds)
 {
     DC_PVR_Vertex triangle[3];
+
+    if (DC_PVR_RectQuadFastPath(quad, bounds)) {
+        return DC_PVR_EmitVertex(&quad[0], PVR_CMD_VERTEX) &&
+               DC_PVR_EmitVertex(&quad[1], PVR_CMD_VERTEX) &&
+               DC_PVR_EmitVertex(&quad[2], PVR_CMD_VERTEX_EOL) &&
+               DC_PVR_EmitVertex(&quad[0], PVR_CMD_VERTEX) &&
+               DC_PVR_EmitVertex(&quad[2], PVR_CMD_VERTEX) &&
+               DC_PVR_EmitVertex(&quad[3], PVR_CMD_VERTEX_EOL);
+    }
 
     triangle[0] = quad[0];
     triangle[1] = quad[1];

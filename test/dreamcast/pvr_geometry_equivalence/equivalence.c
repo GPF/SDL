@@ -113,6 +113,53 @@ int main(int argc, char **argv)
             mismatches++;
         }
     }
+    /* Quads as RunGeometryCommand builds them: an axis-aligned rectangle from x, y,
+     * width, height with u = v = 0 and a per-primitive colour. */
+    long quad_mismatches = 0, quad_fast = 0, quad_with_output = 0;
+    for (long it = 0; it < iterations; ++it) {
+        DC_PVR_GeometryBounds b;
+        DC_PVR_Vertex q[4];
+        Emitted old_seq[64], new_seq[64];
+        int old_n, new_n;
+        float x, y, w, h;
+
+        inside_bias = (it & 1);
+        b.left = (int)(rnd() % 40);
+        b.top = (int)(rnd() % 40);
+        b.right = b.left + 1 + (int)(rnd() % 640);
+        b.bottom = b.top + 1 + (int)(rnd() % 480);
+        x = coord(b.left, b.right);
+        y = coord(b.top, b.bottom);
+        switch (rnd() % 8) {
+        case 0: w = 1.0f; h = 1.0f; break;                  /* a point */
+        case 1: w = 1.0e-10f; h = 1.0f + frnd(); break;     /* width lost to rounding */
+        case 2: w = 1.0f + frnd(); h = 1.0e-10f; break;
+        case 3: w = (float)(b.right - b.left); h = (float)(b.bottom - b.top); break; /* whole bounds */
+        case 4: w = 1.0e30f; h = 1.0f; break;
+        case 5: w = NAN; h = 1.0f; break;
+        default: w = 0.5f + (float)(rnd() % 64) * frnd(); h = 0.5f + (float)(rnd() % 64) * frnd(); break;
+        }
+        {
+            const Uint32 color = rnd() * 2654435761u;
+            for (int k = 0; k < 4; ++k) { q[k].u = 0.0f; q[k].v = 0.0f; q[k].color = color; }
+            q[0].x = x;     q[0].y = y;
+            q[1].x = x + w; q[1].y = y;
+            q[2].x = x + w; q[2].y = y + h;
+            q[3].x = x;     q[3].y = y + h;
+        }
+        seq_n = 0; (void)OLD_EmitClippedQuad(q, &b); old_n = seq_n; memcpy(old_seq, seq, sizeof(Emitted) * (size_t)old_n);
+        seq_n = 0; (void)NEW_EmitClippedQuad(q, &b); new_n = seq_n; memcpy(new_seq, seq, sizeof(Emitted) * (size_t)new_n);
+        if (old_n) quad_with_output++;
+        if (NEW_RectQuadFastPath(q, &b)) quad_fast++;
+        if (old_n != new_n || memcmp(old_seq, new_seq, sizeof(Emitted) * (size_t)old_n) != 0) {
+            if (quad_mismatches < 5) {
+                printf("QUAD MISMATCH it=%ld bounds=[%d,%d,%d,%d] x=%g y=%g w=%g h=%g old_n=%d new_n=%d\n", it, b.left, b.top, b.right, b.bottom, x, y, w, h, old_n, new_n);
+            }
+            quad_mismatches++;
+        }
+    }
+    printf("equivalence (quads): iterations=%ld with_output=%ld fast_path=%ld mismatches=%ld\n", iterations, quad_with_output, quad_fast, quad_mismatches);
+    mismatches += quad_mismatches;
     printf("equivalence: iterations=%ld with_output=%ld fast_path_inputs=%ld clipped_or_partial_with_output=%ld mismatches=%ld\n",
            iterations, with_output, fast_candidates, clipped, mismatches);
     return mismatches ? 1 : 0;
