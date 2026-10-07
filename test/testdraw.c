@@ -16,6 +16,13 @@
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_test.h>
 
+#ifdef SDL_PLATFORM_DREAMCAST
+#include <kos/dbglog.h>
+#define TESTDRAW_PROBE(...) dbglog(DBG_INFO, "[testdraw_probe] " __VA_ARGS__)
+#else
+#define TESTDRAW_PROBE(...)
+#endif
+
 #ifdef SDL_PLATFORM_EMSCRIPTEN
 #include <emscripten/emscripten.h>
 #endif
@@ -220,11 +227,17 @@ int main(int argc, char *argv[])
     /* Initialize parameters */
     num_objects = NUM_OBJECTS;
 
+    TESTDRAW_PROBE("main start argc=%d\n", argc);
+
     /* Initialize test framework */
     state = SDLTest_CommonCreateState(argv, SDL_INIT_VIDEO);
     if (!state) {
+        TESTDRAW_PROBE("SDLTest_CommonCreateState failed\n");
         return 1;
     }
+    TESTDRAW_PROBE("state created window_flags=0x%08lx renderdriver=%s\n",
+                   (unsigned long)state->window_flags,
+                   state->renderdriver ? state->renderdriver : "(null)");
 
     for (i = 1; i < argc;) {
         int consumed;
@@ -282,12 +295,18 @@ int main(int argc, char *argv[])
         i += consumed;
     }
     if (!SDLTest_CommonInit(state)) {
+        TESTDRAW_PROBE("SDLTest_CommonInit failed error=%s\n", SDL_GetError());
         return 2;
     }
+    TESTDRAW_PROBE("SDLTest_CommonInit ok num_windows=%d\n", state->num_windows);
 
     /* Create the windows and initialize the renderers */
     for (i = 0; i < state->num_windows; ++i) {
         SDL_Renderer *renderer = state->renderers[i];
+        TESTDRAW_PROBE("renderer slot %d window=0x%08lx renderer=0x%08lx\n",
+                       i,
+                       (unsigned long)state->windows[i],
+                       (unsigned long)renderer);
         SDL_SetRenderDrawBlendMode(renderer, blendMode);
         SDL_SetRenderDrawColor(renderer, 0xA0, 0xA0, 0xA0, 0xFF);
         SDL_RenderClear(renderer);
