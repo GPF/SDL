@@ -840,3 +840,33 @@ sleeping wait 10.03 ms), a frame of 8 quads plus present 16.62 ms (20.05 ms), 10
 16.68 ms (30.01 ms), 12 quads + 100 sprites + 600 points 74.7 ms (100.16 ms). Gate 8
 passes 16 of 16; `pvr_texture_churn` 1500 of 1500 iterations over 15 runs with no VRAM
 lost; `pvr_texture_update_race` 2904 of 2904 frames over 12 runs.
+
+## PVR geometry path
+
+`pvr_geometry_bench` times the CPU cost of submitting 400 sprites, 2400 fill rects, 2400
+points, two long diagonal lines (and pairs of them), 1500 triangles and a `testsprite`-like
+mix, and prints ms per frame and microseconds per primitive. Each frame starts the scene
+with a clear and a flush (which absorbs KallistiOS's wait for the previous render) and
+times only the flush that submits the workload, so the figure is SDL core plus backend
+ingestion plus emission, with no vsync or GPU time in it. Counts stay below what the
+512 KB vertex buffer holds (about 2700 rectangles); more overflows it and corrupts the
+state of every later workload. An earlier version timed whole frames and subtracted an
+empty frame, which hides light workloads under the 16.7 ms vsync interval and understated
+the costs by roughly 3x.
+
+`pvr_geometry_equivalence` is a host-side differential test (`run.sh [revision]
+[iterations]`, needs only gcc and python3). It extracts the real triangle clip and emit
+functions from `SDL_render_dreamcast_pvr_geometry.c` at a git revision and from the working
+tree, runs random triangles through both (inside, partly outside, on the bounds, degenerate,
+NaN and infinite, with half the iterations biased to fully inside) and requires the emitted
+vertex sequences to be bit-identical. A deliberately broken fast path (wrong tie-break)
+produces 88,619 mismatches in 2,000,000 iterations, so the harness does detect errors.
+
+Fast path for in-bounds triangles: a triangle entirely inside the clip bounds skips the
+four-plane clipper, the second finiteness pass and the area finiteness check, and is
+emitted in the same vertex order the clipper would have produced (cyclic order starting at
+the geometric lowest vertex). Triangles that touch or cross a bound still take the full
+path. Hardware (`pvr_geometry_bench`), microseconds per primitive before / after: sprite
+75.7 / 53.2, 4x4 fill rect 37.9 / 15.4, point 37.3 / 14.5, line pixel 37.4 / 14.6,
+triangle 24.2 / 12.8; the `testsprite`-like frame 57.3 / 29.2 ms (OpenGL: 30.0). Captures
+of all geometry fixtures, `pvr_texture_churn` and `pvr_texture_update_race` are unchanged.

@@ -311,6 +311,26 @@ static int DC_PVR_ClipTriangle(const DC_PVR_Vertex triangle[3],
     return count;
 }
 
+/* True when every vertex is inside the bounds by the same test the clipper uses
+ * (left/top inclusive, right/bottom exclusive). Callers have checked finiteness. */
+static bool DC_PVR_TriangleInsideBounds(const DC_PVR_Vertex triangle[3],
+                                        const DC_PVR_GeometryBounds *bounds)
+{
+    const float left = (float)bounds->left;
+    const float top = (float)bounds->top;
+    const float right = (float)bounds->right;
+    const float bottom = (float)bounds->bottom;
+    int i;
+
+    for (i = 0; i < 3; ++i) {
+        if (!(triangle[i].x >= left && triangle[i].x < right &&
+              triangle[i].y >= top && triangle[i].y < bottom)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /* KOS release flags include -ffast-math, which permits the compiler to fold
  * isfinite() to true. Check IEEE-754 exponent bits so malformed public
  * geometry is still rejected in the actual Dreamcast build. */
@@ -383,6 +403,34 @@ static bool DC_PVR_EmitClippedTriangle(const DC_PVR_Vertex triangle[3],
         if (!DC_PVR_VertexIsFinite(&triangle[i])) {
             return true;
         }
+    }
+
+    /* Fast path: a triangle entirely inside the bounds needs no clipping. Clipping
+     * would only rotate the vertex array, so the result is the input in cyclic
+     * order starting at the geometric fan anchor, which is what is emitted here.
+     * Finiteness was checked above and nothing is interpolated, so the second
+     * finiteness pass and the area finiteness check are not needed either. */
+    if (DC_PVR_TriangleInsideBounds(triangle, bounds)) {
+        const DC_PVR_Vertex *a, *b, *c;
+        double area;
+
+        for (i = 1; i < 3; ++i) {
+            if (triangle[i].y < triangle[fan_anchor].y ||
+                (triangle[i].y == triangle[fan_anchor].y && triangle[i].x < triangle[fan_anchor].x)) {
+                fan_anchor = i;
+            }
+        }
+        a = &triangle[fan_anchor];
+        b = &triangle[(fan_anchor + 1) % 3];
+        c = &triangle[(fan_anchor + 2) % 3];
+        area = ((double)b->x - a->x) * ((double)c->y - a->y) -
+               ((double)b->y - a->y) * ((double)c->x - a->x);
+        if (area == 0.0) {
+            return true;
+        }
+        return DC_PVR_EmitVertex(a, PVR_CMD_VERTEX) &&
+               DC_PVR_EmitVertex(b, PVR_CMD_VERTEX) &&
+               DC_PVR_EmitVertex(c, PVR_CMD_VERTEX_EOL);
     }
 
     clipped_count = DC_PVR_ClipTriangle(triangle, bounds, buffers, &clipped);
