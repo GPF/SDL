@@ -179,3 +179,21 @@ The spin-wait variant (option B in earlier revisions of this note: `pvr_check_re
 then `render_busy`) was correct on gate 8 but gave back CPU/GPU overlap (100 sprites: 23.7
 ms) and needed KOS-internal state, so it is not used; its numbers remain the ceiling
 for "make the wait non-sleeping".
+
+### PVR vs OpenGL (GLdc) after retirement
+
+Same benchmark and clock as the earlier comparison (ms per frame, 100 frames each):
+
+| workload | PVR before (committed wait) | **PVR now** | OpenGL |
+|---|---|---|---|
+| empty frame | 20.0 | **16.66** | 16.62 |
+| 100 sprites | 30.0 | **16.66** | 16.69 |
+| 2 diagonal lines (~1150 points) | 60.1 | **51.6** | 20.0 |
+| 1200 points, one call | 70.1 | **53.6** | 20.0 |
+| `testsprite`-like (sprites + 2 lines) | 90.1 | **57.3** (17 fps) | 30.0 (33 fps) |
+
+The sleeping wait explained the whole sprite gap and part of the point/line gap. What
+remains is CPU cost per drawn primitive: about 30 us per 1-pixel point (two triangles),
+which is the per-triangle CPU clipping, validation and per-vertex submission in
+`SDL_render_dreamcast_pvr_geometry.c` (an earlier probe build measured about 19 us per
+triangle, inflated by the probe's own timer reads). That is the next thing to optimize.
