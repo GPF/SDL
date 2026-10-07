@@ -918,3 +918,11 @@ its model exactly; bilinear matches within 2.75 of 31 levels. Copy/transform out
 its previous capture, and all rerun geometry/target/hardening captures match within 8 RGB
 levels. `pvr_texture_churn`, `pvr_texture_update_race`, gate 8 (three runs), P1-A and all
 three P1-C repeat-pressure runs pass.
+
+Addon integration smoke (2026-10-07): installed the committed SDL3 static build into
+`/opt/toolchains/dc/kos/addons`, then rebuilt Quake and the stock SDL `testgeometry` app
+against that addon. `testgeometry` ran with textures enabled for 120 frames on hardware and
+exited cleanly (60.58 FPS). Quake initialized the PVR window and audio and ran on hardware;
+the user confirmed interactive play for several seconds with no issue. A separate temporary
+Quake build capped its loop at 180 frames and returned cleanly. These are integration
+smokes, not a replacement for the fixture and equivalence checks above.
