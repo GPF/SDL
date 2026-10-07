@@ -591,3 +591,23 @@ Re-run against the reinstalled `local-install` with the front-buffer helper:
   Unexplained: the promotion fixture was pixel-identical across the two
   libraries, so the offset is not a general library difference; it appears only
   for the hardening scene's geometry. Stored captures are kept; new ones are `rebaseline_*` under `results/phase1-captures/`.
+
+### Closed: 1-pixel offset in the stale library (no further investigation planned)
+
+The pre-2026-10-06 `local-install` library drew the hardening P1-C scene's
+untextured cyan rectangle one pixel to the right (x=441..536 instead of the
+specified 440..535). The offset was reproduced with the front-buffer helper
+(`results/phase1-captures/stalelib_pvr_phase1_hardening_p1c_repeat_control*`), so
+it is a library difference, not a capture-path one. The promotion fixture was
+pixel-identical across the old and new libraries, so the old library did not
+shift every draw; which draws it affected was never determined.
+
+The old install archive was deleted and the investigation was closed on purpose:
+the current library draws the specified geometry, and earlier results can be
+re-run against it. To reopen it, rebuild the old library from the commit it was
+built from (it predated the working-tree changes to
+`src/render/dreamcast/SDL_render_dreamcast_pvr.c` that existed on 2026-10-06; the
+exact build commit was not recorded), build the hardening `p1c_repeat_control`
+fixture against it with `SCREENSHOT=1` and explicit `SDL3_PREFIX` /
+`SDL3_CONFIG_INCLUDEDIR`, and compare the cyan rectangle's x range at all three
+captures. Do not use the old library as a pass artifact.
