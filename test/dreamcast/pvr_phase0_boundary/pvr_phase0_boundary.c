@@ -3,7 +3,7 @@
  * FAIL when the backend quietly does something else.
  *
  * Expected on hardware:
- *   case1 target_texture=PASS      (render targets are not implemented)
+ *   case1 target_texture=PASS      (render targets are supported now that they are promoted)
  *   case2 lock_static_texture=PASS (lock requires streaming access)
  *   case3 blend_mod_rejected=PASS  (PVR-specific core gate rejects setter)
  *   case4 update_while_scene_open=PASS
@@ -79,10 +79,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* Case 1: render target. */
+    /* Case 1: render target. Targets are supported now that they are promoted, so this is
+     * a positive check rather than a rejection boundary. */
     SDL_Texture *target = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB565,
                                             SDL_TEXTUREACCESS_TARGET, 320, 240);
-    expect_failure("target_texture", target != NULL);
+    expect_success("target_texture_supported", target != NULL);
     if (target) {
         SDL_DestroyTexture(target);
     }
