@@ -822,3 +822,21 @@ Uploads after `RenderPresent` returns are not the hazard: the presentation scene
 entry already waits for the frame scene's render to complete (single vertex buffer).
 Validated on hardware: the racy original fails every frame (242 of 242, both runs), the
 committed sleeping fix passes.
+
+## PVR scene retirement (replaces the sleeping wait)
+
+`DC_PVR_FinishActiveScene` no longer waits for the render. Destroyed textures are retired
+and freed once their last scene is proven complete; CPU uploads into recently sampled
+textures and VRAM allocation failures use a blocking drain (details, the KOS facts it
+rests on, and the residual assumptions are in `results/pvr-scene-completion-design.md`).
+
+Consequence for fixtures: `SDL_RenderPresent` returns before the frame has been rendered
+and flipped, so a front-buffer capture taken straight after it can show the previous
+frame. `pvr_phase0_capture()` therefore waits 100 ms first; fixtures that read the front
+buffer themselves (`pvr_texture_churn`) wait before sampling.
+
+Measured on hardware (`clock_gettime`): a render-target switch costs 3.29 ms (committed
+sleeping wait 10.03 ms), a frame of 8 quads plus present 16.62 ms (20.05 ms), 100 sprites
+16.68 ms (30.01 ms), 12 quads + 100 sprites + 600 points 74.7 ms (100.16 ms). Gate 8
+passes 16 of 16; `pvr_texture_churn` 1500 of 1500 iterations over 15 runs with no VRAM
+lost; `pvr_texture_update_race` 2904 of 2904 frames over 12 runs.

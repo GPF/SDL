@@ -17,6 +17,19 @@
 #include <dc/pvr/pvr_txr.h>
 
 #if SDL_VIDEO_RENDER_DREAMCAST_PVR
+/* pvr_mem_malloc() with one retry after draining retired VRAM: memory held only
+ * because a render may still be reading it is allocatable once that render is
+ * proven complete, which costs a blocking wait only when memory runs out. */
+static pvr_ptr_t DC_PVR_MallocWithReclaim(SDL_Renderer *renderer, size_t size)
+{
+    pvr_ptr_t memory = pvr_mem_malloc(size);
+
+    if (!memory && DC_PVR_ReclaimForAllocation(renderer)) {
+        memory = pvr_mem_malloc(size);
+    }
+    return memory;
+}
+
 static pvr_ptr_t DC_PVR_AllocTextureVRAM(SDL_Renderer *renderer, size_t size)
 {
 #ifdef SDL_VIDEO_RENDER_DREAMCAST_PVR_TESTS
@@ -31,7 +44,7 @@ static pvr_ptr_t DC_PVR_AllocTextureVRAM(SDL_Renderer *renderer, size_t size)
 #else
     (void)renderer;
 #endif
-    return pvr_mem_malloc(size);
+    return DC_PVR_MallocWithReclaim(renderer, size);
 }
 #endif
 
@@ -244,7 +257,7 @@ SDL_Texture *DC_PVR_LoadDreamcastTexture_IO(SDL_Renderer *renderer,
     }
     free(data->pixels);
     data->pixels = NULL;
-    data->vram = pvr_mem_malloc(payload_size);
+    data->vram = DC_PVR_MallocWithReclaim(renderer, payload_size);
     if (!data->vram) {
         SDL_SetError("Could not allocate Dreamcast .dt texture VRAM");
         goto done;
@@ -350,6 +363,10 @@ bool DC_PVR_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
         source += pitch;
     }
 
+    /* The upload overwrites VRAM that a recent scene may still be sampling. */
+    if (!DC_PVR_WaitTextureIdle(renderer, data)) {
+        return false;
+    }
     pvr_txr_load(data->pixels, data->vram, data->allocation_size);
     data->uploaded = true;
     return true;
@@ -397,8 +414,12 @@ void DC_PVR_UnlockTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     if (!data || !data->locked) {
         return;
     }
-    pvr_txr_load(data->pixels, data->vram, data->allocation_size);
-    data->uploaded = true;
+    if (DC_PVR_WaitTextureIdle(renderer, data)) {
+        pvr_txr_load(data->pixels, data->vram, data->allocation_size);
+        data->uploaded = true;
+    } else {
+        SDL_LogError(SDL_LOG_CATEGORY_RENDER, "Dreamcast PVR texture upload skipped: %s", SDL_GetError());
+    }
     data->locked = false;
     SDL_zero(data->locked_rect);
 }
@@ -463,15 +484,10 @@ void DC_PVR_DestroyTexture(SDL_Renderer *renderer, SDL_Texture *texture)
             (void *)texture, (void *)data->vram, (void *)data->vram_next,
             renderdata->scene_active);
 #endif
-    if (renderdata->scene_active) {
-        /* Emitted headers may still reference this VRAM until the scene
-         * finishes; defer the free to presentation. */
-        data->next_deferred = renderdata->deferred_textures;
-        renderdata->deferred_textures = data;
-    } else {
-        DC_PVR_FreeTextureData(data);
-    }
+    /* Never free here: an already finished scene's render may still be reading
+     * this VRAM. Retire it; it is freed once that render is proven complete. */
     texture->internal = NULL;
+    DC_PVR_RetireTexture(renderer, data);
 }
 
 #endif /* SDL_VIDEO_RENDER_DREAMCAST_PVR */

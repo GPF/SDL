@@ -95,56 +95,87 @@ Readings:
   `while (!pvr_check_ready())`, which exits as soon as the TA is **busy**, so it never
   waited. It is retracted.
 
-## Options
+## Implemented: retirement by scene generation (option C)
 
-**A. Sleeping wait (committed).** Correct and simple, public KOS API only. Costs a
-scheduler tick per scene finish, which is too much for target-heavy or 60 fps scenes.
+`DC_PVR_FinishActiveScene` no longer waits. Instead:
 
-**B. Bounded spinning wait.** Same two waits, spinning: `while (pvr_check_ready() != 0)`
-then `while (render_busy)`. Correct on gate 8 (10/10) and nearly free in the benchmark.
-Needs the private `render_busy` (or a small KOS addition such as
-`pvr_check_render_done()`), must be bounded (fall back to the sleeping wait after a
-timeout so a hardware stall cannot hang the CPU), and burns CPU for the render duration,
-which matters for audio and other threads (inference: the KOS scheduler preempts at the
-tick, so other threads still run, but this was not measured). Gives up CPU/GPU overlap.
+- **Scene numbers.** `scenes_begun` counts `pvr_scene_begin*()` calls, including the
+  presentation scene that `RenderPresent` starts. `scenes_entered` is the highest scene
+  whose first `pvr_list_begin()` has returned (also set when `pvr_scene_finish()` opens
+  any list never opened).
+- **Retire, never free.** `DC_PVR_DestroyTexture` puts the texture on `retired_textures`
+  tagged `retire_gen = scenes_begun`: the last scene that could reference it, because the
+  SDL core flushes queued commands that use a texture before calling the backend destroy.
+  This also covers the old "no scene open" immediate free, which was equally unsafe once
+  a finished scene's render can still be running.
+- **Proven-complete scenes** (`DC_PVR_CompletedScenes`, monotonic), from facts 1 to 4
+  above: with `m` the latest entered scene, renders up to `m-2` are complete; if scene
+  `m` is finished and `pvr_check_ready() == 0`, renders up to `m-1` are.
+- **Reclaim** (`DC_PVR_ReclaimRetired`) at scene entry, scene finish, texture destruction
+  and the end of `RenderPresent`: free every retired texture whose tag is proven complete.
+  Nothing waits.
+- **Blocking drain** (`DC_PVR_WaitScenesComplete`) only in three places: when
+  `pvr_mem_malloc` fails (retry once after reclaiming; also used by the `.dt` loader),
+  before a CPU upload into texture VRAM that a scene not yet proven complete sampled
+  (`DC_PVR_WaitTextureIdle`, using `last_used_gen` set when a header samples the
+  texture), and in `DestroyRenderer` before any VRAM is freed (it now waits for every
+  submitted render whether or not a scene was open; it used to wait only if one was).
+  The drain checks the KOS wait results and does not free on a timeout. If a scene is
+  open and has entered the TA it does not wait for `ta_busy` (that would not end until the
+  scene is finished) and only waits for render-done, giving `m-1`.
 
-**C. Non-blocking retirement by scene generation.** Give each SDL scene a sequence
-number. A texture destroyed while scene `s` is open or was last finished is tagged
-`retire_after = s` (this includes the immediate-free branch in `DC_PVR_DestroyTexture`
-for `!scene_active`, which is also unsafe once finish no longer waits). It may be freed
-once scene `s+1`'s render is known to have started, because renders are serialized.
-That is observable without sleeping: `pvr_check_ready() == 0` after scene `s+1` was
-finished, or the return of the following `pvr_scene_begin`. Cost: no waiting, VRAM held
-about one extra frame, CPU/GPU overlap preserved. Required fallbacks: a blocking drain
-when `pvr_mem_malloc` fails, at `DestroyRenderer`, and when the retire queue grows past
-a bound or the app goes idle (no later scene would otherwise advance it).
+Render-target buffers use the same rule: a target texture's `vram` and `vram_next` are
+freed through the retire list, and the swap after a target scene is a pointer swap that
+only has to be ordered before later scenes, which PVR render serialization provides.
 
-Open questions for C, not yet answered:
+Residual assumptions, stated so they can be challenged:
 
-- `DC_PVR_FinishActiveScene` also swaps render-target buffers after a target scene
-  finishes and relies on the render having completed; removing the render-done wait must
-  not change that ordering (inference: PVR ordering makes later sampling safe, but CPU
-  reads of target contents would not be).
-- The presentation path runs an extra "preservation seed" scene after each frame; the
-  generation numbering must count it.
-- Validating C needs a detector that fails on early reclamation. Gate 8 detects a free
-  that precedes the render start but exits before any reclamation point, so on its own
-  it cannot judge C. `test/dreamcast/pvr_texture_churn` repeats gate 8's scene 40 times
-  per run (same textures, positions and destroy-before-present, with the same warm-up
-  presents, then a short delay so the final frame is displayed) and compares the
-  destroyed texture's quad with the expected checker. Validated on hardware: the racy
-  original fails all 40 iterations in every run (exactly the 16 corner pixels, 640 bad
-  pixels per run, 2 runs); the committed fix passes 40/40 twice; spin on
-  `pvr_check_ready()` + sleeping render-done passes 120/120; spin on both passes 120/120.
-  Earlier attempts with other geometry (a 256x256 full-screen texture, then a 64x64
-  texture in a small quad, with a frame-number marker) could not reproduce the race
-  even on the original code, because the race exists only while the scene's render has
-  not started yet and those frames did not leave the PVR in that state; the gate 8 scene
-  and its warm-up pattern do.
+- Fact 2 relies on `pvr_wait_ready()` inside `pvr_start_ta_rendering()`, which times out
+  after 100 ms without reporting it. A render stalled that long means the system is
+  already failing; the committed sleeping wait ignored the same timeout.
+- Texture VRAM is held until a later scene proves completion, normally about one frame
+  later. Out-of-memory handling drains first, so this costs a wait only under memory
+  pressure.
+- Uploads into a texture that a not-yet-proven scene sampled still block (the write fence).
+  A texture that is uploaded every frame right after a render-to-texture scene that
+  sampled it pays that wait; renaming the backing store (allocate a new block, retire the
+  old one) would remove it and is not done.
+- `SDL_RenderPresent` now returns before the frame is rendered. A capture taken right
+  after it can show the previous frame, so `pvr_phase0_capture()` waits 100 ms first.
 
-## Recommendation
+### Results (hardware, 640x480)
 
-Short term: B with a bounded fallback, since it is correct on the existing detector and
-removes the measured stall. Long term: C, once a fixture exists that fails on early
-reclamation. Do not rely on `pvr_scene_finish()` or a bare `pvr_wait_render_done()` for
-completion in either case.
+Benchmarks use `clock_gettime`. Correctness uses the two lifetime detectors plus the
+existing fixtures.
+
+| | racy original | committed sleeping wait | **retirement** |
+|---|---|---|---|
+| ms per render-target switch | 3.28 | 10.03 | **3.29** |
+| ms per frame, 8 quads + present | 16.65 | 20.05 | **16.62** |
+| 100 sprites | 17.26 | 30.01 | **16.68** |
+| 600 points | 36.98 | 50.08 | **29.5** |
+| 4 full-screen translucent quads | 25.30 | 30.22 | **25.2** |
+| 12 full-screen translucent quads | 50.26 | 60.12 | **50.0** |
+| 12 quads + 100 sprites + 600 points | 86.60 | 100.16 | **74.7** |
+| ms per frame, upload right after a target scene | 23.5 (incorrect) | 40.05 | **30.0** |
+
+| detector | racy original | committed | **retirement** |
+|---|---|---|---|
+| gate 8 (one run each) | 6/6 corrupt | 3/3 clean | **16/16 clean** (10 with the old capture, 6 with the settled capture) |
+| `pvr_texture_churn`, 100 iterations per run | 100/100 corrupt | 300/300 clean | **1500/1500 clean** (15 runs), VRAM lost: 0 in every run |
+| `pvr_texture_update_race`, 242 frames per run | 242/242 corrupt | 2 runs clean | **12 runs, 2904/2904 frames clean** |
+
+Existing fixtures against the retirement library: boundary, lifecycle, textured_quad
+(settled capture), clear_triangle, coordinates, copy_transform, point_line, default_lines,
+blend_modes, dt_texture, and `pvr_phase1_hardening` P1-A, P1-B (failure-injection library),
+P1-C repeat control and repeat pressure 1 to 3 all pass, and their captures match earlier
+known-good runs pixel for pixel except the documented unwritten bottom-row band (16 px)
+and 2 px of dither noise. `pvr_dt_direct` and `pvr_phase1_targets` ran to completion
+(`pvr_targets result=PASS`, exit 0) but have no earlier capture to compare against. The
+pressure gates exhaust VRAM, destroy 230 textures and reallocate them, which exercises
+the out-of-memory drain.
+
+The spin-wait variant (option B in earlier revisions of this note: `pvr_check_ready()`
+then `render_busy`) was correct on gate 8 but gave back CPU/GPU overlap (100 sprites: 23.7
+ms) and needed KOS-internal state, so it is not used; its numbers remain the ceiling
+for "make the wait non-sleeping".

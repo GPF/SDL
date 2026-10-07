@@ -17,9 +17,10 @@
  * pvr_get_front_buffer() returns the PVR front page; its address is for 64-bit
  * memory, so convert it back to the linear 32-bit-area address for CPU reads.
  *
- * NOTE: vid_waitvbl() only waits for the display (framebuffer) vblank and does
- * not wait for PVR rendering (RenderPresent does that), so it is not needed
- * here. Only RGB565 display modes are handled. */
+ * NOTE: SDL_RenderPresent no longer waits for the PVR to finish rendering the
+ * frame (texture VRAM is retired by scene generation instead of waiting), so a
+ * capture taken immediately can show the previous frame. Wait for the frame to be
+ * rendered and flipped first. Only RGB565 display modes are handled. */
 static bool pvr_phase0_capture(const char *path)
 {
     const uintptr_t base = 0xa5000000u; /* PVR_RAM_BASE: 32-bit area, P2 */
@@ -31,6 +32,7 @@ static bool pvr_phase0_capture(const char *path)
     if (vid_mode->pm != PM_RGB565) {
         return SDL_SetError("capture supports RGB565 display only (pm=%d)", (int)vid_mode->pm);
     }
+    SDL_Delay(100); /* several vblanks: let the last present render and flip */
     front64 = (uintptr_t)pvr_get_front_buffer();
     fb = (const uint16_t *)(base + (front64 - base) / 2);
     w = vid_mode->width;

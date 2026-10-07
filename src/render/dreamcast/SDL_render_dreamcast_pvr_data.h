@@ -36,7 +36,9 @@ typedef struct DC_PVR_Vertex
 
 typedef struct DC_PVR_TextureData
 {
-    struct DC_PVR_TextureData *next_deferred;
+    struct DC_PVR_TextureData *next_deferred; /* retire list link */
+    Uint64 retire_gen;            /* last scene that could reference this VRAM */
+    Uint64 last_used_gen;         /* latest scene that sampled this texture */
     void *pixels;                 /* CPU staging backing store */
     pvr_ptr_t vram;               /* PVR VRAM backing store */
     pvr_ptr_t sample_vram;         /* PVR sampling address (VQ codebook offset) */
@@ -107,9 +109,17 @@ typedef struct DC_PVR_RenderData
     int header_list_type;
     int active_list_type;
 
-    /* Textures destroyed while a scene is open cannot have their VRAM freed
-     * until presentation completes. */
-    DC_PVR_TextureData *deferred_textures;
+    /* Texture VRAM retirement. Scenes are numbered by pvr_scene_begin*(); a
+     * scene "enters" the TA when its first pvr_list_begin() returns, which is
+     * where KallistiOS waits for the previous render to start. Destroyed
+     * textures wait on retired_textures, tagged with the last scene that could
+     * reference them, until that scene's render is proven complete. See
+     * DC_PVR_CompletedScenes() and pvr-scene-completion-design.md. */
+    DC_PVR_TextureData *retired_textures;
+    Uint64 scenes_begun;
+    Uint64 scenes_entered;
+    Uint64 scenes_completed; /* highest scene proven complete; monotonic */
+    bool scene_entered;      /* the open scene has entered the TA */
 } DC_PVR_RenderData;
 
 #endif /* SDL_render_dreamcast_pvr_data_h_ */

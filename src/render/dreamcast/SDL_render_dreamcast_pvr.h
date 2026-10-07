@@ -93,4 +93,9 @@ void DC_PVR_UnlockTexture(SDL_Renderer *renderer, SDL_Texture *texture);
 void DC_PVR_DestroyTexture(SDL_Renderer *renderer, SDL_Texture *texture);
 void DC_PVR_FreeTextureData(DC_PVR_TextureData *data);
 
+/* Texture VRAM lifetime (SDL_render_dreamcast_pvr.c). */
+void DC_PVR_RetireTexture(SDL_Renderer *renderer, DC_PVR_TextureData *texture);
+bool DC_PVR_WaitTextureIdle(SDL_Renderer *renderer, DC_PVR_TextureData *texture);
+bool DC_PVR_ReclaimForAllocation(SDL_Renderer *renderer);
+
 #endif /* SDL_render_dreamcast_pvr_h_ */
