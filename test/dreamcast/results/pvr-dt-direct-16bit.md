@@ -234,3 +234,8 @@ added; `compare_capture.py` (nonzero exit on mismatch) is the pixel gate.
 Other fixtures that use `pvr_phase0_capture()` now capture the PVR front buffer
 and reject non-RGB565 modes; re-run the Phase 1 hardening control and the
 promotion fixture against this library before citing their earlier passes.
+
+Note: the 1-pixel horizontal offset seen in the hardening captures was reproduced
+with the stale library plus the front-buffer helper (x=441..536 vs 440..535 with
+the current library), so it is a library difference. The promotion fixture did
+not show it (pixel-identical), so which draws are affected is not yet known.

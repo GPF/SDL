@@ -584,5 +584,10 @@ Re-run against the reinstalled `local-install` with the front-buffer helper:
   Versus the stored captures there is a constant 1-pixel horizontal offset of the
   untextured cyan rectangle (new x=440..535, stored 441..536; 249 px), and
   stored pressure vblank-1 was the stale warmup page. The new geometry is the
-  specified one; the stored captures came from the stale library. Stored
-  captures are kept; new ones are `rebaseline_*` under `results/phase1-captures/`.
+  specified one. Attribution: the same hardening control built against the stale
+  archive (`build-scripts/local-install.stale-20261006`) with the new
+  front-buffer helper shows x=441..536 at all three captures
+  (`stalelib_*`), so the stale library causes the offset, not the capture path.
+  Unexplained: the promotion fixture was pixel-identical across the two
+  libraries, so the offset is not a general library difference; it appears only
+  for the hardening scene's geometry. Stored captures are kept; new ones are `rebaseline_*` under `results/phase1-captures/`.
