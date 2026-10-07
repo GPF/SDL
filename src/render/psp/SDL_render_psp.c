@@ -805,8 +805,10 @@ static bool PSP_QueueFillRects(SDL_Renderer *renderer, SDL_RenderCommand *cmd, c
 }
 
 static bool PSP_QueueCopy(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Texture *texture,
-                         const SDL_FRect *srcrect, const SDL_FRect *dstrect)
+                         const SDL_FRect *srcrect, const SDL_FRect *dstrect,
+                         const SDL_FRect *unscaled_dstrect)
 {
+    (void)unscaled_dstrect;
     VertTV *verts;
     const float x = dstrect->x;
     const float y = dstrect->y;

@@ -785,12 +785,14 @@ static bool UpdateTexturePalette(SDL_Texture *texture)
     return true;
 }
 
-static bool QueueCmdCopy(SDL_Renderer *renderer, SDL_Texture *texture, const SDL_FRect *srcrect, const SDL_FRect *dstrect)
+static bool QueueCmdCopy(SDL_Renderer *renderer, SDL_Texture *texture,
+                         const SDL_FRect *srcrect, const SDL_FRect *dstrect,
+                         const SDL_FRect *unscaled_dstrect)
 {
     SDL_RenderCommand *cmd = PrepQueueCmdDraw(renderer, SDL_RENDERCMD_COPY, texture);
     bool result = false;
     if (cmd) {
-        result = renderer->QueueCopy(renderer, cmd, texture, srcrect, dstrect);
+        result = renderer->QueueCopy(renderer, cmd, texture, srcrect, dstrect, unscaled_dstrect);
         if (!result) {
             cmd->command = SDL_RENDERCMD_NO_OP;
         }
@@ -4133,7 +4135,7 @@ static bool SDL_RenderTextureInternal(SDL_Renderer *renderer, SDL_Texture *textu
                                   scale_x, scale_y, SDL_TEXTURE_ADDRESS_CLAMP, SDL_TEXTURE_ADDRESS_CLAMP);
     } else {
         const SDL_FRect rect = { dstrect->x * scale_x, dstrect->y * scale_y, dstrect->w * scale_x, dstrect->h * scale_y };
-        result = QueueCmdCopy(renderer, texture, srcrect, &rect);
+        result = QueueCmdCopy(renderer, texture, srcrect, &rect, dstrect);
     }
     return result;
 }

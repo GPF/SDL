@@ -234,7 +234,8 @@ struct SDL_Renderer
     bool (*QueueFillRects)(SDL_Renderer *renderer, SDL_RenderCommand *cmd, const SDL_FRect *rects,
                           int count);
     bool (*QueueCopy)(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Texture *texture,
-                     const SDL_FRect *srcrect, const SDL_FRect *dstrect);
+                     const SDL_FRect *srcrect, const SDL_FRect *dstrect,
+                     const SDL_FRect *unscaled_dstrect);
     bool (*QueueCopyEx)(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Texture *texture,
                        const SDL_FRect *srcquad, const SDL_FRect *dstrect,
                        const double angle, const SDL_FPoint *center, const SDL_FlipMode flip, float scale_x, float scale_y);

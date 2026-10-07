@@ -595,6 +595,7 @@ static bool DC_PVR_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cm
                 return false;
             }
             break;
+        case SDL_RENDERCMD_COPY:
         case SDL_RENDERCMD_GEOMETRY:
         case SDL_RENDERCMD_DRAW_POINTS:
         case SDL_RENDERCMD_FILL_RECTS:
@@ -903,8 +904,9 @@ static bool DC_PVR_CreateRenderer(SDL_Renderer *renderer, SDL_Window *window,
     renderer->QueueDrawPoints = DC_PVR_QueueDrawPoints;
     renderer->QueueDrawLines = DC_PVR_QueueDrawLines;
     renderer->QueueFillRects = DC_PVR_QueueFillRects;
-    /* QueueCopy/QueueCopyEx stay unset: SDL core translates copies, rotation
-     * and flips into QueueGeometry, so the geometry path is the only emitter. */
+    renderer->QueueCopy = DC_PVR_QueueCopy;
+    /* QueueCopyEx stays unset: SDL core translates rotation and flips into
+     * QueueGeometry, so those operations keep using the generic path. */
     renderer->QueueGeometry = DC_PVR_QueueGeometry;
     renderer->InvalidateCachedState = DC_PVR_InvalidateCachedState;
     renderer->RunCommandQueue = DC_PVR_RunCommandQueue;

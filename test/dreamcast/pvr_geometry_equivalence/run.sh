@@ -18,3 +18,22 @@ cp "$here/equivalence.c" "$tmp/"
 sed -i 's|^#include "old_funcs.inc"|DEFINE_SIDE(OLD_)\n#include "old_funcs.inc"|; s|^#include "new_funcs.inc"|DEFINE_SIDE(NEW_)\n#include "new_funcs.inc"|' "$tmp/equivalence.c"
 gcc -O2 -std=gnu11 -Wall -Wno-unused-function -Wno-unused-variable -I"$tmp" -o "$tmp/equiv" "$tmp/equivalence.c" -lm
 "$tmp/equiv" "$iter"
+
+# Negative control: perturb the new sprite's top-right x coordinate and require
+# the QueueCopy record comparison to reject it.
+sed 's/quad\[1\]\.x = maxx \* scale_x;/quad[1].x = (maxx + 1.0f) * scale_x;/' \
+    "$tmp/new_funcs.inc" > "$tmp/new_broken_funcs.inc"
+sed 's|^#include "new_funcs.inc"|#include "new_broken_funcs.inc"|' \
+    "$tmp/equivalence.c" > "$tmp/broken_equivalence.c"
+gcc -O2 -std=gnu11 -Wall -Wno-unused-function -Wno-unused-variable -I"$tmp" \
+    -o "$tmp/broken_equiv" "$tmp/broken_equivalence.c" -lm
+if "$tmp/broken_equiv" 1000 > "$tmp/broken.log" 2>&1; then
+    echo "broken QueueCopy negative control unexpectedly passed" >&2
+    exit 1
+fi
+if ! grep -Eq 'record_mismatches=[1-9][0-9]*' "$tmp/broken.log"; then
+    cat "$tmp/broken.log" >&2
+    echo "broken QueueCopy was not caught by the record comparison" >&2
+    exit 1
+fi
+echo "negative control: deliberately broken QueueCopy was detected"

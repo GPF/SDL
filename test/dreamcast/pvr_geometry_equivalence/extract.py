@@ -6,11 +6,14 @@ import re
 import sys
 
 NAMES = [
+    "DC_PVR_FloatChannelToByte", "DC_PVR_PackColor", "DC_PVR_ValidateQueuedBlend",
     "DC_PVR_InterpolateColor", "DC_PVR_InterpolateVertex", "DC_PVR_ClipPlaneDistance",
     "DC_PVR_ClipPlaneContains", "DC_PVR_AppendClippedVertex", "DC_PVR_ClipAgainstPlane",
     "DC_PVR_ClipTriangle", "DC_PVR_FloatIsFinite", "DC_PVR_DoubleIsFinite",
     "DC_PVR_VertexIsFinite", "DC_PVR_TriangleInsideBounds", "DC_PVR_EmitClippedTriangle",
     "DC_PVR_QuadIntersectsBounds", "DC_PVR_RectQuadFastPath", "DC_PVR_EmitClippedQuad",
+    "DC_PVR_IsPowerOfTwoScale", "DC_PVR_QueueGeometry", "DC_PVR_QueueCopyGeometry",
+    "DC_PVR_QueueCopy",
 ]
 
 

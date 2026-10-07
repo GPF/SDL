@@ -712,6 +712,155 @@ bool DC_PVR_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
     return true;
 }
 
+static bool DC_PVR_IsPowerOfTwoScale(float scale)
+{
+    Uint32 bits;
+    Uint32 exponent;
+    Uint32 mantissa;
+
+    SDL_memcpy(&bits, &scale, sizeof(bits));
+    if ((bits & 0x80000000u) != 0) {
+        return false;
+    }
+    exponent = (bits >> 23) & 0xffu;
+    mantissa = bits & 0x7fffffu;
+    if (exponent == 0xffu || (exponent == 0 && mantissa == 0)) {
+        return false;
+    }
+    if (exponent != 0) {
+        return mantissa == 0;
+    }
+    return (mantissa & (mantissa - 1u)) == 0;
+}
+
+static bool DC_PVR_QueueCopyGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
+                                     SDL_Texture *texture, const SDL_FRect *srcrect,
+                                     const SDL_FRect *dstrect, float scale_x, float scale_y)
+{
+    static const Uint32 indices[6] = { 0, 1, 2, 0, 2, 3 };
+    float xy[8];
+    float uv[8];
+    float minu = srcrect->x / texture->w;
+    float minv = srcrect->y / texture->h;
+    float maxu = (srcrect->x + srcrect->w) / texture->w;
+    float maxv = (srcrect->y + srcrect->h) / texture->h;
+
+    xy[0] = dstrect->x;
+    xy[1] = dstrect->y;
+    xy[2] = dstrect->x + dstrect->w;
+    xy[3] = dstrect->y;
+    xy[4] = dstrect->x + dstrect->w;
+    xy[5] = dstrect->y + dstrect->h;
+    xy[6] = dstrect->x;
+    xy[7] = dstrect->y + dstrect->h;
+
+    uv[0] = minu;
+    uv[1] = minv;
+    uv[2] = maxu;
+    uv[3] = minv;
+    uv[4] = maxu;
+    uv[5] = maxv;
+    uv[6] = minu;
+    uv[7] = maxv;
+
+    return DC_PVR_QueueGeometry(renderer, cmd, texture, xy, 2 * (int)sizeof(float),
+                                &texture->color, 0, uv, 2 * (int)sizeof(float),
+                                4, indices, 6, (int)sizeof(indices[0]), scale_x, scale_y);
+}
+
+bool DC_PVR_QueueCopy(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
+                      SDL_Texture *texture, const SDL_FRect *srcrect,
+                      const SDL_FRect *dstrect, const SDL_FRect *unscaled_dstrect)
+{
+    DC_PVR_TextureData *texturedata = texture ? (DC_PVR_TextureData *)texture->internal : NULL;
+    const float scale_x = renderer->view->current_scale.x;
+    const float scale_y = renderer->view->current_scale.y;
+    DC_PVR_Vertex quad[4];
+    const float minu = srcrect->x / texture->w;
+    const float minv = srcrect->y / texture->h;
+    const float maxu = (srcrect->x + srcrect->w) / texture->w;
+    const float maxv = (srcrect->y + srcrect->h) / texture->h;
+    float u_max;
+    float v_max;
+    float maxx;
+    float maxy;
+
+    (void)dstrect; /* The original rect is needed to preserve the core's add-then-scale order. */
+    if (!DC_PVR_ValidateQueuedBlend(cmd)) {
+        return false;
+    }
+#if SDL_VIDEO_RENDER_DREAMCAST_PVR
+    if (texture && texture == ((DC_PVR_RenderData *)renderer->internal)->current_target) {
+        return DC_PVR_QueueCopyGeometry(renderer, cmd, texture, srcrect,
+                                        unscaled_dstrect, scale_x, scale_y);
+    }
+#endif
+    if (!texturedata || !DC_PVR_IsPowerOfTwoScale(scale_x) ||
+        !DC_PVR_IsPowerOfTwoScale(scale_y) ||
+        texturedata->logical_w <= 0 || texturedata->logical_h <= 0 ||
+        texturedata->backing_w <= 0 || texturedata->backing_h <= 0) {
+        return DC_PVR_QueueCopyGeometry(renderer, cmd, texture, srcrect,
+                                        unscaled_dstrect, scale_x, scale_y);
+    }
+#if SDL_VIDEO_RENDER_DREAMCAST_PVR
+    if (texturedata->access == SDL_TEXTUREACCESS_TARGET) {
+        if (!texturedata->current_valid) {
+            return DC_PVR_QueueCopyGeometry(renderer, cmd, texture, srcrect,
+                                            unscaled_dstrect, scale_x, scale_y);
+        }
+        u_max = (texturedata->logical_w <= 1) ? 0.0f :
+                (float)(texturedata->logical_w - 1) / (float)texturedata->backing_w;
+        v_max = (texturedata->logical_h <= 1) ? 0.0f :
+                (float)(texturedata->logical_h - 1) / (float)texturedata->backing_h;
+    } else
+#endif
+    {
+        u_max = (float)texturedata->logical_w / (float)texturedata->backing_w;
+        v_max = (float)texturedata->logical_h / (float)texturedata->backing_h;
+    }
+
+    maxx = unscaled_dstrect->x + unscaled_dstrect->w;
+    maxy = unscaled_dstrect->y + unscaled_dstrect->h;
+    quad[0].x = unscaled_dstrect->x * scale_x;
+    quad[0].y = unscaled_dstrect->y * scale_y;
+    quad[1].x = maxx * scale_x;
+    quad[1].y = unscaled_dstrect->y * scale_y;
+    quad[2].x = maxx * scale_x;
+    quad[2].y = maxy * scale_y;
+    quad[3].x = unscaled_dstrect->x * scale_x;
+    quad[3].y = maxy * scale_y;
+    for (int i = 0; i < 4; ++i) {
+        if (!DC_PVR_FloatIsFinite(quad[i].x) || !DC_PVR_FloatIsFinite(quad[i].y)) {
+            return DC_PVR_QueueCopyGeometry(renderer, cmd, texture, srcrect,
+                                            unscaled_dstrect, scale_x, scale_y);
+        }
+        quad[i].color = DC_PVR_PackColor(&texture->color, cmd->data.draw.color_scale);
+    }
+    quad[0].u = minu * u_max;
+    quad[0].v = minv * v_max;
+    quad[1].u = maxu * u_max;
+    quad[1].v = minv * v_max;
+    quad[2].u = maxu * u_max;
+    quad[2].v = maxv * v_max;
+    quad[3].u = minu * u_max;
+    quad[3].v = maxv * v_max;
+    for (int i = 0; i < 4; ++i) {
+        if (!DC_PVR_FloatIsFinite(quad[i].u) || !DC_PVR_FloatIsFinite(quad[i].v)) {
+            return DC_PVR_QueueCopyGeometry(renderer, cmd, texture, srcrect,
+                                            unscaled_dstrect, scale_x, scale_y);
+        }
+    }
+
+    DC_PVR_Vertex *vertices = (DC_PVR_Vertex *)SDL_AllocateRenderVertices(
+        renderer, sizeof(quad), 0, &cmd->data.draw.first);
+    if (!vertices) {
+        return false;
+    }
+    SDL_memcpy(vertices, quad, sizeof(quad));
+    cmd->data.draw.count = 4;
+    return true;
+}
+
 /* SDL3 documents that SDL_RenderClear() clears the entire rendering target and
  * ignores the viewport and the clip rectangle, so the clear quad is the full
  * output and uses no coordinate conversion. */
@@ -805,6 +954,28 @@ bool DC_PVR_RunGeometryCommand(SDL_Renderer *renderer,
                                const SDL_RenderCommand *cmd, const void *vertices)
 {
     DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->internal;
+
+    if (cmd->command == SDL_RENDERCMD_COPY) {
+        const DC_PVR_Vertex *queued = (const DC_PVR_Vertex *)((const Uint8 *)vertices + cmd->data.draw.first);
+        DC_PVR_Vertex quad[4];
+        DC_PVR_GeometryBounds bounds;
+
+        if (DC_PVR_CalcEffectiveGeometryBounds(data, &bounds) == DC_PVR_GEOMETRY_BOUNDS_EMPTY) {
+            return true;
+        }
+        if (cmd->data.draw.count != 4) {
+            return SDL_SetError("Dreamcast PVR copy command has an invalid vertex count");
+        }
+        if (!DC_PVR_EmitHeader(renderer, cmd->data.draw.texture, cmd->data.draw.blend,
+                               cmd->data.draw.texture_scale_mode, data->active_list_type)) {
+            return false;
+        }
+        for (int i = 0; i < 4; ++i) {
+            quad[i] = queued[i];
+            DC_PVR_TranslateToFramebuffer(data, &quad[i].x, &quad[i].y);
+        }
+        return DC_PVR_EmitClippedQuad(quad, &bounds);
+    }
 
     if (cmd->command == SDL_RENDERCMD_GEOMETRY) {
         const DC_PVR_Vertex *queued = (const DC_PVR_Vertex *)((const Uint8 *)vertices + cmd->data.draw.first);

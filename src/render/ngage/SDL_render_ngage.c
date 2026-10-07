@@ -53,7 +53,7 @@ static bool NGAGE_QueueSetViewport(SDL_Renderer *renderer, SDL_RenderCommand *cm
 static bool NGAGE_QueueSetDrawColor(SDL_Renderer *renderer, SDL_RenderCommand *cmd);
 static bool NGAGE_QueueDrawVertices(SDL_Renderer *renderer, SDL_RenderCommand *cmd, const SDL_FPoint *points, int count);
 static bool NGAGE_QueueFillRects(SDL_Renderer *renderer, SDL_RenderCommand *cmd, const SDL_FRect *rects, int count);
-static bool NGAGE_QueueCopy(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Texture *texture, const SDL_FRect *srcrect, const SDL_FRect *dstrect);
+static bool NGAGE_QueueCopy(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Texture *texture, const SDL_FRect *srcrect, const SDL_FRect *dstrect, const SDL_FRect *unscaled_dstrect);
 static bool NGAGE_QueueCopyEx(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Texture *texture, const SDL_FRect *srcquad, const SDL_FRect *dstrect, const double angle, const SDL_FPoint *center, const SDL_FlipMode flip, float scale_x, float scale_y);
 static bool NGAGE_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Texture *texture, const float *xy, int xy_stride, const SDL_FColor *color, int color_stride, const float *uv, int uv_stride, int num_vertices, const void *indices, int num_indices, int size_indices, float scale_x, float scale_y);
 
@@ -245,8 +245,9 @@ static bool NGAGE_QueueFillRects(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
     return true;
 }
 
-static bool NGAGE_QueueCopy(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Texture *texture, const SDL_FRect *srcrect, const SDL_FRect *dstrect)
+static bool NGAGE_QueueCopy(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Texture *texture, const SDL_FRect *srcrect, const SDL_FRect *dstrect, const SDL_FRect *unscaled_dstrect)
 {
+    (void)unscaled_dstrect;
     SDL_Rect *verts = (SDL_Rect *)SDL_AllocateRenderVertices(renderer, 2 * sizeof(SDL_Rect), 0, &cmd->data.draw.first);
 
     if (!verts) {

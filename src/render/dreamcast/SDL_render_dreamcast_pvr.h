@@ -72,6 +72,9 @@ bool DC_PVR_QueueGeometry(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
                           const float *uv, int uv_stride, int num_vertices,
                           const void *indices, int num_indices, int size_indices,
                           float scale_x, float scale_y);
+bool DC_PVR_QueueCopy(SDL_Renderer *renderer, SDL_RenderCommand *cmd,
+                      SDL_Texture *texture, const SDL_FRect *srcrect,
+                      const SDL_FRect *dstrect, const SDL_FRect *unscaled_dstrect);
 bool DC_PVR_EmitClear(SDL_Renderer *renderer, const SDL_RenderCommand *cmd);
 bool DC_PVR_RunGeometryCommand(SDL_Renderer *renderer,
                                const SDL_RenderCommand *cmd,

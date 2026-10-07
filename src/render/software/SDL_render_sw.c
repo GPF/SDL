@@ -274,8 +274,10 @@ static bool SW_QueueFillRects(SDL_Renderer *renderer, SDL_RenderCommand *cmd, co
 }
 
 static bool SW_QueueCopy(SDL_Renderer *renderer, SDL_RenderCommand *cmd, SDL_Texture *texture,
-                        const SDL_FRect *srcrect, const SDL_FRect *dstrect)
+                        const SDL_FRect *srcrect, const SDL_FRect *dstrect,
+                        const SDL_FRect *unscaled_dstrect)
 {
+    (void)unscaled_dstrect;
     SDL_Rect *verts = (SDL_Rect *)SDL_AllocateRenderVertices(renderer, 2 * sizeof(SDL_Rect), 0, &cmd->data.draw.first);
 
     if (!verts) {

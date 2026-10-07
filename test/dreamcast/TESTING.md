@@ -895,6 +895,26 @@ sequence that no longer matches the unbatched path, so it was not kept. The per-
 `RunGeometryCommand` is. Not tried: float instead of double for the area test (small gain,
 and it changes which near-degenerate triangles are dropped).
 
-What is left is mostly sprites, at 53 us each: the SDL core's per-call work plus
-`DC_PVR_QueueGeometry` (an earlier probe build measured about 25 us per call) rather than
-emission, which is where to look next.
+Sprite fast path: SDL core now passes `QueueCopy` both its scaled destination rect and the
+original rect. Other backends ignore the added private callback argument; `QueueCopyEx`
+already receives an unscaled destination rect and remains on the generic geometry path.
+The PVR uses the direct copy path only for positive power-of-two view scales, where its
+four queued corners reproduce the generic path's add-then-scale coordinates exactly. It
+uses the same source-UV divisions, backing-size scaling, target-texture rule and color
+packing. Other scales and inputs rejected by the generic geometry validation fall back to
+`DC_PVR_QueueGeometry` with the original rect and scale. `SDL_RENDERCMD_COPY` emits through
+`DC_PVR_EmitClippedQuad`, preserving the expanded order `[q0,q1,q2],[q0,q2,q3]`.
+
+The host equivalence harness compares the extracted generic queue and PVR copy queue over
+6,000,000 randomized cases, including ordinary and render-target textures, POT and NPOT
+dimensions, power-of-two and other scales, non-finite inputs, modulation and clipping: 0
+queued-record or emitted-vertex mismatches. A deliberately perturbed top-right vertex is
+detected by its negative control. The geometry probe measured 26.21 us per
+`DC_PVR_QueueGeometry` call including two timer reads; subtracting the estimated 3.0 us
+timer overhead gives about 23.2 us in the backend and 30.5 us in the surrounding SDL path.
+Hardware (`pvr_geometry_bench`), before / after: sprite 53.65 / 27.13 us; the
+`testsprite`-like submit frame 13.54 / 10.72 ms. The nearest textured-quad capture matches
+its model exactly; bilinear matches within 2.75 of 31 levels. Copy/transform output matches
+its previous capture, and all rerun geometry/target/hardening captures match within 8 RGB
+levels. `pvr_texture_churn`, `pvr_texture_update_race`, gate 8 (three runs), P1-A and all
+three P1-C repeat-pressure runs pass.
