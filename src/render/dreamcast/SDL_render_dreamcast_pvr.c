@@ -237,10 +237,16 @@ static bool DC_PVR_FinishActiveScene(SDL_Renderer *renderer)
     }
     data->scene_active = false;
 #if SDL_VIDEO_RENDER_DREAMCAST_PVR
+#ifdef DC_PVR_TRACE_TARGETS
+    SDL_Log("PVRTRACE scene_finish ta_ready_before_wait=%d", pvr_check_ready());
+#endif
     if (pvr_wait_render_done() < 0) {
         data->pvr_failed = true;
         return SDL_SetError("Timed out waiting for Dreamcast PVR scene completion");
     }
+#ifdef DC_PVR_TRACE_TARGETS
+    SDL_Log("PVRTRACE scene_finish ta_ready_after_wait=%d", pvr_check_ready());
+#endif
     if (data->scene_kind == DC_PVR_SCENE_TARGET && data->scene_target) {
         DC_PVR_TextureData *texturedata =
             (DC_PVR_TextureData *)data->scene_target->internal;

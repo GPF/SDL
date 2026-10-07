@@ -409,10 +409,33 @@ void DC_PVR_FreeTextureData(DC_PVR_TextureData *data)
         return;
     }
 #ifdef DC_PVR_TRACE_TARGETS
-    SDL_Log("PVRTRACE free vram=%p vram_next=%p", (void *)data->vram, (void *)data->vram_next);
+    /* Diagnostic only: compile with -DDC_PVR_TRACE_TARGETS. No behavior change.
+     * In-band allocator metadata is written into the first 8 bytes of a freed
+     * VRAM block, so the words seen here are the texels if the PVR has already
+     * fetched them, or free-list pointers if the free landed first. */
+    {
+        const uint32_t *words = (const uint32_t *)data->vram;
+        SDL_Log("PVRTRACE free vram=%p vram_next=%p first8=%08x %08x ta_ready=%d",
+                (void *)data->vram, (void *)data->vram_next,
+                words ? (unsigned)words[0] : 0u, words ? (unsigned)words[1] : 0u,
+                pvr_check_ready());
+    }
 #endif
     if (data->vram) {
         pvr_mem_free(data->vram);
+#ifdef DC_PVR_TRACE_TARGETS
+        /* Diagnostic only: compile with -DDC_PVR_TRACE_TARGETS. Writes into the
+         * just-freed block, which is only safe in a trace build. If the frame
+         * shows the marker at texels 4..11 (screen x=136..159, y=176..177 for
+         * the gate 8 fixture), the PVR fetched this texture after the free. */
+        {
+            volatile uint32_t *marker = (volatile uint32_t *)data->vram;
+            for (int i = 4; i < 12; ++i) {
+                marker[i] = 0x83E0u | (uint32_t)i;   /* ARGB1555: opaque green ramp */
+            }
+            SDL_Log("PVRTRACE marker written after free at %p", (void *)marker);
+        }
+#endif
     }
     if (data->vram_next) {
         pvr_mem_free(data->vram_next);

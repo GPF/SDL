@@ -6,6 +6,9 @@
 
 #include <SDL3/SDL.h>
 #include "../pvr_phase0_screenshot.h"
+#ifdef PVR_PHASE0_HARDWARE_SCREENSHOT
+#include <dc/pvr.h>
+#endif
 
 static bool require_pvr(SDL_Renderer *renderer)
 {
@@ -19,7 +22,8 @@ static bool require_pvr(SDL_Renderer *renderer)
 }
 
 /* Diagnostic switch (default 0 = the gate): 1 = never destroy before present,
- * 2 = destroy after present. Build with -DDEFERRED_PROBE_MODE=<n>. */
+ * 2 = destroy after present, 3 = gate (destroy before present) plus a raw
+ * pvr_mem_malloc control block after the present. Build with -DDEFERRED_PROBE_MODE=<n>. */
 #ifndef DEFERRED_PROBE_MODE
 #define DEFERRED_PROBE_MODE 0
 #endif
@@ -114,7 +118,7 @@ int main(int argc, char **argv)
         SDL_Log("pvr_deferred_texture draw=FAIL %s", SDL_GetError());
         success = false;
     }
-    if (success && DEFERRED_PROBE_MODE == 0) {
+    if (success && (DEFERRED_PROBE_MODE == 0 || DEFERRED_PROBE_MODE == 3)) {
         /* Match SDL2's queued-destroy probe: SDL_DestroyTexture flushes the
          * queued draw, opening the PVR scene before the backend callback. */
         SDL_DestroyTexture(texture);
@@ -132,6 +136,21 @@ int main(int argc, char **argv)
         texture = NULL;
     }
 #ifdef PVR_PHASE0_HARDWARE_SCREENSHOT
+    if (success && DEFERRED_PROBE_MODE == 3) {
+        /* Control: first bytes of the block the allocator hands back after the free. */
+        volatile uint32_t *blk = (volatile uint32_t *)pvr_mem_malloc(8192);
+        SDL_Log("deferred_probe3 control_block=%p front=%p back=%p", (void *)blk,
+                (void *)pvr_get_front_buffer(), (void *)pvr_get_back_buffer());
+        if (blk) {
+            SDL_Log("deferred_probe3 control_pre  %08x %08x %08x %08x", (unsigned)blk[0],
+                    (unsigned)blk[1], (unsigned)blk[2], (unsigned)blk[3]);
+            for (int i = 0; i < 2048; ++i) blk[i] = 0xa5a50000u | (uint32_t)i;
+            int bad = 0;
+            for (int i = 0; i < 2048; ++i) bad += blk[i] != (0xa5a50000u | (uint32_t)i);
+            SDL_Log("deferred_probe3 control_readback_bad=%d", bad);
+            pvr_mem_free((pvr_ptr_t)blk);
+        }
+    }
     if (success && !pvr_phase0_capture(DEFERRED_PROBE_MODE == 1 ? "/pc/pvr_phase0_deferred_probe1.ppm" :
                                        DEFERRED_PROBE_MODE == 2 ? "/pc/pvr_phase0_deferred_probe2.ppm" :
                                        "/pc/pvr_phase0_deferred_texture.ppm")) {
