@@ -127,12 +127,20 @@ Open questions for C, not yet answered:
   reads of target contents would not be).
 - The presentation path runs an extra "preservation seed" scene after each frame; the
   generation numbering must count it.
-- A fixture that actually detects early reuse is needed to validate C. Gate 8 detects a
-  free that precedes the render start but exits before any reclamation point, so it
-  cannot judge C. `test/dreamcast/pvr_texture_churn` (gate 8's scene repeated 40 times
-  per run) is the attempt; earlier variants with other geometry and heavier frames could
-  not reproduce the race even on the original code, and the current version has not
-  been validated on hardware yet.
+- Validating C needs a detector that fails on early reclamation. Gate 8 detects a free
+  that precedes the render start but exits before any reclamation point, so on its own
+  it cannot judge C. `test/dreamcast/pvr_texture_churn` repeats gate 8's scene 40 times
+  per run (same textures, positions and destroy-before-present, with the same warm-up
+  presents, then a short delay so the final frame is displayed) and compares the
+  destroyed texture's quad with the expected checker. Validated on hardware: the racy
+  original fails all 40 iterations in every run (exactly the 16 corner pixels, 640 bad
+  pixels per run, 2 runs); the committed fix passes 40/40 twice; spin on
+  `pvr_check_ready()` + sleeping render-done passes 120/120; spin on both passes 120/120.
+  Earlier attempts with other geometry (a 256x256 full-screen texture, then a 64x64
+  texture in a small quad, with a frame-number marker) could not reproduce the race
+  even on the original code, because the race exists only while the scene's render has
+  not started yet and those frames did not leave the PVR in that state; the gate 8 scene
+  and its warm-up pattern do.
 
 ## Recommendation
 

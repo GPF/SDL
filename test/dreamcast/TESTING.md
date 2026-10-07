@@ -786,3 +786,20 @@ scheduler tick), which a 500 ms deadline loop shows as ~51 iterations.
 
 Any SDL-reported frame rate or timing taken on Dreamcast before this fix, including
 the fps lines printed by the SDL test programs, was not wall-clock.
+
+## PVR texture churn
+
+`pvr_texture_churn` repeats the gate 8 scene (two 64x64 ARGB1555 checker textures, the
+first destroyed before `SDL_RenderPresent`, after three warm-up presents) 40 times in
+one process and checks each iteration's destroyed-texture quad and control quad against
+the expected checker after the frame is displayed. It prints `pvr_texture_churn
+result=PASS` or `FAIL` and returns 0 or 1. Build it like the other fixtures against the
+library under test (`make -f Makefile.dc SDL3_PREFIX=<prefix>
+SDL3_CONFIG_INCLUDEDIR=<prefix>/include`, with `KOS_CFLAGS`/`KOS_LDFLAGS` pointing at the
+same prefix) and run it through the locked launcher.
+
+Purpose: a lifetime race that depends on timing is exercised 40 times per run instead of
+once, and any scheme that frees or reuses texture VRAM must keep it at zero bad
+iterations. On the racy original (no `pvr_wait_ready()`) every iteration fails with the
+16 corner pixels; on the committed fix it passes. See
+`results/pvr-scene-completion-design.md`.
