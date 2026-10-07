@@ -408,6 +408,9 @@ void DC_PVR_FreeTextureData(DC_PVR_TextureData *data)
     if (!data) {
         return;
     }
+#ifdef DC_PVR_TRACE_TARGETS
+    SDL_Log("PVRTRACE free vram=%p vram_next=%p", (void *)data->vram, (void *)data->vram_next);
+#endif
     if (data->vram) {
         pvr_mem_free(data->vram);
     }
@@ -432,6 +435,11 @@ void DC_PVR_DestroyTexture(SDL_Renderer *renderer, SDL_Texture *texture)
         renderdata->header_valid = false;
         renderdata->header_texture = NULL;
     }
+#ifdef DC_PVR_TRACE_TARGETS
+    SDL_Log("PVRTRACE destroy texture=%p vram=%p vram_next=%p scene_active=%d",
+            (void *)texture, (void *)data->vram, (void *)data->vram_next,
+            renderdata->scene_active);
+#endif
     if (renderdata->scene_active) {
         /* Emitted headers may still reference this VRAM until the scene
          * finishes; defer the free to presentation. */
