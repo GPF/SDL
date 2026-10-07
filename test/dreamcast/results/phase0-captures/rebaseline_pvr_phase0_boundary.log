@@ -1,0 +1,57 @@
+Connecting to 192.168.0.128...
+dc-load-ip 3.0.1 using Broadband Adapter (HIT-0400)
+Console enabled
+Upload <pvr_phase0_boundary.elf>
+File format is ELF, start address is 0x8c010000
+Section .text, lma 0x8c010000, size 1037468
+Section .init, lma 0x8c10e000, size 54
+Section .fini, lma 0x8c10e038, size 42
+Section .rodata, lma 0x8c10e080, size 120024
+Section .eh_frame, lma 0x8c12b558, size 460
+Section .ctors, lma 0x8c12b7a4, size 12
+Section .dtors, lma 0x8c12b7b0, size 8
+Section .data, lma 0x8c12b7b8, size 13500
+Section .got, lma 0x8c12ec74, size 12
+Transferred 1171580 bytes at 4359011 bytes / sec
+Executing at 0x8c010000
+Sending execute command (0xac010000, console=1, cdfsredir=0)...argv(1, argv0="pvr_phase0_boundary.elf")...executing
+
+--
+KallistiOS v2.3.0 [dreamcast/pristine]
+  Git revision: cf190e23
+  Tue Sep 29 03:56:19 PM MST 2026
+  gpf@gpf-B550-Phantom-Gaming-4-ac:/opt/toolchains/dc/kos
+  sh-elf-gcc (GCC) 17.0.0 20260703 (experimental)
+maple: active drivers:
+    Dreameye (Camera): Camera
+    Sound Input Peripheral: Microphone
+    PuruPuru (Vibration) Pack: JumpPack
+    VMU Driver: Clock, LCD, MemoryCard
+    Mouse Driver: Mouse
+    Keyboard Driver: Keyboard
+    Controller Driver: Controller
+    Lightgun: LightGun
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+dc-load console support enabled
+maple: attached devices:
+  B0: Dreamcast Controller           (01000000: Controller)
+  B1: Visual Memory                  (0e000000: Clock, LCD, MemoryCard)
+
+Initializing SDL_DC_DREAMCAST_PVR_VIDEO mode
+SDL3 Dreamcast video initialized: 640x480 (default), texture hints: (null)x(null)
+[dcwin_probe] CreateWindow enter window=0x8c14e088 internal=0x00000000 flags=0x00000008 size=640x480 pending=0x0
+DREAMCAST_CreateWindow: Client requested window at 0,0 with size 640x480
+[dcwin_probe] CreateWindow using target=640x480 requested=640x480
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+[dcwin_probe] CreateWindow vid_set_mode final disp=4097 pixel=1
+[dcwin_probe] CreateWindow return true window=0x8c14e088 internal=0x8c14e520 flags=0x00000608 size=640x480
+pvr_boundary renderer=Dreamcast PVR
+case target_texture=FAIL (expected rejection, got success)
+case lock_static_texture=PASS (SDL_LockTexture(): texture must be streaming)
+case blend_mod_rejected=PASS (That operation is not supported)
+case update_while_scene_open=PASS (Dreamcast PVR texture cannot be updated while it is referenced by an open scene)
+case update_after_present_allowed=PASS
+case non_triangle_geometry=PASS (Parameter 'num_vertices' is invalid)
+case non_finite_geometry=PASS (Dreamcast PVR geometry has a non-finite position)
+pvr_boundary result=FAIL cases=7
+Program returned 1
