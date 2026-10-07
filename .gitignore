@@ -175,3 +175,7 @@ doxygen_warn.txt
 # Dreamcast hardware test build products
 /test/dreamcast/**/*.elf
 /test/dreamcast/**/*.bin
+
+# Dreamcast run captures and generated romdisks
+/*.ppm
+/test/dreamcast/**/romdisk.img
