@@ -219,7 +219,7 @@ static bool DREAMCAST_VideoInit(SDL_VideoDevice *_this) {
 
     if (!video_mode_hint || SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") != 0) {
         if (!video_mode_hint) {
-            SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_OPENGL_VIDEO");
+            SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DREAMCAST_PVR_VIDEO");
             // SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");
             video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
             bool double_buffer = SDL_GetHintBoolean(SDL_HINT_VIDEO_DOUBLE_BUFFER, true);
@@ -228,10 +228,9 @@ static bool DREAMCAST_VideoInit(SDL_VideoDevice *_this) {
         }
     }
 
-    /* The PVR renderer is opt-in: it is only selected when the application
-     * asks for the PVR video mode. Changing the default video mode would also
-     * change the display configuration for applications that request OpenGL by
-     * name, so the video-mode policy stays coordinated with GLdc separately. */
+    /* SDL_DC_DREAMCAST_PVR_VIDEO is the default video mode, so the PVR renderer
+     * is selected by default. An application that asks for another mode keeps
+     * that mode, and the render driver follows the mode actually selected. */
     if (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DREAMCAST_PVR_VIDEO") == 0 &&
         SDL_GetHint(SDL_HINT_RENDER_DRIVER) == NULL) {
         SDL_SetHint(SDL_HINT_RENDER_DRIVER, "Dreamcast PVR");
