@@ -128,11 +128,17 @@ diagnostic fixture's do not. Remaining structural differences:
     mismatches expected at 4192 px, the new capture at 1001 px. The new capture's
     panel content matches the expected checker block-for-block, so the stored
     capture is the wrong frame and the new one is right.
-  - **Still unexplained in the new capture:** 704 px at y=0..1 (x=128..639) and
-    ~16 px at y=479 (x=608..637) are black where the expected final frame is red.
-    Those pixels equal the previous frame's black clear, so they look like pixels
-    the final clear polygon did not cover rather than a capture-edge artifact.
-    Not settled; a corner-marker run would be needed.
+  - **Bands explained as a capture artifact (2026-10-06 probe run).** 704 px at
+    y=0..1 (x=128..639) and ~16 px at y=479 (x=608..637) are black where the
+    expected final frame is red. They are not retained previous-frame content: a
+    diagnostic copy of the fixture (`pvr_dt_diag_bandprobe.c`) changed the frame
+    before the final one to a magenta clear, and the bands still read black — no
+    magenta appears anywhere in the capture. Their extent also varies between
+    runs (512/192, 512/203, 512/200 on the new runs; 484/70 and 512/212 on
+    earlier diag captures), so they are pixels of the captured page that were
+    never written and read as 0, not scene content. Captures:
+    `phase1-captures/rebaseline_pvr_dt_diag_bandprobe*.ppm`, run log
+    `logs/rebaseline_run_pvr_dt_diag_bandprobe.log`.
 - **Valid target-scene evidence is the red-background run**: three warmup frames,
   a flushed screen scene, one target scene, then a final screen scene with a red
   clear and an untextured white marker at `(16,464)`. The marker and background
