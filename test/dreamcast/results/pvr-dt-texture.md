@@ -43,13 +43,19 @@ property path; the next followed the GL-only loader. The fixture now names the
 local archive explicitly, and the final normal-build ELF was inspected before
 the passing run. These preliminary runs are not counted as feature failures.
 
-**Note (2026-10-06 second pass):** the stored capture is the evidence for this
-gate, and the 2026-10-06 re-run differs from it by 16197 pixels across the quad
-(mean about one framebuffer LSB darker). Ground truth could not be established:
-the fixture's `Troy2024.dt` is internally inconsistent — `codebook_size=255`
-implies 256 entries and 8-bit indices, but the payload holds only 16384 index
-bytes (2 bits per texel), which is the assumption the loader's size check uses.
-Capture pixels do match codebook entries, so VQ decoding is happening, but no
-index layout reproduces the capture. The difference is threshold-sensitive
-(45257 at tol 2, 16197 at tol 8, 6818 at tol 16). Which capture is right is
-unresolved.
+**Note (2026-10-06 second pass, corrected):** the 2026-10-06 re-run differs from
+the stored capture by 16197 pixels across the quad (threshold-sensitive: 45257 at
+tol 2, 16197 at tol 8, 6818 at tol 16). `Troy2024.dt` is self-consistent: 18464
+bytes = 32-byte header + 2048-byte codebook (256 entries x 4 RGB565 texels) +
+16384 one-byte indices (one per 2x2 block, 128x128 blocks). `codebook_size=255`
+means 256 entries; 16384 index bytes is the standard 8-bit-index layout, not an
+inconsistency. Decoding with the block index as a 7-bit morton (y bits in even
+positions, x bits odd) and the texel order inside an entry as
+`(x&1)<<1 | (y&1)`, expanded with plain shifts (5-bit<<3, 6-bit<<2), gives the
+ground truth for the 256x256 quad at (192,112): the **new** capture is the
+closer one (43% exact, mean absolute difference 4.8 per channel) versus the
+stored capture (15% exact, 10.2). Both captures read about +4 brighter than the
+decoded values on average and the residual is not exact, so filtering/dither
+differences are not ruled out; no positional shift (checked +-1 px). The earlier
+claim that the file was inconsistent came from a decoder using the wrong index
+layout. The stored capture is the weaker evidence for this gate.

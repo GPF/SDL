@@ -677,3 +677,23 @@ exact build commit was not recorded), build the hardening `p1c_repeat_control`
 fixture against it with `SCREENSHOT=1` and explicit `SDL3_PREFIX` /
 `SDL3_CONFIG_INCLUDEDIR`, and compare the cyan rectangle's x range at all three
 captures. Do not use the old library as a pass artifact.
+
+### Gate 8 deferred-texture corner: intermittent, correlates with displayed page (2026-10-06)
+
+Six runs of the unmodified gate against the current library, built with the trace
+define (`deferred_trace_run{1..6}` under `results/phase0-captures/`): the
+16-pixel deviation at x=128..135 y=176..177 (top-left of the destroyed texture's
+quad) appears in 5 of 6 runs and is exactly the same 16 pixels each time. It is
+present on all 5 runs where the displayed PVR page was `0xa5129100` (linear
+`0xa5094880`, the `vram_l` page) and absent on the 1 run where it was
+`0xa5929100`. Which page is displayed varies run to run for the same ELF.
+
+Modes of the probe switch in the fixture (`-DDEFERRED_PROBE_MODE`): 1 (never
+destroy) and 2 (destroy after present) showed 0 mismatches on the page that
+produces the defect in mode 0, one run each. The trace shows the deferral is
+behaving as designed: destroy with `scene_active=1`, texture VRAM `0xa4455160`
+freed only afterward. The cause is not established. So gate 8 is **not** a clean
+pass: it is intermittent, parity-dependent, and needs the destroy-before-present
+path; the earlier stored pass is consistent with having captured the other page.
+Next step if pursued: log the freed block against the page that is displayed and
+check the allocator's in-band metadata writes against the display page.
