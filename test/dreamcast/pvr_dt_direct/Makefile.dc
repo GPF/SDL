@@ -1,0 +1,58 @@
+TARGET = pvr_dt_direct
+OBJS = $(TARGET).o romdisk.o
+KOS_ROMDISK_DIR = romdisk
+SDL3_PREFIX ?= ../../../build-scripts/local-install
+HOST_CC ?= cc
+PVRTEX ?= $(KOS_BASE)/utils/pvrtex/pvrtex
+KOS_CFLAGS += -I$(SDL3_PREFIX)/include
+
+DT_ASSETS = romdisk/rgb565.dt romdisk/argb1555.dt romdisk/argb4444.dt
+
+ifeq ($(SCREENSHOT),1)
+KOS_CFLAGS += -DPVR_PHASE0_HARDWARE_SCREENSHOT
+endif
+
+all: $(TARGET).bin
+
+include $(KOS_BASE)/Makefile.rules
+
+asset_generator: asset_generator.c
+	$(HOST_CC) -std=c99 -Wall -Wextra -Werror $< -o $@
+
+romdisk/source.tga: asset_generator | romdisk
+	./asset_generator $@
+
+romdisk:
+	mkdir -p $@
+
+romdisk/rgb565.dt: romdisk/source.tga
+	$(PVRTEX) -i $< -f rgb565 -o $@
+
+romdisk/argb1555.dt: romdisk/source.tga
+	$(PVRTEX) -i $< -f argb1555 -o $@
+
+romdisk/argb4444.dt: romdisk/source.tga
+	$(PVRTEX) -i $< -f argb4444 -o $@
+
+clean:
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin romdisk.img asset_generator
+	rm -f $(DT_ASSETS) romdisk/source.tga
+
+$(TARGET).elf: $(OBJS)
+	kos-cc -o $(TARGET).elf $(OBJS) $(SDL3_PREFIX)/lib/dreamcast/libSDL3.a -lGL -lm -lpthread -lsh4zam
+
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin
+
+# Diagnostic build: single-target discriminator for the sampled-target row.
+pvr_dt_diag.elf: pvr_dt_diag.c romdisk.o
+	kos-cc $(CPPFLAGS) -o $@ $< romdisk.o $(SDL3_PREFIX)/lib/dreamcast/libSDL3.a -lGL -lm -lpthread -lsh4zam
+
+pvr_dt_diag.bin: pvr_dt_diag.elf
+	$(KOS_OBJCOPY) -O binary $< $@
+
+romdisk.img: $(DT_ASSETS)
+romdisk.o: romdisk.img
+
+run: $(TARGET).bin
+	$(KOS_LOADER) $(TARGET).bin
