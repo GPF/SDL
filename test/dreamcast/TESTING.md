@@ -765,3 +765,24 @@ worklog): pre-fix failing run `results/phase0-captures/deferred_trace_run1.{log,
 (16 px defect, displayed page `0xa5129100`); post-fix clean runs
 `results/phase1-captures/rebaseline_fix_g8_mode0_run{1,5,10}.{log,ppm}`, all displayed
 on `0xa5129100`. Hardening regression logs were not committed.
+
+## Timer calibration
+
+`timer_calibration` checks `SDL_GetTicks`/`SDL_GetTicksNS`/`SDL_GetPerformanceFrequency`
+against `clock_gettime(CLOCK_MONOTONIC)` (which tracks real time on the console)
+across sleeping, vblank-waiting and busy phases, plus a tick-based deadline loop.
+Build it against the library under test with
+`make -f Makefile.dc SDL3_PREFIX=<prefix> SDL3_CONFIG_INCLUDEDIR=<prefix>/include`
+and run it through the locked launcher. It prints `timer_calibration result=PASS` or
+`FAIL` and returns 0 or 1; every phase must be within 2% and the frequency must be 1e9.
+
+Before the fix, `SDL_systimer.c` read the SH4 perf counter and returned a frequency of
+`5 * 1000000000`, which overflows a 32-bit int to 705032704. SDL's clock then ran 1.41x
+fast while busy and nearly stopped while a thread slept (14 ms over a 2000 ms
+`SDL_Delay`), so a 500 ms tick-deadline loop with `SDL_Delay(1)` took 51.7 s of real
+time. All six checks failed. After the fix (generic `clock_gettime(CLOCK_MONOTONIC)`
+path) all pass, within 0.01%. Note that `SDL_Delay(1)` itself waits about 10 ms (the KOS
+scheduler tick), which a 500 ms deadline loop shows as ~51 iterations.
+
+Any SDL-reported frame rate or timing taken on Dreamcast before this fix, including
+the fps lines printed by the SDL test programs, was not wall-clock.
