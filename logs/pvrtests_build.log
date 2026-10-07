@@ -1,0 +1,299 @@
+[  1%] Building C object CMakeFiles/SDL3_test.dir/src/test/SDL_test_common.c.obj
+[  1%] Building C object CMakeFiles/SDL3_test.dir/src/test/SDL_test_assert.c.obj
+[  1%] Building C object CMakeFiles/SDL3_test.dir/src/test/SDL_test_font.c.obj
+[  1%] Building C object CMakeFiles/SDL3_test.dir/src/test/SDL_test_fuzzer.c.obj
+[  2%] Building C object CMakeFiles/SDL3_test.dir/src/test/SDL_test_compare.c.obj
+[  2%] Building C object CMakeFiles/SDL3_test.dir/src/test/SDL_test_crc32.c.obj
+[  2%] Building C object CMakeFiles/SDL3_test.dir/src/test/SDL_test_log.c.obj
+[  3%] Building C object CMakeFiles/SDL3_test.dir/src/test/SDL_test_md5.c.obj
+[  3%] Building C object CMakeFiles/SDL3_test.dir/src/test/SDL_test_memory.c.obj
+[  4%] Building C object CMakeFiles/SDL3-static.dir/src/dynapi/SDL_dynapi.c.obj
+[  4%] Building C object CMakeFiles/SDL3-static.dir/cmake_pch.h.gch
+[  5%] Building C object CMakeFiles/SDL3_test.dir/src/test/SDL_test_harness.c.obj
+[  6%] Building C object CMakeFiles/SDL3-static.dir/src/SDL_hints.c.obj
+[  8%] Building C object CMakeFiles/SDL3-static.dir/src/SDL_assert.c.obj
+[  8%] Building C object CMakeFiles/SDL3-static.dir/src/SDL_error.c.obj
+[  8%] Building C object CMakeFiles/SDL3-static.dir/src/SDL_guid.c.obj
+[  8%] Building C object CMakeFiles/SDL3-static.dir/src/SDL_hashtable.c.obj
+[  8%] Building C object CMakeFiles/SDL3-static.dir/src/SDL_list.c.obj
+[  9%] Building C object CMakeFiles/SDL3-static.dir/src/SDL_log.c.obj
+[  8%] Building C object CMakeFiles/SDL3-static.dir/src/SDL.c.obj
+[ 10%] Building C object CMakeFiles/SDL3-static.dir/src/audio/SDL_audio.c.obj
+[  9%] Building C object CMakeFiles/SDL3-static.dir/src/atomic/SDL_spinlock.c.obj
+[ 10%] Building C object CMakeFiles/SDL3-static.dir/src/SDL_properties.c.obj
+[ 10%] Building C object CMakeFiles/SDL3-static.dir/src/SDL_utils.c.obj
+[ 10%] Building C object CMakeFiles/SDL3-static.dir/src/audio/SDL_audiocvt.c.obj
+[ 11%] Building C object CMakeFiles/SDL3-static.dir/src/audio/SDL_audiodev.c.obj
+[ 12%] Building C object CMakeFiles/SDL3-static.dir/src/atomic/SDL_atomic.c.obj
+[ 12%] Building C object CMakeFiles/SDL3-static.dir/src/audio/SDL_audioqueue.c.obj
+[ 13%] Building C object CMakeFiles/SDL3-static.dir/src/audio/SDL_audioresample.c.obj
+[ 13%] Building C object CMakeFiles/SDL3-static.dir/src/audio/SDL_audiotypecvt.c.obj
+[ 13%] Building C object CMakeFiles/SDL3-static.dir/src/camera/SDL_camera.c.obj
+[ 13%] Building C object CMakeFiles/SDL3-static.dir/src/audio/SDL_wave.c.obj
+[ 14%] Building C object CMakeFiles/SDL3-static.dir/src/core/SDL_core_unsupported.c.obj
+[ 14%] Building C object CMakeFiles/SDL3-static.dir/src/cpuinfo/SDL_cpuinfo.c.obj
+[ 14%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_categories.c.obj
+[ 15%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_clipboardevents.c.obj
+[ 15%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_displayevents.c.obj
+[ 16%] Building C object CMakeFiles/SDL3-static.dir/src/audio/SDL_mixer.c.obj
+[ 17%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_dropevents.c.obj
+[ 17%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_events.c.obj
+[ 17%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_eventwatch.c.obj
+[ 18%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_keyboard.c.obj
+[ 19%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_keysym_to_keycode.c.obj
+[ 19%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_keymap.c.obj
+[ 19%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_keysym_to_scancode.c.obj
+[ 19%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_pen.c.obj
+[ 20%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_mouse.c.obj
+[ 21%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_quit.c.obj
+[ 22%] Linking C static library libSDL3_test.a
+[ 22%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_scancode_tables.c.obj
+[ 23%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_touch.c.obj
+[ 23%] Building C object CMakeFiles/SDL3-static.dir/src/events/imKStoUCS.c.obj
+[ 23%] Building C object CMakeFiles/SDL3-static.dir/src/events/SDL_windowevents.c.obj
+[ 24%] Building C object CMakeFiles/SDL3-static.dir/src/filesystem/SDL_filesystem.c.obj
+[ 24%] Building C object CMakeFiles/SDL3-static.dir/src/gpu/SDL_gpu.c.obj
+[ 25%] Building C object CMakeFiles/SDL3-static.dir/src/gpu/xr/SDL_gpu_openxr.c.obj
+[ 25%] Built target SDL3_test
+[ 25%] Building C object CMakeFiles/SDL3-static.dir/src/gpu/xr/SDL_openxrdyn.c.obj
+[ 26%] Building C object CMakeFiles/SDL3-static.dir/src/haptic/SDL_haptic.c.obj
+[ 26%] Building C object CMakeFiles/SDL3-static.dir/src/hidapi/SDL_hidapi.c.obj
+[ 27%] Building C object CMakeFiles/SDL3-static.dir/src/io/SDL_asyncio.c.obj
+[ 27%] Building C object CMakeFiles/SDL3-static.dir/src/io/SDL_iostream.c.obj
+[ 27%] Building C object CMakeFiles/SDL3-static.dir/src/io/generic/SDL_asyncio_generic.c.obj
+[ 28%] Building C object CMakeFiles/SDL3-static.dir/src/joystick/SDL_gamepad.c.obj
+[ 29%] Building C object CMakeFiles/SDL3-static.dir/src/joystick/SDL_steam_virtual_gamepad.c.obj
+[ 29%] Building C object CMakeFiles/SDL3-static.dir/src/joystick/controller_type.c.obj
+[ 29%] Building C object CMakeFiles/SDL3-static.dir/src/joystick/SDL_joystick.c.obj
+[ 30%] Building C object CMakeFiles/SDL3-static.dir/src/locale/SDL_locale.c.obj
+[ 30%] Building C object CMakeFiles/SDL3-static.dir/src/main/SDL_main_callbacks.c.obj
+[ 31%] Building C object CMakeFiles/SDL3-static.dir/src/main/SDL_runapp.c.obj
+[ 31%] Building C object CMakeFiles/SDL3-static.dir/src/misc/SDL_libusb.c.obj
+[ 32%] Building C object CMakeFiles/SDL3-static.dir/src/misc/SDL_url.c.obj
+[ 33%] Building C object CMakeFiles/SDL3-static.dir/src/render/SDL_render_unsupported.c.obj
+[ 33%] Building C object CMakeFiles/SDL3-static.dir/src/power/SDL_power.c.obj
+[ 33%] Building C object CMakeFiles/SDL3-static.dir/src/render/SDL_render.c.obj
+[ 34%] Building C object CMakeFiles/SDL3-static.dir/src/render/direct3d/SDL_render_d3d.c.obj
+[ 34%] Building C object CMakeFiles/SDL3-static.dir/src/render/direct3d/SDL_shaders_d3d.c.obj
+[ 35%] Building C object CMakeFiles/SDL3-static.dir/src/render/direct3d11/SDL_render_d3d11.c.obj
+[ 35%] Building C object CMakeFiles/SDL3-static.dir/src/render/direct3d11/SDL_shaders_d3d11.c.obj
+[ 35%] Building C object CMakeFiles/SDL3-static.dir/src/render/SDL_yuv_sw.c.obj
+[ 35%] Building C object CMakeFiles/SDL3-static.dir/src/render/direct3d12/SDL_shaders_d3d12.c.obj
+[ 36%] Building C object CMakeFiles/SDL3-static.dir/src/render/direct3d12/SDL_render_d3d12.c.obj
+[ 36%] Building C object CMakeFiles/SDL3-static.dir/src/render/dreamcast/SDL_render_dreamcast_pvr.c.obj
+[ 37%] Building C object CMakeFiles/SDL3-static.dir/src/render/dreamcast/SDL_render_dreamcast_pvr_geometry.c.obj
+[ 37%] Building C object CMakeFiles/SDL3-static.dir/src/render/dreamcast/SDL_render_dreamcast_pvr_texture.c.obj
+[ 38%] Building C object CMakeFiles/SDL3-static.dir/src/render/gpu/SDL_pipeline_gpu.c.obj
+[ 39%] Building C object CMakeFiles/SDL3-static.dir/src/render/gpu/SDL_shaders_gpu.c.obj
+[ 39%] Building C object CMakeFiles/SDL3-static.dir/src/render/gpu/SDL_render_gpu.c.obj
+[ 40%] Building C object CMakeFiles/SDL3-static.dir/src/render/opengl/SDL_render_gl.c.obj
+[ 40%] Building C object CMakeFiles/SDL3-static.dir/src/render/ngage/SDL_render_ngage.c.obj
+[ 40%] Building C object CMakeFiles/SDL3-static.dir/src/render/opengl/SDL_shaders_gl.c.obj
+[ 41%] Building C object CMakeFiles/SDL3-static.dir/src/render/opengles/SDL_render_gles.c.obj
+[ 41%] Building C object CMakeFiles/SDL3-static.dir/src/render/opengles2/SDL_render_gles2.c.obj
+[ 41%] Building C object CMakeFiles/SDL3-static.dir/src/render/opengles2/SDL_shaders_gles2.c.obj
+[ 42%] Building C object CMakeFiles/SDL3-static.dir/src/render/psp/SDL_render_psp.c.obj
+[ 42%] Building C object CMakeFiles/SDL3-static.dir/src/render/ps2/SDL_render_ps2.c.obj
+[ 43%] Building C object CMakeFiles/SDL3-static.dir/src/render/software/SDL_blendfillrect.c.obj
+[01m[K/home/gpf/code/dreamcast/SDL3/src/render/opengl/SDL_render_gl.c:[m[K In function ‘[01m[KSDL_GL_LoadDreamcastTexture_IO[m[K’:
+[01m[K/home/gpf/code/dreamcast/SDL3/src/render/opengl/SDL_render_gl.c:1242:65:[m[K [01;35m[Kwarning: [m[Kcomparison of constant ‘[01m[K0[m[K’ with boolean expression is always false [[01;35m[K-Wbool-compare[m[K]
+ 1242 |     if (GL_CheckError("Dreamcast .dt texture upload", renderer) [01;35m[K<[m[K 0) {
+      |                                                                 [01;35m[K^[m[K
+[ 43%] Building C object CMakeFiles/SDL3-static.dir/src/render/software/SDL_drawline.c.obj
+[ 43%] Building C object CMakeFiles/SDL3-static.dir/src/render/software/SDL_blendline.c.obj
+[ 44%] Building C object CMakeFiles/SDL3-static.dir/src/render/software/SDL_blendpoint.c.obj
+[ 45%] Building C object CMakeFiles/SDL3-static.dir/src/render/software/SDL_drawpoint.c.obj
+[ 45%] Building C object CMakeFiles/SDL3-static.dir/src/render/software/SDL_render_sw.c.obj
+[ 45%] Building C object CMakeFiles/SDL3-static.dir/src/render/software/SDL_triangle.c.obj
+[ 46%] Building C object CMakeFiles/SDL3-static.dir/src/render/vitagxm/SDL_render_vita_gxm.c.obj
+[ 46%] Building C object CMakeFiles/SDL3-static.dir/src/render/vitagxm/SDL_render_vita_gxm_memory.c.obj
+[ 47%] Building C object CMakeFiles/SDL3-static.dir/src/render/vitagxm/SDL_render_vita_gxm_tools.c.obj
+[ 48%] Building C object CMakeFiles/SDL3-static.dir/src/render/vulkan/SDL_shaders_vulkan.c.obj
+[ 48%] Building C object CMakeFiles/SDL3-static.dir/src/render/vulkan/SDL_render_vulkan.c.obj
+[ 48%] Building C object CMakeFiles/SDL3-static.dir/src/sensor/SDL_sensor.c.obj
+[ 49%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_crc16.c.obj
+[ 49%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_crc32.c.obj
+[ 50%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_getenv.c.obj
+[ 50%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_iconv.c.obj
+[ 50%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_malloc.c.obj
+[ 50%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_memmove.c.obj
+[ 51%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_memcpy.c.obj
+[ 51%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_mslibc.c.obj
+[ 52%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_memset.c.obj
+[ 53%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_murmur3.c.obj
+[ 53%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_qsort.c.obj
+[ 54%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_random.c.obj
+[ 54%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_strtokr.c.obj
+[ 54%] Building C object CMakeFiles/SDL3-static.dir/src/storage/SDL_storage.c.obj
+[ 55%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_string.c.obj
+[ 56%] Building C object CMakeFiles/SDL3-static.dir/src/thread/SDL_thread.c.obj
+[ 56%] Building C object CMakeFiles/SDL3-static.dir/src/time/SDL_time.c.obj
+[ 56%] Building C object CMakeFiles/SDL3-static.dir/src/stdlib/SDL_stdlib.c.obj
+[ 57%] Building C object CMakeFiles/SDL3-static.dir/src/timer/SDL_timer.c.obj
+[ 57%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_RLEaccel.c.obj
+[ 58%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_blit.c.obj
+[ 58%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_blit_0.c.obj
+[ 59%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_blit_1.c.obj
+[ 59%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_blit_A.c.obj
+[ 59%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_blit_N.c.obj
+[ 60%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_blit_auto.c.obj
+[ 60%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_blit_copy.c.obj
+[ 61%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_blit_slow.c.obj
+[ 61%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_bmp.c.obj
+[ 62%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_clipboard.c.obj
+[ 62%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_egl.c.obj
+[ 63%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_fillrect.c.obj
+[ 63%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_pixels.c.obj
+[ 63%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_rotate.c.obj
+[ 64%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_rect.c.obj
+[ 64%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_stb.c.obj
+[ 65%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_stretch.c.obj
+[ 65%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_surface.c.obj
+[ 66%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_video.c.obj
+[ 66%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_video_unsupported.c.obj
+[ 66%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_yuv.c.obj
+[ 67%] Building C object CMakeFiles/SDL3-static.dir/src/video/SDL_vulkan_utils.c.obj
+[ 68%] Building C object CMakeFiles/SDL3-static.dir/src/video/yuv2rgb/yuv_rgb_lsx.c.obj
+[ 68%] Building C object CMakeFiles/SDL3-static.dir/src/video/yuv2rgb/yuv_rgb_sse.c.obj
+[ 68%] Building C object CMakeFiles/SDL3-static.dir/src/video/yuv2rgb/yuv_rgb_std.c.obj
+[ 69%] Building C object CMakeFiles/SDL3-static.dir/src/libm/e_atan2.c.obj
+[ 69%] Building C object CMakeFiles/SDL3-static.dir/src/libm/e_exp.c.obj
+[ 70%] Building C object CMakeFiles/SDL3-static.dir/src/libm/e_fmod.c.obj
+[ 70%] Building C object CMakeFiles/SDL3-static.dir/src/libm/e_log.c.obj
+[ 71%] Building C object CMakeFiles/SDL3-static.dir/src/libm/e_log10.c.obj
+[ 71%] Building C object CMakeFiles/SDL3-static.dir/src/libm/e_pow.c.obj
+[ 72%] Building C object CMakeFiles/SDL3-static.dir/src/libm/e_rem_pio2.c.obj
+[ 72%] Building C object CMakeFiles/SDL3-static.dir/src/libm/e_sqrt.c.obj
+[ 73%] Building C object CMakeFiles/SDL3-static.dir/src/libm/k_cos.c.obj
+[ 73%] Building C object CMakeFiles/SDL3-static.dir/src/libm/k_rem_pio2.c.obj
+[ 73%] Building C object CMakeFiles/SDL3-static.dir/src/libm/k_sin.c.obj
+[ 73%] Building C object CMakeFiles/SDL3-static.dir/src/libm/s_atan.c.obj
+[ 74%] Building C object CMakeFiles/SDL3-static.dir/src/libm/k_tan.c.obj
+[ 75%] Building C object CMakeFiles/SDL3-static.dir/src/libm/s_copysign.c.obj
+[ 75%] Building C object CMakeFiles/SDL3-static.dir/src/libm/s_cos.c.obj
+[ 76%] Building C object CMakeFiles/SDL3-static.dir/src/libm/s_isinf.c.obj
+[ 76%] Building C object CMakeFiles/SDL3-static.dir/src/libm/s_floor.c.obj
+[ 76%] Building C object CMakeFiles/SDL3-static.dir/src/libm/s_isinff.c.obj
+[ 77%] Building C object CMakeFiles/SDL3-static.dir/src/libm/s_fabs.c.obj
+[ 78%] Building C object CMakeFiles/SDL3-static.dir/src/libm/s_isnanf.c.obj
+[ 78%] Building C object CMakeFiles/SDL3-static.dir/src/libm/s_modf.c.obj
+[ 78%] Building C object CMakeFiles/SDL3-static.dir/src/libm/s_isnan.c.obj
+[ 78%] Building C object CMakeFiles/SDL3-static.dir/src/libm/s_sin.c.obj
+[ 79%] Building C object CMakeFiles/SDL3-static.dir/src/libm/s_tan.c.obj
+[ 79%] Building C object CMakeFiles/SDL3-static.dir/src/audio/dummy/SDL_dummyaudio.c.obj
+[ 80%] Building C object CMakeFiles/SDL3-static.dir/src/audio/disk/SDL_diskaudio.c.obj
+[ 80%] Building C object CMakeFiles/SDL3-static.dir/src/video/dummy/SDL_nullevents.c.obj
+[ 81%] Building C object CMakeFiles/SDL3-static.dir/src/video/dummy/SDL_nullframebuffer.c.obj
+[ 81%] Building C object CMakeFiles/SDL3-static.dir/src/video/dummy/SDL_nullvideo.c.obj
+[ 81%] Building C object CMakeFiles/SDL3-static.dir/src/thread/pthread/SDL_systhread.c.obj
+[ 82%] Building C object CMakeFiles/SDL3-static.dir/src/thread/pthread/SDL_sysmutex.c.obj
+[ 82%] Building C object CMakeFiles/SDL3-static.dir/src/thread/pthread/SDL_syscond.c.obj
+[ 83%] Building C object CMakeFiles/SDL3-static.dir/src/libm/s_scalbn.c.obj
+[ 83%] Building C object CMakeFiles/SDL3-static.dir/src/thread/pthread/SDL_systls.c.obj
+[ 84%] Building C object CMakeFiles/SDL3-static.dir/src/thread/pthread/SDL_sysrwlock.c.obj
+[ 85%] Building C object CMakeFiles/SDL3-static.dir/src/thread/pthread/SDL_syssem.c.obj
+[ 85%] Building C object CMakeFiles/SDL3-static.dir/src/timer/unix/SDL_systimer.c.obj
+[01m[K/home/gpf/code/dreamcast/SDL3/src/timer/unix/SDL_systimer.c:[m[K In function ‘[01m[KSDL_GetPerformanceFrequency[m[K’:
+[01m[K/home/gpf/code/dreamcast/SDL3/src/timer/unix/SDL_systimer.c:131:14:[m[K [01;35m[Kwarning: [m[Kinteger overflow in expression of type ‘[01m[Kint[m[K’ results in ‘[01m[K705032704[m[K’ [[01;35m[K-Woverflow[m[K]
+  131 |     return 5 [01;35m[K*[m[K 1000000000;
+      |              [01;35m[K^[m[K
+[01m[K/home/gpf/code/dreamcast/SDL3/src/timer/unix/SDL_systimer.c:[m[K At top level:
+[01m[K/home/gpf/code/dreamcast/SDL3/src/timer/unix/SDL_systimer.c:75:13:[m[K [01;35m[Kwarning: [m[K‘[01m[KCheckMonotonicTime[m[K’ defined but not used [[01;35m[K-Wunused-function[m[K]
+   75 | static void [01;35m[KCheckMonotonicTime[m[K(void)
+      |             [01;35m[K^~~~~~~~~~~~~~~~~~[m[K
+[ 86%] Building C object CMakeFiles/SDL3-static.dir/src/time/unix/SDL_systime.c.obj
+[ 86%] Building C object CMakeFiles/SDL3-static.dir/src/filesystem/dreamcast/SDL_sysfilesystem.c.obj
+[ 86%] Building C object CMakeFiles/SDL3-static.dir/src/filesystem/posix/SDL_sysfsops.c.obj
+[ 87%] Building C object CMakeFiles/SDL3-static.dir/src/joystick/dreamcast/SDL_sysjoystick.c.obj
+[ 87%] Building C object CMakeFiles/SDL3-static.dir/src/video/dreamcast/SDL_dreamcastframebuffer.c.obj
+[ 88%] Building C object CMakeFiles/SDL3-static.dir/src/video/dreamcast/SDL_dreamcastkeyboard.c.obj
+[ 88%] Building C object CMakeFiles/SDL3-static.dir/src/video/dreamcast/SDL_dreamcastmouse.c.obj
+[ 88%] Building C object CMakeFiles/SDL3-static.dir/src/haptic/dreamcast/SDL_syshaptics.c.obj
+[ 89%] Building C object CMakeFiles/SDL3-static.dir/src/audio/dreamcast/SDL_dreamcastaudio.c.obj
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastkeyboard.c:[m[K In function ‘[01m[KDREAMCAST_PollKeyboard[m[K’:
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastkeyboard.c:155:14:[m[K [01;35m[Kwarning: [m[Kunused variable ‘[01m[Kwas_down[m[K’ [[01;35m[K-Wunused-variable[m[K]
+  155 |         bool [01;35m[Kwas_down[m[K = state->key_states[i].was_down;
+      |              [01;35m[K^~~~~~~~[m[K
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:[m[K In function ‘[01m[Ksdl_dc_blit_textured[m[K’:
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:178:9:[m[K [01;35m[Kwarning: [m[K‘[01m[Kdcache_flush_range[m[K’ is deprecated: dcache_flush_range() has been renamed to dcache_wback_range() [[01;35m[K-Wdeprecated-declarations[m[K]
+  178 |         [01;35m[Kdcache_flush_range[m[K((unsigned)sdl_dc_buftex, sdl_dc_tex_bytes);
+      |         [01;35m[K^~~~~~~~~~~~~~~~~~[m[K
+In file included from [01m[K/opt/toolchains/dc/kos/include/kos.h:36[m[K,
+                 from [01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:24[m[K:
+[01m[K/opt/toolchains/dc/kos/include/kos/cache.h:279:20:[m[K [01;36m[Knote: [m[Kdeclared here
+  279 | static inline void [01;36m[Kdcache_flush_range[m[K(uintptr_t start, size_t count) {
+      |                    [01;36m[K^~~~~~~~~~~~~~~~~~[m[K
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:184:5:[m[K [01;35m[Kwarning: [m[K‘[01m[Kpvr_dr_init[m[K’ is deprecated: pvr_dr_init is not useful anymore [[01;35m[K-Wdeprecated-declarations[m[K]
+  184 |     [01;35m[Kpvr_dr_init[m[K(&dr_state);
+      |     [01;35m[K^~~~~~~~~~~[m[K
+In file included from [01m[K/opt/toolchains/dc/kos/kernel/arch/dreamcast/include/dc/pvr.h:1328[m[K,
+                 from [01m[K/opt/toolchains/dc/kos/kernel/arch/dreamcast/include/arch/kos.h:54[m[K,
+                 from [01m[K/opt/toolchains/dc/kos/include/kos.h:74[m[K:
+[01m[K/opt/toolchains/dc/kos/kernel/arch/dreamcast/include/dc/pvr/pvr_legacy.h:283:20:[m[K [01;36m[Knote: [m[Kdeclared here
+  283 | static inline void [01;36m[Kpvr_dr_init[m[K(pvr_dr_state_t *vtx_buf_ptr) {
+      |                    [01;36m[K^~~~~~~~~~~[m[K
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:[m[K In function ‘[01m[KSDL_DREAMCAST_CreateWindowFramebuffer[m[K’:
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:321:32:[m[K [01;35m[Kwarning: [m[Kconversion from ‘[01m[Kfloat[m[K’ to ‘[01m[Kunsigned int[m[K’ may change value [[01;35m[K-Wfloat-conversion[m[K]
+  321 |         __sdl_dc_mouse_shift = [01;35m[K640.0f[m[K / (float)w;
+      |                                [01;35m[K^~~~~~[m[K
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:[m[K In function ‘[01m[KSDL_DREAMCAST_UpdateWindowFramebuffer[m[K’:
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:386:13:[m[K [01;35m[Kwarning: [m[K‘[01m[Kdcache_flush_range[m[K’ is deprecated: dcache_flush_range() has been renamed to dcache_wback_range() [[01;35m[K-Wdeprecated-declarations[m[K]
+  386 |             [01;35m[Kdcache_flush_range[m[K((uintptr_t)sdl_dc_dblmem, sdl_dc_dblsize);
+      |             [01;35m[K^~~~~~~~~~~~~~~~~~[m[K
+[01m[K/opt/toolchains/dc/kos/include/kos/cache.h:279:20:[m[K [01;36m[Knote: [m[Kdeclared here
+  279 | static inline void [01;36m[Kdcache_flush_range[m[K(uintptr_t start, size_t count) {
+      |                    [01;36m[K^~~~~~~~~~~~~~~~~~[m[K
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:375:9:[m[K [01;35m[Kwarning: [m[Kunused variable ‘[01m[Kw[m[K’ [[01;35m[K-Wunused-variable[m[K]
+  375 |     int [01;35m[Kw[m[K = surface->w;
+      |         [01;35m[K^[m[K
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:373:10:[m[K [01;35m[Kwarning: [m[Kunused variable ‘[01m[Kvsync_enabled[m[K’ [[01;35m[K-Wunused-variable[m[K]
+  373 |     bool [01;35m[Kvsync_enabled[m[K = SDL_GetHintBoolean(SDL_HINT_RENDER_VSYNC, true);
+      |          [01;35m[K^~~~~~~~~~~~~[m[K
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:[m[K In function ‘[01m[KDREAMCAST_CreateWindowTexture[m[K’:
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:485:28:[m[K [01;35m[Kwarning: [m[Kconversion from ‘[01m[Kfloat[m[K’ to ‘[01m[Kunsigned int[m[K’ may change value [[01;35m[K-Wfloat-conversion[m[K]
+  485 |     __sdl_dc_mouse_shift = [01;35m[K640.0f[m[K / (float)sdl_dc_width;
+      |                            [01;35m[K^~~~~~[m[K
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:438:17:[m[K [01;35m[Kwarning: [m[Kunused variable ‘[01m[Kdouble_buffer_hint[m[K’ [[01;35m[K-Wunused-variable[m[K]
+  438 |     const char *[01;35m[Kdouble_buffer_hint[m[K = SDL_GetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER);
+      |                 [01;35m[K^~~~~~~~~~~~~~~~~~[m[K
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:[m[K At top level:
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:116:21:[m[K [01;35m[Kwarning: [m[K‘[01m[Kinit_system_cursor[m[K’ defined but not used [[01;35m[K-Wunused-function[m[K]
+  116 | static SDL_Surface *[01;35m[Kinit_system_cursor[m[K(const char *image[]) {
+      |                     [01;35m[K^~~~~~~~~~~~~~~~~~[m[K
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:73:20:[m[K [01;35m[Kwarning: [m[K‘[01m[Karrow[m[K’ defined but not used [[01;35m[K-Wunused-variable[m[K]
+   73 | static const char *[01;35m[Karrow[m[K[] = {
+      |                    [01;35m[K^~~~~[m[K
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastframebuffer.c:60:13:[m[K [01;35m[Kwarning: [m[K‘[01m[Ksdl_dc_is_textured_mode[m[K’ defined but not used [[01;35m[K-Wunused-function[m[K]
+   60 | static bool [01;35m[Ksdl_dc_is_textured_mode[m[K(const char *video_mode_hint)
+      |             [01;35m[K^~~~~~~~~~~~~~~~~~~~~~~[m[K
+[ 90%] Building C object CMakeFiles/SDL3-static.dir/src/video/dreamcast/SDL_dreamcastopengl.c.obj
+[ 90%] Building C object CMakeFiles/SDL3-static.dir/src/video/dreamcast/SDL_dreamcastvideo.c.obj
+[ 91%] Building C object CMakeFiles/SDL3-static.dir/src/video/dreamcast/SDL_dreamcastwindow.c.obj
+[ 91%] Building C object CMakeFiles/SDL3-static.dir/src/dialog/SDL_dialog.c.obj
+[ 92%] Building C object CMakeFiles/SDL3-static.dir/src/video/offscreen/SDL_offscreenevents.c.obj
+[ 92%] Building C object CMakeFiles/SDL3-static.dir/src/video/offscreen/SDL_offscreenframebuffer.c.obj
+[ 92%] Building C object CMakeFiles/SDL3-static.dir/src/process/SDL_process.c.obj
+[ 93%] Building C object CMakeFiles/SDL3-static.dir/src/video/offscreen/SDL_offscreenopengles.c.obj
+[ 93%] Building C object CMakeFiles/SDL3-static.dir/src/video/offscreen/SDL_offscreenvideo.c.obj
+[ 93%] Building C object CMakeFiles/SDL3-static.dir/src/video/offscreen/SDL_offscreenwindow.c.obj
+[ 94%] Building C object CMakeFiles/SDL3-static.dir/src/tray/SDL_tray_utils.c.obj
+[ 94%] Building C object CMakeFiles/SDL3-static.dir/src/sensor/dummy/SDL_dummysensor.c.obj
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastwindow.c:[m[K In function ‘[01m[KDREAMCAST_CreateWindow[m[K’:
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastwindow.c:264:52:[m[K [01;35m[Kwarning: [m[Kcomparison of constant ‘[01m[K0[m[K’ with boolean expression is always false [[01;35m[K-Wbool-compare[m[K]
+  264 |     if (SDL_SetWindowFullscreenMode(window, &mode) [01;35m[K<[m[K 0) {
+      |                                                    [01;35m[K^[m[K
+[ 95%] Building C object CMakeFiles/SDL3-static.dir/src/video/offscreen/SDL_offscreenvulkan.c.obj
+[ 95%] Building C object CMakeFiles/SDL3-static.dir/src/loadso/dummy/SDL_sysloadso.c.obj
+[ 96%] Building C object CMakeFiles/SDL3-static.dir/src/storage/generic/SDL_genericstorage.c.obj
+[ 96%] Building C object CMakeFiles/SDL3-static.dir/src/locale/dummy/SDL_syslocale.c.obj
+[01m[K/home/gpf/code/dreamcast/SDL3/src/video/dreamcast/SDL_dreamcastvideo.c:340:13:[m[K [01;35m[Kwarning: [m[K‘[01m[KDREAMCAST_SetDisplayMode[m[K’ defined but not used [[01;35m[K-Wunused-function[m[K]
+  340 | static bool [01;35m[KDREAMCAST_SetDisplayMode[m[K(SDL_VideoDevice *_this, SDL_VideoDisplay *display, SDL_DisplayMode *mode) {
+      |             [01;35m[K^~~~~~~~~~~~~~~~~~~~~~~~[m[K
+[ 97%] Building C object CMakeFiles/SDL3-static.dir/src/misc/dummy/SDL_sysurl.c.obj
+[ 97%] Building C object CMakeFiles/SDL3-static.dir/src/dialog/dummy/SDL_dummydialog.c.obj
+[ 97%] Building C object CMakeFiles/SDL3-static.dir/src/tray/dummy/SDL_tray.c.obj
+[ 98%] Building C object CMakeFiles/SDL3-static.dir/src/process/dummy/SDL_dummyprocess.c.obj
+[ 98%] Building C object CMakeFiles/SDL3-static.dir/src/main/generic/SDL_sysmain_callbacks.c.obj
+[ 99%] Building C object CMakeFiles/SDL3-static.dir/src/camera/dummy/SDL_camera_dummy.c.obj
+[100%] Linking C static library libSDL3.a
+[100%] Built target SDL3-static
