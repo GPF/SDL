@@ -592,6 +592,42 @@ Re-run against the reinstalled `local-install` with the front-buffer helper:
   libraries, so the offset is not a general library difference; it appears only
   for the hardening scene's geometry. Stored captures are kept; new ones are `rebaseline_*` under `results/phase1-captures/`.
 
+### Second-pass re-baseline (2026-10-06)
+
+Every fixture that calls `pvr_phase0_capture()` was rebuilt with `SCREENSHOT=1`
+and explicit `SDL3_PREFIX` / `SDL3_CONFIG_INCLUDEDIR` (the Makefile defaults point
+at the stale KOS addon archive), each ELF was checked for the `front buffer
+capture` string, and each launch went through `tools/dc-load/kos-tool-locked.sh`
+with a `SDL_DC_LOCK_TASK` label. Comparison used `tools/ppm_diff.py` at tolerance
+8 per channel. All re-run fixtures ran in 640x480 VGA RGB565; none requested a
+display mode the helper cannot read.
+
+| Fixture | Run | Differing px (tol 8) | Where / notes |
+|---|---|---|---|
+| `pvr_phase0_lifecycle` | PASS | 0 | identical |
+| `pvr_phase0_clear_triangle` | PASS | 0 | identical |
+| `pvr_phase0_coordinates` | PASS | 0 | identical |
+| `pvr_phase0_copy_transform` | PASS | 0 | identical |
+| `pvr_phase0_point_line` | PASS | 0 | identical |
+| `pvr_phase0_default_lines` | PASS | 0 | identical |
+| `pvr_phase0_deferred_texture` | PASS | 16 | top-left corner of the tested checkerboard, x=128..135 y=176..177. Stored is solid red there; the new capture has alternating white/dark-blue 2-px pairs. Reproduced exactly on a repeat run. |
+| `pvr_phase0_textured_quad` | PASS | 3840 each | quad only, x=256..383 y=176..303. Stored `nearest` is pixel-identical to the new `linear`, and stored `linear` to the new `nearest`: the stored pair is the other frame parity (wrong page). The new pair matches the fixture's even=nearest / odd=bilinear contract. |
+| `pvr_phase0_boundary` | FAIL | no capture | case 1 `target_texture` now succeeds because targets are promoted, so the fixture aborts before capturing. Nothing to compare; the fixture's expectation predates promotion and was not changed. |
+| `pvr_blend_modes` | PASS | 1845 | target panels only, x=344..553 y=16..212. The whole panel content is one pixel left of stored (stored = new shifted right by 1); consistent with the closed stale-library 1-px offset. |
+| `pvr_dt_texture` | PASS | 16197 | confined to the 256x256 quad, x=192..448 y=112..368. No positional shift (tested ±2 px). Mean absolute difference ~8 per channel, new slightly darker; the image content is the same. Reproduced exactly on a repeat run. |
+| `pvr_dt_diag` (textured) | PASS | 4912 | panel x=16..79 y=16..79 now shows content (blue clear + green marker) where stored is black; the white marker at (300,300) is present in the new capture and absent in stored. Plus a 704-px band at y=0..1 x=128..639 and ~16 px at y=479 x=608..639. Reproduced exactly on a repeat run. |
+| `pvr_phase1_hardening` P1-B | PASS | 0 | recovery capture identical; built against the separate injection prefix `build-scripts/local-install-pvrtests` (never over `local-install`). |
+| P1-C repeat pressure 2 | PASS | 249 x3 | same pattern as the already-recorded control: cyan rect one pixel left (new 440..535, stored 441..536) plus a 57-px marker-edge band at x=337..338 y=53..81. Stored vblank 1 here was the final scene, not the warmup page. |
+| P1-C repeat pressure 3 | PASS | 249 x3 | same pattern as pressure 2. |
+
+Not re-baselined (already re-run and passing against the new library): the
+`pvr_dt_direct` gate, `pvr_phase1_targets`, hardening P1-A, P1-C repeat control,
+and P1-C repeat pressure 1. Fixtures that do not use the capture helper were not
+touched.
+
+New captures and logs are `rebaseline_*` under `results/phase0-captures/` and
+`results/phase1-captures/`; build logs are under `logs/`. Stored captures are kept.
+
 ### Closed: 1-pixel offset in the stale library (no further investigation planned)
 
 The pre-2026-10-06 `local-install` library drew the hardening P1-C scene's
