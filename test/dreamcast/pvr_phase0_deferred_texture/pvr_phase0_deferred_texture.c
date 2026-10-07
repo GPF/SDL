@@ -18,6 +18,12 @@ static bool require_pvr(SDL_Renderer *renderer)
     return true;
 }
 
+/* Diagnostic switch (default 0 = the gate): 1 = never destroy before present,
+ * 2 = destroy after present. Build with -DDEFERRED_PROBE_MODE=<n>. */
+#ifndef DEFERRED_PROBE_MODE
+#define DEFERRED_PROBE_MODE 0
+#endif
+
 int main(int argc, char **argv)
 {
     SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DREAMCAST_PVR_VIDEO");
@@ -108,7 +114,7 @@ int main(int argc, char **argv)
         SDL_Log("pvr_deferred_texture draw=FAIL %s", SDL_GetError());
         success = false;
     }
-    if (success) {
+    if (success && DEFERRED_PROBE_MODE == 0) {
         /* Match SDL2's queued-destroy probe: SDL_DestroyTexture flushes the
          * queued draw, opening the PVR scene before the backend callback. */
         SDL_DestroyTexture(texture);
@@ -121,8 +127,14 @@ int main(int argc, char **argv)
     } else if (success) {
         SDL_Log("pvr_deferred_texture present_after_destroy=PASS");
     }
+    if (success && DEFERRED_PROBE_MODE == 2) {
+        SDL_DestroyTexture(texture);
+        texture = NULL;
+    }
 #ifdef PVR_PHASE0_HARDWARE_SCREENSHOT
-    if (success && !pvr_phase0_capture("/pc/pvr_phase0_deferred_texture.ppm")) {
+    if (success && !pvr_phase0_capture(DEFERRED_PROBE_MODE == 1 ? "/pc/pvr_phase0_deferred_probe1.ppm" :
+                                       DEFERRED_PROBE_MODE == 2 ? "/pc/pvr_phase0_deferred_probe2.ppm" :
+                                       "/pc/pvr_phase0_deferred_texture.ppm")) {
         SDL_Log("pvr_deferred_texture screenshot=FAIL %s", SDL_GetError());
         success = false;
     }
