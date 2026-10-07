@@ -122,6 +122,17 @@ diagnostic fixture's do not. Remaining structural differences:
   `(32,32,64,64)` but **outside** the 64×64 panel region `(16..79)`, and
   `(100,100)` is black. A panel-local mapping could not produce pixels outside the
   panel, so that run is invalid and aliasing is dropped as an inference.
+  - **Confirmed by the 2026-10-06 second pass.** Checked against the fixture's
+    expected final frame (red clear, white marker at (300,300), pot panel at
+    (16,16) with the red/green checker at target (8,8,48,48)): the stored capture
+    mismatches expected at 4192 px, the new capture at 1001 px. The new capture's
+    panel content matches the expected checker block-for-block, so the stored
+    capture is the wrong frame and the new one is right.
+  - **Still unexplained in the new capture:** 704 px at y=0..1 (x=128..639) and
+    ~16 px at y=479 (x=608..637) are black where the expected final frame is red.
+    Those pixels equal the previous frame's black clear, so they look like pixels
+    the final clear polygon did not cover rather than a capture-edge artifact.
+    Not settled; a corner-marker run would be needed.
 - **Valid target-scene evidence is the red-background run**: three warmup frames,
   a flushed screen scene, one target scene, then a final screen scene with a red
   clear and an untextured white marker at `(16,464)`. The marker and background

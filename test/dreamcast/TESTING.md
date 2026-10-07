@@ -590,7 +590,13 @@ Re-run against the reinstalled `local-install` with the front-buffer helper:
   (`stalelib_*`), so the stale library causes the offset, not the capture path.
   Unexplained: the promotion fixture was pixel-identical across the two
   libraries, so the offset is not a general library difference; it appears only
-  for the hardening scene's geometry. Stored captures are kept; new ones are `rebaseline_*` under `results/phase1-captures/`.
+  for the hardening scene's geometry. Stored captures are kept; new ones are `rebaseline_*` under `results/phase1-captures/`
+
+Update from the second pass: `pvr_blend_modes` shows the same one-pixel offset on
+its sampled target panels (x=344..553, y=16..212), so the offset was not limited
+to the hardening scene's geometry. That makes the promotion fixture being
+pixel-identical across the two libraries harder to explain, and the attribution
+still rests on pattern matching rather than on a reproduced stale-library build.
 
 ### Second-pass re-baseline (2026-10-06)
 
@@ -600,22 +606,34 @@ at the stale KOS addon archive), each ELF was checked for the `front buffer
 capture` string, and each launch went through `tools/dc-load/kos-tool-locked.sh`
 with a `SDL_DC_LOCK_TASK` label. Comparison used `tools/ppm_diff.py` at tolerance
 8 per channel. All re-run fixtures ran in 640x480 VGA RGB565; none requested a
-display mode the helper cannot read.
+display mode the helper cannot read. Hardware run output was not saved to files;
+only build logs are under `logs/`.
 
-| Fixture | Run | Differing px (tol 8) | Where / notes |
+15 fixtures re-run: 14 exited 0, 1 failed. 7 captures are pixel-identical to
+stored, 7 differ, 1 produced no capture. "Identical" means nothing changed, not
+that the scene is correct; the expected-content column is the only place a side
+is judged. Expected content was derived from each fixture's own drawing code, as
+`pvr_dt_direct/compare_capture.py` does for the .dt gate.
+
+| Fixture | Exit | vs stored (tol 8) | vs expected content |
 |---|---|---|---|
-| `pvr_phase0_lifecycle` | PASS | 0 | identical |
+| `pvr_phase0_lifecycle` | PASS | 0 | not modelled; unchanged only |
+| `pvr_phase0_clear_triangle` | PASS | 0 | not modelled; unchanged only |
+| `pvr_phase0_coordinates` | PASS | 0 | not modelled; unchanged only |
+| `pvr_phase0_copy_transform` | PASS | 0 | not modelled; unchanged only |
+| `pvr_phase0_point_line` | PASS | 0 | not modelled; unchanged only |
+| `pvr_phase0_default_lines` | PASS | 0 | not modelled; unchanged only |
 | `pvr_phase0_clear_triangle` | PASS | 0 | identical |
 | `pvr_phase0_coordinates` | PASS | 0 | identical |
 | `pvr_phase0_copy_transform` | PASS | 0 | identical |
 | `pvr_phase0_point_line` | PASS | 0 | identical |
 | `pvr_phase0_default_lines` | PASS | 0 | identical |
-| `pvr_phase0_deferred_texture` | PASS | 16 | top-left corner of the tested checkerboard, x=128..135 y=176..177. Stored is solid red there; the new capture has alternating white/dark-blue 2-px pairs. Reproduced exactly on a repeat run. |
+| `pvr_phase0_deferred_texture` | PASS | 16 | **Checked.** Expected ARGB1555 checker at (128,176,128,128): stored matches expected exactly (0 mismatches), new has 16 at x=128..135 y=176..177 (white + dark blue instead of red). So the *new* capture is the one that deviates. Not threshold-sensitive (16 px at tol 2, 8 and 16). This is gate 8, whose whole purpose is corruption after destroying a texture before present, so this needs a decision, not a repeat. |
 | `pvr_phase0_textured_quad` | PASS | 3840 each | quad only, x=256..383 y=176..303. Stored `nearest` is pixel-identical to the new `linear`, and stored `linear` to the new `nearest`: the stored pair is the other frame parity (wrong page). The new pair matches the fixture's even=nearest / odd=bilinear contract. |
 | `pvr_phase0_boundary` | FAIL | no capture | case 1 `target_texture` now succeeds because targets are promoted, so the fixture aborts before capturing. Nothing to compare; the fixture's expectation predates promotion and was not changed. |
-| `pvr_blend_modes` | PASS | 1845 | target panels only, x=344..553 y=16..212. The whole panel content is one pixel left of stored (stored = new shifted right by 1); consistent with the closed stale-library 1-px offset. |
-| `pvr_dt_texture` | PASS | 16197 | confined to the 256x256 quad, x=192..448 y=112..368. No positional shift (tested ±2 px). Mean absolute difference ~8 per channel, new slightly darker; the image content is the same. Reproduced exactly on a repeat run. |
-| `pvr_dt_diag` (textured) | PASS | 4912 | panel x=16..79 y=16..79 now shows content (blue clear + green marker) where stored is black; the white marker at (300,300) is present in the new capture and absent in stored. Plus a 704-px band at y=0..1 x=128..639 and ~16 px at y=479 x=608..639. Reproduced exactly on a repeat run. |
+| `pvr_blend_modes` | PASS | 1845 | target panels only, x=344..553 y=16..212. The whole panel content is one pixel left of stored (stored = new shifted right by 1). Consistent with the closed stale-library 1-px offset, but that remains an inference: the old library is gone and no expected-content model was built for this scene. See the Closed section, which now absorbs this. |
+| `pvr_dt_texture` | PASS | 16197 | **Ground truth unresolved.** The fixture's `Troy2024.dt` is internally inconsistent: `codebook_size=255` implies 256 entries and 8-bit indices, but the payload holds 16384 index bytes, i.e. 2 bits per texel. The renderer's size check passes only under that 2-bit assumption. Capture pixels are codebook entries (mean nearest-codebook distance 4.35), so VQ decoding is happening, but no index layout reproduces the capture. No positional shift (tested ±2 px); the gap is about one framebuffer LSB, so it is threshold-sensitive: 45257 px at tol 2, 16197 at tol 8, 6818 at tol 16. Which side is right cannot be said. |
+| `pvr_dt_diag` (textured) | PASS | 4912 | **Checked against the fixture's final frame** (red clear, white marker at (300,300), pot panel at (16,16) with the red/green checker at target (8,8,48,48)): new matches expected except 1001 px, stored mismatches expected at 4192 px (black panel, missing marker). So stored is the wrong frame and the new capture is the correct one, apart from the bands. New's remaining pixels: 704 px at y=0..1 x=128..639, ~16 px at y=479 x=608..637, and 281 panel block-boundary pixels. The band pixels are black, which is the *previous* frame's clear colour, so they look like pixels the final clear polygon did not cover rather than a capture-edge artifact. Unexplained; a corner-marker run would be needed to settle it. |
 | `pvr_phase1_hardening` P1-B | PASS | 0 | recovery capture identical; built against the separate injection prefix `build-scripts/local-install-pvrtests` (never over `local-install`). |
 | P1-C repeat pressure 2 | PASS | 249 x3 | same pattern as the already-recorded control: cyan rect one pixel left (new 440..535, stored 441..536) plus a 57-px marker-edge band at x=337..338 y=53..81. Stored vblank 1 here was the final scene, not the warmup page. |
 | P1-C repeat pressure 3 | PASS | 249 x3 | same pattern as pressure 2. |
@@ -625,8 +643,16 @@ Not re-baselined (already re-run and passing against the new library): the
 and P1-C repeat pressure 1. Fixtures that do not use the capture helper were not
 touched.
 
+Tolerance sensitivity (tol 2 / 8 / 16): deferred 16/16/16, diag 4912/4912/4912
+(real), dt_texture 45257/16197/6818 (threshold-sensitive, one LSB).
+
 New captures and logs are `rebaseline_*` under `results/phase0-captures/` and
 `results/phase1-captures/`; build logs are under `logs/`. Stored captures are kept.
+
+The `pvr_phase0_boundary` fixture is not valid for the promoted library: case 1
+expects `target_texture` to be rejected, which was true before promotion. It needs
+a one-line expectation update or retirement; nobody has taken that, and it produced
+no capture.
 
 ### Closed: 1-pixel offset in the stale library (no further investigation planned)
 

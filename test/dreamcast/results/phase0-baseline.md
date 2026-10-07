@@ -83,6 +83,12 @@ START-button wait; each now captures its frame and exits without controller inpu
   transparent ARGB1555 fixture texels; the fixture was corrected to set the
   opaque bit (`0x801f` blue, `0xfc00` red), then rebuilt and rerun. Captures show
   the expected checkerboard in both modes.
+  - **Note (2026-10-06 second pass):** the captures cited here are the stored
+    pair, which was later shown to be the wrong frame parity — stored `nearest`
+    is pixel-identical to the new `linear` and vice versa. The nearest-versus-
+    linear judgement in this gate was therefore evaluated against the wrong frame;
+    the 2026-10-06 re-run pair is the one that matches the fixture's
+    even=nearest / odd=bilinear contract.
 - **Gate 4:** coordinate transform passed. Captured sample locations matched the
   expected red, green, blue, yellow, cyan, and black regions.
 - **Gate 5:** all seven rejection/boundary cases passed. The first run showed
@@ -139,6 +145,15 @@ control checker; see
 [`pvr_phase0_deferred_texture.ppm`](phase0-captures/pvr_phase0_deferred_texture.ppm).
 The fixture returned 0, and the screenshot has five colors including the
 background.
+
+**Note (2026-10-06 second pass):** the stored capture matches the fixture's
+expected checkerboard exactly (0 mismatches over the tested region). The
+re-run against the current library does not: 16 pixels at the top-left corner of
+the tested checkerboard, x=128..135 y=176..177, read white and dark blue instead
+of red, and reproduce exactly. Since this gate exists to catch corruption after a
+texture is destroyed before present, that corner is the thing the gate guards
+against, so this gate's evidence is contested and needs a decision from the
+expected pattern.
 
 This follows the SDL2 `pvr_texture_stress` queued-destroy probe: draw, destroy
 before present, then present, with no explicit flush. SDL3's destroy path flushes

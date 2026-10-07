@@ -41,3 +41,11 @@ carried in the queued vertex color for both textured and untextured geometry.
 previous mode. No renderer or core changes were required by this audit. The
 fixture passed a strict `-Wall -Wextra -Werror` compile. The capture is
 [`pvr_blend_modes.ppm`](pvr_blend_modes.ppm).
+
+**Note (2026-10-06 second pass):** the re-run against the current library differs
+from the stored capture by 1845 pixels, all inside the target panels
+(x=344..553, y=16..212), as a one-pixel horizontal shift. The colour values
+themselves are unchanged, so this gate's colour conclusion stands; the shift is an
+additional symptom of the closed stale-library offset, and it shows the offset
+reached sampled target panels, not only the hardening scene's geometry.
+Attribution is by pattern only — the stale library is no longer installed.

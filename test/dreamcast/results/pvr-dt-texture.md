@@ -42,3 +42,14 @@ linked the global KOS addon archive. One faulted in the old `SDL_IOFromFile`
 property path; the next followed the GL-only loader. The fixture now names the
 local archive explicitly, and the final normal-build ELF was inspected before
 the passing run. These preliminary runs are not counted as feature failures.
+
+**Note (2026-10-06 second pass):** the stored capture is the evidence for this
+gate, and the 2026-10-06 re-run differs from it by 16197 pixels across the quad
+(mean about one framebuffer LSB darker). Ground truth could not be established:
+the fixture's `Troy2024.dt` is internally inconsistent — `codebook_size=255`
+implies 256 entries and 8-bit indices, but the payload holds only 16384 index
+bytes (2 bits per texel), which is the assumption the loader's size check uses.
+Capture pixels do match codebook entries, so VQ decoding is happening, but no
+index layout reproduces the capture. The difference is threshold-sensitive
+(45257 at tol 2, 16197 at tol 8, 6818 at tol 16). Which capture is right is
+unresolved.
