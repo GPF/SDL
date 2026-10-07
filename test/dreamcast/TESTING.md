@@ -697,3 +697,60 @@ pass: it is intermittent, parity-dependent, and needs the destroy-before-present
 path; the earlier stored pass is consistent with having captured the other page.
 Next step if pursued: log the freed block against the page that is displayed and
 check the allocator's in-band metadata writes against the display page.
+
+### Gate 8 corner: cause and fix (2026-10-07)
+
+Cause: `pvr_wait_render_done()` only blocks when KOS `render_busy` is set, and that
+is set from the TA-complete interrupt. If the TA has not finished the scene, the
+wait is a no-op, `DC_PVR_ReleaseDeferredTextures()` runs, and `pvr_mem_free`
+writes dlmalloc free-list pointers into the first 8 bytes of the freed texture
+before the PVR fetches those texels. Those 8 bytes are texels 0..3 of row 0,
+which is exactly the 16-pixel corner (decoded values match `0x8c1311dc`). A raw
+`pvr_mem_malloc` after the free returned the same block with those pointers in it
+(probe mode 3, 6 runs). Displayed page was not the discriminator.
+
+Fix: `DC_PVR_FinishActiveScene` calls `pvr_wait_ready()` before
+`pvr_wait_render_done()`, so the render-done wait is a real barrier. Verified on a
+non-trace library: the unmodified gate, 10 runs, 0 mismatching pixels in all of
+them (full frame), on the page that was defective before. Regression runs on the
+fixed library: `pvr_phase0_boundary` 7/7, `pvr_phase0_lifecycle`,
+`pvr_phase0_textured_quad` (same captures as the pre-fix rebaselines), and
+`pvr_phase1_hardening` P1-A, P1-B (injection prefix), P1-C repeat control and
+repeat pressure 1 to 3: all PASS, captures identical to the pre-fix rebaselines.
+
+Cost of the added wait. Measured with `clock_gettime(CLOCK_MONOTONIC)`, because
+`SDL_GetTicksNS` is wrong on this port (it advanced 14 ms during a 2000 ms
+`SDL_Delay`; `SDL_systimer.c` reads the SH4 perf counter and returns a frequency
+constant, `5 * 1000000000`, that overflows a 32-bit int). Synthetic bench, 3
+alternating runs per variant, spread under 0.1%:
+
+| barrier before the deferred free | per render-target switch | per frame (8 quads + present) | gate 8 |
+|---|---|---|---|
+| none: `pvr_wait_render_done()` only (racy original) | 3.28 ms | 16.65 ms (60 fps) | 6 of 6 runs corrupt |
+| `pvr_wait_ready()` + `pvr_wait_render_done()` (this fix) | 10.03 ms | 20.05 ms (50 fps) | 3 of 3 clean |
+| spin until `pvr_check_ready() == 0`, then `pvr_wait_render_done()` | 10.03 ms | 20.05 ms | 8 of 8 clean |
+| spin until `pvr_check_ready() == 0`, then spin until `render_busy == 0` | 3.43 ms | 16.67 ms | 10 of 10 clean |
+
+So the fix is correct but currently imposes a scheduler-tick-sized stall: about
++6.7 ms per scene finish at a target switch and +3.4 ms per presented frame in this
+synthetic. Every blocking wait here costs a full ~10 ms (durations are multiples of
+about 10 ms), which fits sleeping waits waking on the scheduler tick; an inference,
+not separately proven. A wait that spins instead of sleeping pays only the real PVR
+time and is just as correct. `pvr_check_ready()` returns 0 when the TA is ready (the
+render has started) and -1 when busy, the opposite of a boolean. An earlier version of
+this section claimed +73 us and +0.12 ms (broken SDL clock) and later that a spin on
+`pvr_check_ready()` was not a valid barrier (the loop condition was inverted, so it
+never waited); both claims were wrong and are retracted.
+
+A frame whose CPU work is long and whose GPU work is short loses CPU/GPU overlap when
+the barrier waits for render-done at all (spin-wait vs no barrier, ms per frame:
+100 sprites 23.7 vs 17.3, 600 points 43.6 vs 37.0; GPU-heavy frames are unaffected,
+12 full-screen translucent quads 51.8 vs 50.3). Reclaiming deferred textures without
+waiting would recover that. The sleeping wait should not be treated as the final
+design; see `results/pvr-scene-completion-design.md`.
+
+Evidence kept (the rest of the runs are not committed; counts above are from the
+worklog): pre-fix failing run `results/phase0-captures/deferred_trace_run1.{log,ppm}`
+(16 px defect, displayed page `0xa5129100`); post-fix clean runs
+`results/phase1-captures/rebaseline_fix_g8_mode0_run{1,5,10}.{log,ppm}`, all displayed
+on `0xa5129100`. Hardening regression logs were not committed.

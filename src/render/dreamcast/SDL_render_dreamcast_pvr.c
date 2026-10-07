@@ -237,9 +237,16 @@ static bool DC_PVR_FinishActiveScene(SDL_Renderer *renderer)
     }
     data->scene_active = false;
 #if SDL_VIDEO_RENDER_DREAMCAST_PVR
+    /* pvr_wait_render_done() only waits when pvr_state.render_busy is set, and
+     * render_busy is set from the TA-complete interrupt. If the TA is still
+     * processing the scene the wait returns immediately, and the deferred
+     * texture free below can land before the PVR has fetched the texels (the
+     * allocator then overwrites the first 8 bytes). Wait for the TA first so
+     * the render-done wait is a real barrier. */
 #ifdef DC_PVR_TRACE_TARGETS
     SDL_Log("PVRTRACE scene_finish ta_ready_before_wait=%d", pvr_check_ready());
 #endif
+    pvr_wait_ready();
     if (pvr_wait_render_done() < 0) {
         data->pvr_failed = true;
         return SDL_SetError("Timed out waiting for Dreamcast PVR scene completion");
