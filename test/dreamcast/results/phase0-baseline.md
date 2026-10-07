@@ -83,12 +83,15 @@ START-button wait; each now captures its frame and exits without controller inpu
   transparent ARGB1555 fixture texels; the fixture was corrected to set the
   opaque bit (`0x801f` blue, `0xfc00` red), then rebuilt and rerun. Captures show
   the expected checkerboard in both modes.
-  - **Note (2026-10-06 second pass):** the captures cited here are the stored
-    pair, which was later shown to be the wrong frame parity — stored `nearest`
-    is pixel-identical to the new `linear` and vice versa. The nearest-versus-
-    linear judgement in this gate was therefore evaluated against the wrong frame;
-    the 2026-10-06 re-run pair is the one that matches the fixture's
-    even=nearest / odd=bilinear contract.
+  - **Note (2026-10-07, expected-output model):** the stored pair is swapped
+    relative to its filenames, so it is not valid evidence for the
+    nearest-versus-linear judgement and is retained only as history. Scored against
+    a model derived from the fixture source (`pvr_phase0_textured_quad/expected_model.py`):
+    stored `pvr_phase0_textured_quad_linear.ppm` is the exact nearest frame
+    (16384/16384 px) and stored `..._nearest.ppm` is a bilinear frame. The 2026-10-06
+    re-run pair has nearest exact in `..._nearest.ppm` and bilinear in `..._linear.ppm`,
+    matching the fixture's even=nearest / odd=bilinear contract. The stored images
+    were most likely captured from the other frame parity (previous page); that is an inference, the model only shows the pair is swapped.
 - **Gate 4:** coordinate transform passed. Captured sample locations matched the
   expected red, green, blue, yellow, cyan, and black regions.
 - **Gate 5:** all seven rejection/boundary cases passed. The first run showed

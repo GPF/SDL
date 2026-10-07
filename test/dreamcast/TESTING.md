@@ -247,6 +247,17 @@ SDL_DC_LOCK_TASK=pvr-smoke2 tools/dc-load/kos-tool-locked.sh -t 192.168.0.128 \
 Expected: 128x128 checkerboard quad at pixel `(256,176)`, red/blue alternating,
 nearest on even frames and bilinear on odd frames.
 
+Expected output is modelled in `pvr_phase0_textured_quad/expected_model.py`
+(`python3 expected_model.py capture.ppm ...`, reports MATCH per mode). Nearest is
+exact: every texel is a 2x2 block, 16 px cells. Bilinear uses texel-center sampling
+with **repeat** addressing, so the quad's edge pixels blend with the opposite texture
+edge (the corner pixel reads 19/0/12, not pure red). Hardware bilinear tracks the ideal
+float filter within about 3 of 31 levels; its blend weights run a little high in the
+red channel (cause not established), so compare with a tolerance, not equality. The
+two 2026-10-06 rebaseline runs are bit-identical to each other; the older stored
+bilinear frame differs from them by one level on 1920 blend pixels (unexplained;
+possibly a library-version or dither difference).
+
 Failure signatures:
 
 - black quad → texture never uploaded, or the VRAM pointer is wrong;
@@ -629,7 +640,7 @@ is judged. Expected content was derived from each fixture's own drawing code, as
 | `pvr_phase0_point_line` | PASS | 0 | identical |
 | `pvr_phase0_default_lines` | PASS | 0 | identical |
 | `pvr_phase0_deferred_texture` | PASS | 16 | **Checked.** Expected ARGB1555 checker at (128,176,128,128): stored matches expected exactly (0 mismatches), new has 16 at x=128..135 y=176..177 (white + dark blue instead of red). So the *new* capture is the one that deviates. Not threshold-sensitive (16 px at tol 2, 8 and 16); a third run reproduced the same 16 pixels (`rebaseline_pvr_phase0_deferred_texture_repeat.ppm`). The deviating values are intermediate between the white clear and the blue texel (0xFFFF, 0x1813, 0x1815), so they are written content, not unwritten-page pixels. This is gate 8, whose whole purpose is corruption after destroying a texture before present, so this needs a decision, not a repeat. |
-| `pvr_phase0_textured_quad` | PASS | 3840 each | quad only, x=256..383 y=176..303. Stored `nearest` is pixel-identical to the new `linear`, and stored `linear` to the new `nearest`: the stored pair is the other frame parity (wrong page). The new pair matches the fixture's even=nearest / odd=bilinear contract. |
+| `pvr_phase0_textured_quad` | PASS | 3840 each | quad only, x=256..383 y=176..303. **Resolved against an expected-output model** (`pvr_phase0_textured_quad/expected_model.py`, derived from the fixture source): the new pair is correct; the stored pair is the other frame parity, i.e. swapped relative to its filenames (stored `linear` = exact nearest frame, stored `nearest` = a bilinear frame). New `nearest` matches the nearest model exactly (16384/16384 px, nothing outside the quad changed); new `linear` matches the bilinear model within 2.75 of 31 levels. The stored pair is retired as evidence. |
 | `pvr_phase0_boundary` | FAIL | no capture | case 1 `target_texture` now succeeds because targets are promoted, so the fixture aborts before capturing. Nothing to compare; the fixture's expectation predates promotion and was not changed. |
 | `pvr_blend_modes` | PASS | 1845 | target panels only, x=344..553 y=16..212. The whole panel content is one pixel left of stored (stored = new shifted right by 1). Consistent with the closed stale-library 1-px offset, but that remains an inference: the old library is gone and no expected-content model was built for this scene. See the Closed section, which now absorbs this. |
 | `pvr_dt_texture` | PASS | 16197 | Ground truth established (see `results/pvr-dt-texture.md`): `Troy2024.dt` is self-consistent (32 + 2048 codebook + 16384 8-bit indices); decoded with y-even morton block indices and `(x&1)<<1\|(y&1)` texel order, the **new** capture is closer (43% exact, mean abs diff 4.8) than the stored one (15%, 10.2). Both read ~+4 brighter than the decode; filtering/dither not ruled out. No positional shift. Threshold-sensitive: 45257 px at tol 2, 16197 at tol 8, 6818 at tol 16. |
