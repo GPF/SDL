@@ -449,8 +449,10 @@ headers:
 
 A required flush polygon would add its own header and vertices. Until its
 shape and reuse rules are known, neither the exact multiplier nor the maximum
-drawable count is established. The authoritative scene budget remains 8,192
-32-byte units. Correctness feasibility and capacity acceptability are separate
+drawable count is established. The former 8,192-unit scene budget is
+superseded; the empirical model in `PVR_CAPACITY_RESEARCH.md`, Section 14,
+covers one stable-header workload only and does not calibrate multipass header
+churn. Correctness feasibility and capacity acceptability are separate
 decisions.
 
 **Distinction:** Correctness feasibility (can the equation be reproduced?) is separate from performance acceptability (is the capacity cost acceptable?). Multipass may be correct but impractical for sprite-heavy workloads.

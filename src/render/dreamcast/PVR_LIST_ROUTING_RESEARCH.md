@@ -78,7 +78,7 @@ Key fields:
 | `opb_sizes[2]` | `PVR_BINSIZE_16` | Only `PVR_LIST_TR_POLY` is enabled (16-word / 64-byte bin size). All other lists are disabled. |
 | `autosort_disabled` | 1 | Translucent primitives processed in submission order. |
 | `opb_overflow_count` | 3 | Extra OPB partitions beyond the base. |
-| `vertex_buf_size` | 512 KiB, double-buffered | 8192 total 32-byte units per scene. |
+| `vertex_buf_size` | 512 KiB per frame buffer, double-buffered | The earlier 8,192 32-byte-unit estimate was incorrect and is superseded by the measured, workload-specific results in `PVR_CAPACITY_RESEARCH.md`, Section 14. |
 
 **Implication for routing:** Enabling `PVR_LIST_OP_POLY` requires a non-zero
 `opb_sizes[0]` at `pvr_init()`. This is a renderer-lifetime configuration

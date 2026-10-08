@@ -53,10 +53,10 @@ static const pvr_init_params_t pvr_params = {
 | Field | Value | Effect |
 |-------|-------|--------|
 | `opb_sizes[2]` | `PVR_BINSIZE_16` | Only `PVR_LIST_TR_POLY` enabled (16-word / 64-byte bin size). All other lists disabled. |
-| `vertex_buf_size` | 512 KiB total, 256 KiB per frame | 8,192 total 32-byte units per scene (vertices + headers). Double-buffered; one frame submits, one renders. |
+| `vertex_buf_size` | 512 KiB per frame buffer (double-buffered, 1 MiB total) | Per-scene TA vertex capacity. KOS assigns `buf->vertex_size = params->vertex_buf_size` for each of the two frame buffers (`pvr_buffers.c`, frames at `0` and `0x400000` in 8 MiB PVR RAM). Corrected by hardware measurement in Section 14; the earlier "256 KiB per frame / 8,192 units" figure was wrong. |
 | `dma_enabled` | 0 | Direct submission via store queues. `pvr_prim()` writes directly to the TA input. |
 | `autosort_disabled` | 1 | Translucent primitives processed in submission order. Preserves SDL painter order. |
-| `opb_overflow_count` | 3 | Three extra OPB partitions beyond the base. PVR hardware handles overflow internally; KOS exposes no observable signal. |
+| `opb_overflow_count` | 3 | Three extra OPB partitions beyond the base. KOS provides no renderer-level capacity result; its PVR interrupt handler can emit debug logs for OPB/TA overflow events. |
 | `vbuf_doublebuf_disabled` | 0 | Two frames worth of vertex data registered simultaneously. |
 
 ### 1.2 List usage
@@ -79,11 +79,18 @@ The renderer requires `SDL_HINT_DC_VIDEO_MODE=SDL_DC_DIRECT_VIDEO`. Width must b
 
 ### 2.1 TA vertex buffer (authoritative)
 
-**8,192 total 32-byte units per scene**, including polygon headers and vertices. This is the scene-wide capacity limit.
+**Measured configuration:** `vertex_buf_size` is 512 KiB for each of two TA
+buffers. On 640x480 VGA with direct submission and one stable polygon header,
+hardware measurements fit `20 bytes per submitted vertex command + 76 fixed
+bytes`. This gives an estimated limit of 26,210 vertex commands per active
+buffer. A line-count sweep brackets a failing workload between 24,150 and
+27,600 commands; it does not independently test the exact 26,210-command
+boundary. This is an empirical model, not a general budget for changing polygon
+headers, other video modes, or different PVR configurations. See Section 14.
 
 * **Fixed in hardware.** Selected during `pvr_init` via `vertex_buf_size`.
 * **Available for each synchronized scene.** TA capacity becomes available for a later properly synchronized scene through hardware-managed buffer rotation. In direct-submission mode, `pvr_scene_begin()` does not perform a software reset of the TA or OPB pointers.
-* **Double buffering does not protect against excessive submission within one scene.** It provides hardware-managed buffer rotation between properly synchronized scenes. Submission beyond the active TA capacity is unsafe. The observable hardware consequence is not established by the inspected KOS source and may include corruption, stalling, missing geometry, or failure to complete the scene. Hardware characterization is required.
+* **Double buffering does not protect against excessive submission within one scene.** It provides hardware-managed buffer rotation between properly synchronized scenes. Submission beyond the active TA capacity is unsafe. The line-capacity probe observed a full vertex-buffer cursor and an incomplete scene at the first failing count, but the precise hardware overflow behavior and possible simultaneous OPB pressure are not isolated.
 * **`pvr_shutdown()` plus `pvr_init()` is not guaranteed to recover.** See Section 3.
 
 ### 2.2 OPB (non-authoritative estimate)
@@ -113,7 +120,7 @@ The OPB is the PVR's tile-bin structure. For `PVR_LIST_TR_POLY` at 640×480 with
 Headers are 32-byte commands submitted through `pvr_prim()`. Each header configures texture, blend mode, filtering, depth, and culling for the following vertices.
 
 * The renderer uses a header cache keyed on `(texture pointer, blend mode, texture_env, filter)`. Cached headers are reused; uncached headers are compiled and submitted.
-* Each submitted header consumes one 32-byte TA command-buffer unit.
+* Each submitted header is a 32-byte input command to `pvr_prim()`. Its storage cost in the TA vertex buffer is not established by the single-header line probe; additional header submissions require separate calibration.
 * OPB pressure depends on primitive tile coverage and binning; the inspected source does not establish a per-header OPB-bin cost.
 
 ### 2.4 Strip and triangle submission
@@ -146,7 +153,7 @@ int pvr_prim(const void *data, size_t size) {
 
 * **Returns:** 0 on success, -1 on error (no list open, unaligned).
 * **Capacity check:** None. Direct submission via store queues.
-* **Critical finding:** `pvr_prim()` does not provide a useful capacity-exceeded result. It writes directly to the TA input. Submission beyond the active TA capacity is unsafe. The observable hardware consequence is not established by the inspected KOS source and may include corruption, stalling, missing geometry, or failure to complete the scene. Hardware characterization is required.
+* **Critical finding:** `pvr_prim()` does not provide a useful capacity-exceeded result. It writes directly to the TA input. Submission beyond the active TA capacity is unsafe. KOS source alone does not establish the hardware consequence; the 640x480 VGA line probe observed an incomplete scene when the measured vertex-buffer cursor reached its end. It did not isolate whether another capacity limit also contributed.
 
 ### 3.2 `pvr_wait_ready()` and `pvr_wait_render_done()`
 
@@ -190,7 +197,7 @@ Closes the open list, submits blank lists for enabled but unvisited lists, and r
 
 ### 3.6 Same-scene overflow consequence
 
-If more commands than 8,192 total 32-byte units are submitted before `pvr_scene_finish()`, `pvr_prim()` provides no capacity-exceeded result. Submission beyond the active TA capacity is unsafe. The observable hardware consequence is not established by the inspected KOS source and may include corruption, stalling, missing geometry, or failure to complete the scene. Hardware characterization is required. A later synchronization timeout would remain ambiguous.
+If submission exceeds the active TA vertex-buffer capacity, `pvr_prim()` provides no capacity-exceeded result. The measured 640x480 VGA line probe observed the vertex-buffer cursor reach its 512 KiB end at 27,600 submitted commands and the scene fail to complete. The actual exhaustion boundary was not swept exactly, and the run does not rule out simultaneous OPB/tile pressure. A synchronization timeout alone remains ambiguous.
 
 **Recovery, if possible, may require `pvr_shutdown()` plus `pvr_init()`, but success is not guaranteed.**
 
@@ -202,7 +209,7 @@ Flycast may handle overflow differently than hardware (e.g., silently dropping p
 
 ## 4. Current renderer command expansion
 
-| Command | Header (cached) | Vertices | Total units |
+| Command | Header submissions | Vertex commands | 32-byte `pvr_prim()` input-command count |
 |---------|----------------|----------|-------------|
 | Clear | 1 (untextured, NONE) | 4 (one four-vertex strip) | 5 |
 | Draw points | 0 (cached) | 6 per point | 6 |
@@ -211,7 +218,9 @@ Flycast may handle overflow differently than hardware (e.g., silently dropping p
 | Geometry clipped triangle (worst) | 0 (cached) | 15 | 15 |
 | Texture quad | 0 (cached) | 6 | 6 |
 
-With cached headers, only vertices consume units. Uncached headers add 1 unit each.
+This last column counts input commands only; it is not the internal TA
+vertex-buffer storage size. A submitted header is one 32-byte input command;
+the header's internal storage cost has not been measured separately.
 
 ---
 
@@ -234,7 +243,7 @@ Identical consecutive state reuses the cached header. Returning to an earlier st
 
 * No preflight estimate exists.
 * No scene splitting is performed.
-* If the SDL queue produces more than 8,192 32-byte units, submission exceeds the active TA capacity and is unsafe; the observable result requires hardware characterization.
+* If an SDL queue emits enough geometry to exceed the active TA vertex buffer, submission is unsafe. The renderer has no preflight estimate or scene splitting.
 
 ---
 
@@ -256,24 +265,42 @@ Scene splitting would require significant KOS/PVR changes. It is not recommended
 
 ## 8. Capacity observability
 
-KOS does not expose TA or OPB usage counters, vertex-buffer pointers, interrupt/overflow flags, or hardware registers in ordinary builds. `pvr_prim()` returns -1 on error (no list open, unaligned) but not on overflow.
+KOS does not provide a high-level capacity query or an overflow return from
+`pvr_prim()`; in direct mode it writes to the TA input. Test code can read PVR
+registers with `PVR_GET`, including the active vertex-buffer start/end/position
+and OPB start/end/position. The line probe used the vertex-buffer cursor to
+measure stored bytes. The OPB position did not vary in that test and does not
+report per-tile bin occupancy, so it cannot rule out OPB pressure.
 
-`PVR_KM_DBG` exposes memory allocation statistics in debug builds but does not expose TA/OPB usage.
+`pvr_check_ready()` reports the software TA-ready state. In KOS's render path,
+the transition to ready occurs after list registration completes and render
+submission starts; it does not report render completion. `pvr_wait_render_done()`
+waits on a separate state and times out after 100 ms. Repeated waits can extend
+the observation window, but a timeout still does not identify its cause.
 
-**Test-only instrumentation (compiles out of ordinary builds):** Count submitted vertex commands and headers; log counts to serial output. Do not rely on `pvr_wait_ready()` or `pvr_wait_render_done()` return values as reliable overflow signals.
+**Test-only instrumentation (compiles out of ordinary builds):** Count submitted
+vertex commands and headers; record relevant register positions and hardware
+captures. Do not use synchronization timeouts alone as overflow detectors.
 
 ---
 
 ## 9. Stress workload design
 
-All workloads use the canonical same-scene budget of 8,192 total 32-byte units (vertices + headers combined). Ordinary final loads target approximately 75–85% of the budget. Workload F is compile-time opt-in only.
+The workload budgets in the original A–F plan used an incorrect 8,192-unit
+capacity model and are superseded. For a stable-header workload at 640x480 VGA,
+use the empirical estimate `20 * vertex_commands + 76` bytes against the active
+524,288-byte TA vertex buffer. Header churn, other modes, and other geometry
+patterns need separate hardware calibration; do not claim a safe percentage for
+them from this single-header model. The previously documented A–F budget table
+is retained below only as historical workload composition, not as a capacity
+recommendation.
 
 ### 9.1 Workload A: stable untextured triangles
 
 * **Purpose:** Maximize vertex traffic, minimize header churn.
 * **Formula:** `1 + 3N` (1 cached header + 3 vertex commands per triangle).
 * **Ordinary final load:** 2,300 triangles.
-* **Total:** `1 + 3 × 2300 = 6901` units (84.2%).
+* **Total:** 6,900 vertex commands and one shared header. Under the measured single-header setup, the estimate is 138,076 bytes (26.3% of 524,288).
 * **Ramp:** 256, 512, 1024, 2048, 2300.
 
 ### 9.2 Workload B: deliberately header-heavy textured quads
@@ -281,7 +308,7 @@ All workloads use the canonical same-scene budget of 8,192 total 32-byte units (
 * **Purpose:** Force polygon-header recompilation and submission. State must actually change for every draw.
 * **Formula:** `7N` (1 header + 6 vertex commands per quad; no shared header).
 * **Ordinary final load:** 990 quads.
-* **Total:** `7 × 990 = 6930` units (84.6%).
+* **Total:** 5,940 vertex commands plus 990 header submissions. Header-churn storage is not calibrated by the single-header model.
 * **Ramp:** 256, 512, 768, 900, 990.
 
 ### 9.3 Workload C: same-texture copies
@@ -289,7 +316,7 @@ All workloads use the canonical same-scene budget of 8,192 total 32-byte units (
 * **Purpose:** Common sprite workload with header caching.
 * **Formula:** `1 + 6N` (1 cached header + 6 vertex commands per copy).
 * **Ordinary final load:** 1,150 copies.
-* **Total:** `1 + 6 × 1150 = 6901` units (84.2%).
+* **Total:** 6,900 vertex commands. The estimate is 138,000 bytes for vertex commands, plus uncalibrated header/setup storage.
 * **Ramp:** 256, 512, 1024, 1150.
 
 ### 9.4 Workload D: stable-state points
@@ -297,7 +324,7 @@ All workloads use the canonical same-scene budget of 8,192 total 32-byte units (
 * **Purpose:** Renderer-specific expansion and degenerate-triangle representation.
 * **Formula:** `1 + 6N` (1 cached header + 6 vertex commands per point).
 * **Ordinary final load:** 1,150 points.
-* **Total:** `1 + 6 × 1150 = 6901` units (84.2%).
+* **Total:** 6,900 vertex commands and one shared header. Under the measured single-header setup, the estimate is 138,076 bytes (26.3% of 524,288).
 * **Ramp:** 256, 512, 1024, 1150.
 
 ### 9.5 Workload E: mixed realistic frame
@@ -314,28 +341,33 @@ All workloads use the canonical same-scene budget of 8,192 total 32-byte units (
 | Translucent overlay quads (unique texture each draw) | 75 | 1 header + 6 vertices each | 525 |
 | UI rectangles (untextured, `NONE`) | 25 | 1 shared header + 6 vertices per rect | 151 |
 | Points (untextured, `NONE`, cached from UI) | 600 | 6 vertices each | 3,600 |
-| **Total** | | | **6,688 units (81.6%)** |
+| **Total** | | | **6,610 vertex commands, 78 headers** |
 
 The renderer has a single-entry header cache. In this exact command order, the clear's untextured `NONE` header is replaced by the textured background/sprite header and then by the overlay headers. The UI rectangles therefore require a new untextured `NONE` header, and the immediately following points reuse that UI header. The background and sprites use the same texture, blend mode, texture environment, and filter. Each overlay uses a distinct texture with `SDL_BLENDMODE_BLEND`, forcing one header per overlay.
 
-For `S` sprites and `O` overlays, the exact load is `3763 + 6S + 7O`: `O + 3` headers and `3760 + 6S + 6O` vertices.
+For `S` sprites and `O` overlays, the legacy 32-byte input-command count is
+`3763 + 6S + 7O`: `O + 3` headers and `3760 + 6S + 6O` vertex commands. This
+count is not an estimate of TA-buffer bytes when headers change.
 
-| Stage | Sprites (`S`) | Overlays (`O`) | Header units | Vertex units | Total units | Percentage of 8,192 |
-|-------|---------------|----------------|--------------|--------------|-------------|---------------------|
-| 1 | 100 | 15 | 18 | 4,450 | 4,468 | 54.5% |
-| 2 | 200 | 30 | 33 | 5,140 | 5,173 | 63.1% |
-| 3 | 300 | 45 | 48 | 5,830 | 5,878 | 71.8% |
-| 4 | 350 | 60 | 63 | 6,220 | 6,283 | 76.7% |
-| 5 (ordinary final) | 400 | 75 | 78 | 6,610 | 6,688 | 81.6% |
+| Stage | Sprites (`S`) | Overlays (`O`) | Header submissions | Vertex commands | Legacy 32-byte command count |
+|-------|---------------|----------------|--------------------|-----------------|-------------------------------|
+| 1 | 100 | 15 | 18 | 4,450 | 4,468 |
+| 2 | 200 | 30 | 33 | 5,140 | 5,173 |
+| 3 | 300 | 45 | 48 | 5,830 | 5,878 |
+| 4 | 350 | 60 | 63 | 6,220 | 6,283 |
+| 5 (ordinary final) | 400 | 75 | 78 | 6,610 | 6,688 |
+
+These mixed-frame header counts have not been converted to TA bytes. The
+single-header storage model must not be applied to this table.
 
 ### 9.6 Workload F: boundary probe (compile-time opt-in)
 
 * **Purpose:** Characterize the capacity boundary.
 * **Formula:** `1 + 3N` (same as Workload A).
-* **Theoretical maximum without exceeding 8,192 units:** 2,730 triangles (`1 + 3 × 2730 = 8191` units).
+* **Capacity limit:** Not specified. The historical 2,730-triangle figure used the superseded 8,192-unit model.
 * **Guard:** `DC_PVR_CAPACITY_BOUNDARY_PROBE` (compile-time define).
-* **Maximum:** `DC_PVR_CAPACITY_BOUNDARY_MAX`. Default must not exceed 2,800 triangles.
-* **Ramp near boundary:** 2,680, 2,700, 2,720, 2,730, 2,740, 2,750, 2,775, 2,800.
+* **Maximum:** `DC_PVR_CAPACITY_BOUNDARY_MAX`. The historical 2,800-triangle ceiling is conservative relative to the single-header estimate, but has not itself been hardware-qualified as a general safe limit.
+* **Ramp near boundary:** Do not use the historical ramp. Recalculate from a hardware-calibrated model before running a destructive boundary probe.
 * **Stop condition:** First observable anomaly. Stop immediately.
 * **Warnings:**
   * Print a prominent risk warning before starting.
@@ -346,14 +378,14 @@ For `S` sprites and `O` overlays, the exact load is `3763 + 6S + 7O`: `O + 3` he
 
 ### 9.7 Workload summary
 
-| Workload | Formula | Ordinary final workload | Final units | Percentage of 8,192 |
-|----------|---------|-------------------------|-------------|---------------------|
-| A | `1 + 3N` | 2,300 triangles | 6,901 | 84.2% |
-| B | `7N` | 990 quads | 6,930 | 84.6% |
-| C | `1 + 6N` | 1,150 copies | 6,901 | 84.2% |
-| D | `1 + 6N` | 1,150 points | 6,901 | 84.2% |
-| E | `3763 + 6S + 7O` | 400 sprites, 75 overlays | 6,688 | 81.6% |
-| F | `1 + 3N` | No ordinary run; theoretical in-budget maximum is 2,730 triangles | 8,191 | 99.99% |
+| Workload | Final workload | Vertex commands | Header submissions | Capacity estimate |
+|----------|----------------|-----------------|--------------------|-------------------|
+| A | 2,300 triangles | 6,900 | 1 | 138,076 bytes under single-header model |
+| B | 990 quads | 5,940 | 990 | Not calibrated for header churn |
+| C | 1,150 copies | 6,900 | 1 | 138,000 vertex-command bytes; clear/header setup not calibrated |
+| D | 1,150 points | 6,900 | 1 | 138,076 bytes under single-header model |
+| E | 400 sprites, 75 overlays | 6,610 | 78 | Not calibrated for header churn |
+| F | No ordinary run | Not applicable | Not applicable | No safe boundary inferred |
 
 ---
 
@@ -371,11 +403,13 @@ Hardware is first and authoritative. Flycast is secondary.
 
 ### 10.1 Focused physical-hardware result (2026-07-29)
 
-The ordinary A-E test passes on a real Dreamcast at 640x480 VGA. Every stage
-reaches presentation and its known-good recovery frame with the exact expected
-command accounting. Final totals are 6,901 units for A, 6,930 for B, 6,901 for
-C, 6,901 for D, and 6,688 for E. Workload F is absent, the program prints PASS,
-and it returns zero.
+The ordinary A-E test passed on a real Dreamcast at 640x480 VGA. Every stage
+reached presentation and its known-good recovery frame with the expected
+command accounting. The previously reported totals (6,901 for A, 6,930 for B,
+6,901 for C and D, and 6,688 for E) are legacy 32-byte command counts, not
+capacity units or percentages. Workload F was absent, the program printed PASS,
+and it returned zero. These visual results remain valid; the old capacity
+interpretation does not.
 
 Fourteen raw hardware framebuffer captures from a test-only
 `DC_PVR_CAPACITY_HARDWARE_SCREENSHOTS` build cover the final A-D stress frames,
@@ -393,11 +427,11 @@ authoritative serial-log path, capture paths, and SHA-256 values are recorded in
 
 ## 11. Failure and recovery policy
 
-* **Submission beyond the active TA capacity is unsafe.** The observable hardware consequence is not established by the inspected KOS source and may include corruption, stalling, missing geometry, or failure to complete the scene. Hardware characterization is required.
-* **`pvr_wait_ready()` and `pvr_wait_render_done()` timeouts are ambiguous and are not reliable overflow detectors.** They cannot distinguish overflow from ordinary long renders, corrupted state, or unrelated stalls.
+* **Submission beyond the active TA capacity is unsafe.** The line probe observed the active vertex-buffer cursor reach its configured end and the scene fail to complete at 27,600 commands. The precise boundary and possible contribution from OPB/tile pressure were not isolated.
+* **`pvr_wait_ready()` and `pvr_wait_render_done()` timeouts are not standalone overflow detectors.** A timeout can reflect overflow, a long render, corrupted state, or unrelated stalls; combine it with register observations and captures.
 * **Recovery, if possible, may require `pvr_shutdown()` plus `pvr_init()`, but success is not guaranteed.**
 * **Do not implement runtime overflow detection based on `pvr_wait_ready()` or `pvr_wait_render_done()` return values.** They produce false positives.
-* **Do not claim a specific overflow result.** Hardware characterization is required.
+* **Do not generalize one probe's result to other scenes or video modes.** Its storage model was measured with one stable header at 640x480 VGA.
 
 ---
 
@@ -405,7 +439,7 @@ authoritative serial-log path, capture paths, and SHA-256 values are recorded in
 
 ### Option A: No renderer change (recommendation for this increment)
 
-Document practical capacity limits (8,192 units per scene). Rely on applications to stay below them. No runtime monitoring. No performance cost. No implementation complexity.
+Document the measured 640x480 VGA single-header estimate (`20 * vertex_commands + 76` bytes) and keep workloads below the configured buffer. Do not treat it as a universal budget for header churn or other modes. No runtime monitoring. No performance cost. No implementation complexity.
 
 ### Option B: Conservative command-count guard (deferred)
 
@@ -454,8 +488,101 @@ No renderer code changes are implemented. Existing tests do not need to be rerun
 
 ### 13.4 Next steps
 
-Implement safe below-boundary stress characterization now; defer renderer safeguards and deliberate boundary probing. Workload F remains optional and must not be run without explicit operator choice via `DC_PVR_CAPACITY_BOUNDARY_PROBE`.
+Keep boundary probing deferred until the capacity model covers the workload's
+header pattern and video mode. Workload F remains optional and must not be run
+without explicit operator choice via `DC_PVR_CAPACITY_BOUNDARY_PROBE`.
+
+## 14. Line workload timeout — hardware characterization (2026-07-31)
+
+The geometry bench line workload timed out at high call counts. A bounded,
+single-frame-per-count probe (`test/dreamcast/test/pvr_line_capacity_probe/`)
+ran on physical 640x480 VGA hardware against both the pinned pre-fast-path
+archive and the working-tree fast-path archive.
+
+The archived probe logs predate correction of the printed model constant from
+44 to 76 bytes. Their `predicted_usage` field is therefore 32 bytes below the
+register-derived measurement; the recorded `vertbuf_bytes_reported` register
+deltas are unaffected and are used below. The probe source now prints the
+corrected prediction; this reporting fix was not rerun on hardware.
+
+### 14.1 Reproducible threshold
+
+Segment `(32,100) -> (606,200)`, 575 Bresenham pixels per call, parallel copies
+offset by 24 pixels, one distinct color per call so dropped geometry is
+measurable per call.
+
+| Calls | Vertex commands submitted | Modeled bytes requested | Vertex-buffer high-water | Render | Geometry |
+|---:|---:|---:|---:|---|---|
+| 1 | 3,450 | 69,076 | 69,076 / 524,288 | completes ~12 ms | complete |
+| 2 | 6,900 | 138,076 | 138,076 / 524,288 | completes ~13 ms | complete |
+| 4 | 13,800 | 276,076 | 276,076 / 524,288 | completes ~8-15 ms | complete |
+| 6 | 20,700 | 414,076 | 414,076 / 524,288 | completes ~15 ms | complete |
+| 7 | 24,150 | 483,076 (92.1%) | 483,076 / 524,288 | completes ~13-16 ms | complete |
+| 8 | 27,600 | 552,076 | **524,288 / 524,288 (register reaches end)** | **never completes** | no completed frame |
+
+Seven calls is the last success and eight calls the first failure in this sweep.
+At eight the vertex-buffer high-water mark equals its end exactly, the render
+does not complete during ten 100 ms waits, the recovery frame fails, and PVR
+shutdown times out on the Tile Accelerator. The failure was not recoverable
+within this run.
+
+### 14.2 Failure phase
+
+The failure occurs after submission: no SDL API error occurs during draw calls.
+`pvr_check_ready()` is `-1` before present and `0` after the failed wait. KOS
+clears its TA-busy state after list registration completes and render submission
+starts; the separate render-done wait still times out. Successful counts took
+8-16 ms, while the failed count remained incomplete for about 1.016 seconds.
+That makes ordinary render cost unlikely, but does not prove the failed scene
+could not take longer.
+
+### 14.3 Cause
+
+The vertex-buffer cursor reaches its configured end at the first failing count.
+Successful counts fit the empirical model `20 bytes per vertex command + 76
+fixed bytes`. Extrapolating gives an estimated limit of 26,210 commands (about
+4,368 six-vertex quads, or 7.6 calls at 575 pixels per call). The sweep did not
+test that exact threshold; it brackets failure between 24,150 and 27,600
+commands. At eight calls the model requests 552,076 bytes, 105.3% of the
+configured buffer.
+
+The probe does not rule out OPB/tile pressure as a simultaneous or alternative
+cause. OPB storage is partitioned per tile, and aggregate triangle count does
+not establish per-tile usage. The reported `PVR_TA_OPB_POS` was constant and did
+not provide per-tile occupancy. The register evidence directly establishes that
+the vertex-buffer cursor reached its end, but not that it was the only limit
+reached.
+
+### 14.4 Baseline versus fast path
+
+At successful counts 1-7, per-call pixel counts match and captures are
+byte-identical between the two archives. At failing count 8, captures are also
+byte-identical, but both show the previous completed front buffer; they do not
+compare geometry from the incomplete scene. The host differential harness
+provides the emitted-vertex equivalence evidence. The measured difference is CPU
+timing: the fast path submits during draw calls (~21.7 ms for eight calls),
+while the baseline queues in ~1.4 ms and submits inside `SDL_RenderPresent`
+(~103 ms). The baseline and fast-path runs have the same observed success/failure
+boundary.
+
+### 14.5 Decision
+
+No fast-path-specific backend defect is reproduced: the baseline and fast-path
+archives have the same success/failure boundary. The original 3,000-call bench
+workload is far beyond the measured scene limit. SDL clips each line to the
+640x480 viewport before Bresenham rasterization; applying that clipping to the
+benchmark endpoints gives about 1,529,154 points, or 9,174,924 vertex commands
+(about 350x the estimated 26,210-command limit). The current benchmark is
+bounded to two line calls per frame.
+
+Any future capacity guard would need a software high-water estimate against the
+configured buffer size. The current model covers vertex commands with one stable
+header only; header churn needs calibration. KOS direct-submit `pvr_prim()` has
+no capacity return. A guard remains deferred.
 
 ---
 
-**End of research.** This document establishes the TA capacity limit (8,192 32-byte units per scene), documents KOS overflow behavior, defines canonical stress workloads (A–F), and recommends Option A (no renderer change) as the current approach. The stress test (Workloads A–E) validates behavior below capacity limits. Workload F requires explicit operator opt-in.
+**End of research.** This document records KOS capacity behavior and an
+empirical 640x480 VGA single-header vertex-buffer model. The original A–F
+workload percentages are historical and are not capacity guarantees. No
+renderer capacity guard or scene splitting is currently implemented.

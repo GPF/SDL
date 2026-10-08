@@ -1,0 +1,165 @@
+Connecting to 192.168.0.128...
+dc-load-ip 3.0.1 using Broadband Adapter (HIT-0400)
+Console enabled
+Upload <probe-fastpath.bin>
+File format is raw binary, start address is 0x8c010000
+Section .raw, lma 0x8c010000, size 1120256
+Transferred 1120256 bytes at 6104172 bytes / sec
+Executing at 0x8c010000
+Sending execute command (0xac010000, console=1, cdfsredir=0)...argv(1, argv0="probe-fastpath.bin")...executing
+
+--
+KallistiOS v2.3.0 [dreamcast/pristine]
+  Git revision: cf190e23
+  Tue Sep 29 03:56:19 PM MST 2026
+  gpf@gpf-B550-Phantom-Gaming-4-ac:/opt/toolchains/dc/kos
+  sh-elf-gcc (GCC) 17.0.0 20260703 (experimental)
+maple: active drivers:
+    Dreameye (Camera): Camera
+    Sound Input Peripheral: Microphone
+    PuruPuru (Vibration) Pack: JumpPack
+    VMU Driver: Clock, LCD, MemoryCard
+    Mouse Driver: Mouse
+    Keyboard Driver: Keyboard
+    Controller Driver: Controller
+    Lightgun: LightGun
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+dc-load console support enabled
+maple: attached devices:
+  A0: Dreamcast Controller           (01000000: Controller)
+  A1: Visual Memory                  (0e000000: Clock, LCD, MemoryCard)
+
+INFO: SDL2 Dreamcast video initialized: 640x480
+INFO: DREAMCAST_CreateWindow: window 640x480 created for native PVR renderer
+INFO: Display modes for Dreamcast retrieved successfully.
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+INFO: Dreamcast PVR
+probe renderer=Dreamcast PVR
+
+probe calls=1 pixels_per_call=575 quads=575 triangles=1150 vertex_commands=3450 predicted_usage=69044
+probe line 0 color 248,0,0
+probe submit    2.70 ms (1 calls)
+probe after submit   opb 00080000..00092c00 pos 000212c0  vertbuf 00000000..00080000 pos 00010dd4
+probe usage opb_bytes_reported=19200 vertbuf_bytes_reported=69076 vertbuf_full=0
+probe check_ready before present=-1
+probe present    0.01 ms
+probe after present  opb 00480000..00492c00 pos 001212c0  vertbuf 00400000..00480000 pos 00400000
+probe render wait first result=0 attempts=1 elapsed   12.24 ms
+probe check_ready after wait=0
+INFO: capture: front64=0xa5929100 linear=0xa5494880 back64=0xa5129100 vram_l=0xa5494880
+INFO: Saved hardware screenshot to /pc/probe-line-1.ppm
+probe captured /pc/probe-line-1.ppm
+INFO: capture: front64=0xa5129100 linear=0xa5094880 back64=0xa5929100 vram_l=0xa5094880
+INFO: Saved hardware screenshot to /pc/probe-line-1-recovery.ppm
+probe captured /pc/probe-line-1-recovery.ppm
+
+probe calls=2 pixels_per_call=575 quads=1150 triangles=2300 vertex_commands=6900 predicted_usage=138044
+probe line 0 color 248,0,0
+probe line 1 color 0,248,0
+probe submit    5.43 ms (2 calls)
+probe after submit   opb 00080000..00092c00 pos 000212c0  vertbuf 00000000..00080000 pos 00021b5c
+probe usage opb_bytes_reported=19200 vertbuf_bytes_reported=138076 vertbuf_full=0
+probe check_ready before present=-1
+probe present    0.01 ms
+probe after present  opb 00480000..00492c00 pos 001212c0  vertbuf 00400000..00480000 pos 00400000
+probe render wait first result=0 attempts=1 elapsed   11.44 ms
+probe check_ready after wait=0
+INFO: capture: front64=0xa5929100 linear=0xa5494880 back64=0xa5129100 vram_l=0xa5494880
+INFO: Saved hardware screenshot to /pc/probe-line-2.ppm
+probe captured /pc/probe-line-2.ppm
+INFO: capture: front64=0xa5129100 linear=0xa5094880 back64=0xa5929100 vram_l=0xa5094880
+INFO: Saved hardware screenshot to /pc/probe-line-2-recovery.ppm
+probe captured /pc/probe-line-2-recovery.ppm
+
+probe calls=4 pixels_per_call=575 quads=2300 triangles=4600 vertex_commands=13800 predicted_usage=276044
+probe line 0 color 248,0,0
+probe line 1 color 0,248,0
+probe line 2 color 0,0,248
+probe line 3 color 248,248,0
+probe submit   10.83 ms (4 calls)
+probe after submit   opb 00080000..00092c00 pos 000212c0  vertbuf 00000000..00080000 pos 0004366c
+probe usage opb_bytes_reported=19200 vertbuf_bytes_reported=276076 vertbuf_full=0
+probe check_ready before present=-1
+probe present    0.01 ms
+probe after present  opb 00480000..00492c00 pos 001212c0  vertbuf 00400000..00480000 pos 00400000
+probe render wait first result=0 attempts=1 elapsed   14.95 ms
+probe check_ready after wait=0
+INFO: capture: front64=0xa5929100 linear=0xa5494880 back64=0xa5129100 vram_l=0xa5494880
+INFO: Saved hardware screenshot to /pc/probe-line-4.ppm
+probe captured /pc/probe-line-4.ppm
+INFO: capture: front64=0xa5129100 linear=0xa5094880 back64=0xa5929100 vram_l=0xa5094880
+INFO: Saved hardware screenshot to /pc/probe-line-4-recovery.ppm
+probe captured /pc/probe-line-4-recovery.ppm
+
+probe calls=6 pixels_per_call=575 quads=3450 triangles=6900 vertex_commands=20700 predicted_usage=414044
+probe line 0 color 248,0,0
+probe line 1 color 0,248,0
+probe line 2 color 0,0,248
+probe line 3 color 248,248,0
+probe line 4 color 248,0,248
+probe line 5 color 0,248,248
+probe submit   16.31 ms (6 calls)
+probe after submit   opb 00080000..00092c00 pos 000212c0  vertbuf 00000000..00080000 pos 0006517c
+probe usage opb_bytes_reported=19200 vertbuf_bytes_reported=414076 vertbuf_full=0
+probe check_ready before present=-1
+probe present    0.01 ms
+probe after present  opb 00480000..00492c00 pos 001212c0  vertbuf 00400000..00480000 pos 00400000
+probe render wait first result=0 attempts=1 elapsed   10.02 ms
+probe check_ready after wait=0
+INFO: capture: front64=0xa5929100 linear=0xa5494880 back64=0xa5129100 vram_l=0xa5494880
+INFO: Saved hardware screenshot to /pc/probe-line-6.ppm
+probe captured /pc/probe-line-6.ppm
+INFO: capture: front64=0xa5129100 linear=0xa5094880 back64=0xa5929100 vram_l=0xa5094880
+INFO: Saved hardware screenshot to /pc/probe-line-6-recovery.ppm
+probe captured /pc/probe-line-6-recovery.ppm
+
+probe calls=7 pixels_per_call=575 quads=4025 triangles=8050 vertex_commands=24150 predicted_usage=483044
+probe line 0 color 248,0,0
+probe line 1 color 0,248,0
+probe line 2 color 0,0,248
+probe line 3 color 248,248,0
+probe line 4 color 248,0,248
+probe line 5 color 0,248,248
+probe line 6 color 128,0,248
+probe submit   19.02 ms (7 calls)
+probe after submit   opb 00080000..00092c00 pos 000212c0  vertbuf 00000000..00080000 pos 00075f04
+probe usage opb_bytes_reported=19200 vertbuf_bytes_reported=483076 vertbuf_full=0
+probe check_ready before present=-1
+probe present    0.01 ms
+probe after present  opb 00480000..00492c00 pos 001212c0  vertbuf 00400000..00480000 pos 00400000
+probe render wait first result=0 attempts=1 elapsed   16.26 ms
+probe check_ready after wait=0
+INFO: capture: front64=0xa5929100 linear=0xa5494880 back64=0xa5129100 vram_l=0xa5494880
+INFO: Saved hardware screenshot to /pc/probe-line-7.ppm
+probe captured /pc/probe-line-7.ppm
+INFO: capture: front64=0xa5129100 linear=0xa5094880 back64=0xa5929100 vram_l=0xa5094880
+INFO: Saved hardware screenshot to /pc/probe-line-7-recovery.ppm
+probe captured /pc/probe-line-7-recovery.ppm
+
+probe calls=8 pixels_per_call=575 quads=4600 triangles=9200 vertex_commands=27600 predicted_usage=552044
+probe line 0 color 248,0,0
+probe line 1 color 0,248,0
+probe line 2 color 0,0,248
+probe line 3 color 248,248,0
+probe line 4 color 248,0,248
+probe line 5 color 0,248,248
+probe line 6 color 128,0,248
+probe line 7 color 248,128,0
+probe submit   21.78 ms (8 calls)
+probe after submit   opb 00080000..00092c00 pos 000212c0  vertbuf 00000000..00080000 pos 00080000
+probe usage opb_bytes_reported=19200 vertbuf_bytes_reported=524288 vertbuf_full=1
+probe check_ready before present=-1
+probe present    0.01 ms
+probe after present  opb 00480000..00492c00 pos 001212c0  vertbuf 00400000..00480000 pos 00400000
+probe render wait first result=-1 attempts=10 elapsed 1015.71 ms
+probe check_ready after wait=0
+INFO: capture: front64=0xa5929100 linear=0xa5494880 back64=0xa5129100 vram_l=0xa5094880
+INFO: Saved hardware screenshot to /pc/probe-line-8.ppm
+probe captured /pc/probe-line-8.ppm
+probe recovery render did not complete
+probe stopping at calls=8 (first anomaly)
+ERROR: Dreamcast PVR cleanup synchronization failed
+probe renderer shutdown error: Timed out waiting for the Dreamcast PVR Tile Accelerator
+vid_set_mode: 640x480 VGA with 1 framebuffers.
+probe done anomaly=1
+Program returned 1
