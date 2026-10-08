@@ -14,13 +14,13 @@
 #include "SDL_haptic.h"
 #include "../SDL_syshaptic.h"
 #include "../../joystick/SDL_sysjoystick.h"
-#include "../../joystick/SDL_joystick_c.h"
+#include "../../joystick/dreamcast/SDL_dreamcast_maple.h"
 
-#define MAX_HAPTIC_DEVICES 4
+#define MAX_HAPTIC_DEVICES MAPLE_PORT_COUNT
 
 typedef struct haptic_hwdata
 {
-    SDL_JoystickID instance_id;
+    int port;                     /* Maple port the Puru device is attached to */
     maple_device_t *device;
     SDL_Haptic *haptic;
 } haptic_hwdata;
@@ -70,13 +70,63 @@ typedef union rumble_fields
     };
 } rumble_fields_t;
 
-static haptic_hwdata haptic_devices[MAX_HAPTIC_DEVICES] = { { 0, NULL, NULL } };
+static haptic_hwdata haptic_devices[MAX_HAPTIC_DEVICES];
 static int num_haptics = 0;
+
+static void DC_RefreshHapticDevices(void)
+{
+    num_haptics = 0;
+    for (int port = 0; port < MAX_HAPTIC_DEVICES; ++port) {
+        maple_device_t *controller = SDL_DreamcastMaplePortDevice(port, MAPLE_FUNC_CONTROLLER);
+        maple_device_t *puru = controller ? SDL_DreamcastMaplePortDevice(port, MAPLE_FUNC_PURUPURU) : NULL;
+
+        haptic_devices[port].port = port;
+        haptic_devices[port].device = puru;
+        if (puru) {
+            ++num_haptics;
+        }
+    }
+}
+
+static int DC_HapticPortForIndex(int index)
+{
+    int haptic_index = 0;
+
+    if (index < 0 || index >= num_haptics) {
+        return -1;
+    }
+
+    for (int port = 0; port < MAX_HAPTIC_DEVICES; ++port) {
+        if (haptic_devices[port].device) {
+            if (haptic_index == index) {
+                return port;
+            }
+            ++haptic_index;
+        }
+    }
+    return -1;
+}
+
+static maple_device_t *DC_HapticDevice(haptic_hwdata *hw)
+{
+    maple_device_t *controller;
+
+    if (!hw || hw->port < 0 || hw->port >= MAX_HAPTIC_DEVICES) {
+        return NULL;
+    }
+
+    controller = SDL_DreamcastMaplePortDevice(hw->port, MAPLE_FUNC_CONTROLLER);
+    hw->device = controller ? SDL_DreamcastMaplePortDevice(hw->port, MAPLE_FUNC_PURUPURU) : NULL;
+    return hw->device;
+}
 
 static haptic_hwdata *DC_HapticByInstanceID(SDL_JoystickID id)
 {
+    DC_RefreshHapticDevices();
     for (int i = 0; i < MAX_HAPTIC_DEVICES; ++i) {
-        if (haptic_devices[i].device && haptic_devices[i].instance_id == id) {
+        maple_device_t *dev = haptic_devices[i].device;
+        if (dev && dev->valid &&
+            SDL_DreamcastJoystickInstanceIDForPort(i) == id) {
             return &haptic_devices[i];
         }
     }
@@ -151,47 +201,56 @@ static int DREAMCAST_InitHapticHandle(SDL_Haptic *haptic, haptic_hwdata *hw)
 
 int SDL_SYS_HapticInit(void)
 {
-    num_haptics = 0;
     SDL_Log("Initializing dreamcast haptic devices...");
 
     for (int i = 0; i < MAX_HAPTIC_DEVICES; ++i) {
-        maple_device_t *dev = maple_enum_type(i, MAPLE_FUNC_PURUPURU);
-        if (dev) {
-            haptic_devices[num_haptics].device = dev;
-            haptic_devices[num_haptics].haptic = NULL;
-            haptic_devices[num_haptics].instance_id = SDL_GetNextJoystickInstanceID();
-            ++num_haptics;
-        }
+        haptic_devices[i].port = i;
+        haptic_devices[i].device = NULL;
+        haptic_devices[i].haptic = NULL;
     }
 
+    DC_RefreshHapticDevices();
     return num_haptics;
 }
 
 int SDL_SYS_NumHaptics(void)
 {
+    /* Maple discovers hot-plugged subdevices asynchronously. Refresh on query
+       so applications can wait for a Jump Pack to be attached. */
+    DC_RefreshHapticDevices();
     return num_haptics;
 }
 
 const char *SDL_SYS_HapticName(int index)
 {
-    if (index < 0 || index >= num_haptics || !haptic_devices[index].device) {
+    int port;
+    DC_RefreshHapticDevices();
+    port = DC_HapticPortForIndex(index);
+    if (port < 0 || !haptic_devices[port].device || !haptic_devices[port].device->valid) {
         SDL_SetError("Invalid haptic device index.");
         return NULL;
     }
 
-    return haptic_devices[index].device->info.product_name;
+    return haptic_devices[port].device->info.product_name;
 }
 
 int SDL_SYS_HapticOpen(SDL_Haptic *haptic)
 {
     haptic_hwdata *hw;
+    int port;
 
-    if (!haptic || haptic->index < 0 || haptic->index >= num_haptics) {
+    if (!haptic) {
         return SDL_SetError("Invalid haptic device.");
     }
 
-    hw = &haptic_devices[haptic->index];
-    if (!hw->device) {
+    DC_RefreshHapticDevices();
+    port = DC_HapticPortForIndex(haptic->index);
+    if (port < 0) {
+        return SDL_SetError("Invalid haptic device.");
+    }
+
+    hw = &haptic_devices[port];
+    if (!DC_HapticDevice(hw)) {
         return SDL_SetError("Haptic device not found.");
     }
 
@@ -205,14 +264,13 @@ int SDL_SYS_HapticMouse(void)
 
 int SDL_SYS_JoystickIsHaptic(SDL_Joystick *joystick)
 {
-    SDL_JoystickID instance_id;
-
     if (!joystick) {
         return 0;
     }
 
-    instance_id = SDL_JoystickInstanceID(joystick);
-    return (DC_HapticByInstanceID(instance_id) != NULL) ? 1 : 0;
+    /* Backend callbacks run with the joystick lock held, so read instance_id
+       directly instead of calling the locking public accessor. */
+    return (DC_HapticByInstanceID(joystick->instance_id) != NULL) ? 1 : 0;
 }
 
 int SDL_SYS_HapticOpenFromJoystick(SDL_Haptic *haptic, SDL_Joystick *joystick)
@@ -224,7 +282,7 @@ int SDL_SYS_HapticOpenFromJoystick(SDL_Haptic *haptic, SDL_Joystick *joystick)
         return SDL_SetError("Invalid joystick for haptic.");
     }
 
-    instance_id = SDL_JoystickInstanceID(joystick);
+    instance_id = joystick->instance_id;
     hw = DC_HapticByInstanceID(instance_id);
     if (!hw || !hw->device) {
         return SDL_SetError("Invalid joystick instance ID for haptics.");
@@ -239,7 +297,7 @@ int SDL_SYS_JoystickSameHaptic(SDL_Haptic *haptic, SDL_Joystick *joystick)
         return 0;
     }
 
-    return (((haptic_hwdata *)haptic->hwdata)->instance_id == SDL_JoystickInstanceID(joystick)) ? 1 : 0;
+    return (DC_HapticByInstanceID(joystick->instance_id) == (haptic_hwdata *)haptic->hwdata) ? 1 : 0;
 }
 
 int SDL_SYS_HapticRunEffect(SDL_Haptic *haptic, struct haptic_effect *effect, Uint32 iterations)
@@ -253,7 +311,7 @@ int SDL_SYS_HapticRunEffect(SDL_Haptic *haptic, struct haptic_effect *effect, Ui
     }
 
     hwdata = (haptic_hwdata *)haptic->hwdata;
-    dev = hwdata->device;
+    dev = DC_HapticDevice(hwdata);
     if (!dev || !dev->valid) {
         return SDL_SetError("Invalid device.");
     }
@@ -284,8 +342,8 @@ int SDL_SYS_HapticStopEffect(SDL_Haptic *haptic, struct haptic_effect *effect)
     }
 
     hwdata = (haptic_hwdata *)haptic->hwdata;
-    dev = hwdata->device;
-    if (!dev) {
+    dev = DC_HapticDevice(hwdata);
+    if (!dev || !dev->valid) {
         return SDL_SetError("No haptic device.");
     }
 
@@ -319,7 +377,7 @@ void SDL_SYS_HapticQuit(void)
     for (int i = 0; i < MAX_HAPTIC_DEVICES; ++i) {
         haptic_devices[i].device = NULL;
         haptic_devices[i].haptic = NULL;
-        haptic_devices[i].instance_id = 0;
+        haptic_devices[i].port = i;
     }
     num_haptics = 0;
 }

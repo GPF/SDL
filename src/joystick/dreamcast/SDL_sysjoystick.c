@@ -31,13 +31,15 @@
 #include <dc/maple.h>
 #include <dc/maple/controller.h>
 
+#include "SDL_dreamcast_maple.h"
+
 #define MAX_JOYSTICKS 8
 #define MAX_AXES 6
 #define MAX_BUTTONS 8
 #define MAX_HATS 2
 
 static maple_device_t *SYS_Joystick_addr[MAX_JOYSTICKS];
-static maple_device_t *SYS_Rumble_device[MAX_JOYSTICKS];  // Use maple_device_t for rumble device
+static int SYS_Joystick_port[MAX_JOYSTICKS];              // Maple port owning each entry
 
 typedef struct joystick_hwdata {
     cont_state_t prev_state;
@@ -54,6 +56,18 @@ static const int sdl_buttons[] = {
     CONT_D
 };
 
+SDL_JoystickID SDL_DreamcastJoystickInstanceIDForPort(int port)
+{
+    for (int i = 0; i < MAX_JOYSTICKS; ++i) {
+        if (SYS_Joystick_addr[i] && SYS_Joystick_addr[i]->valid && SYS_Joystick_port[i] == port) {
+            /* This driver reports device_index as its instance ID, so the
+               entry index is the value SDL core assigns. */
+            return (SDL_JoystickID)i;
+        }
+    }
+    return -1;
+}
+
 static int DREAMCAST_JoystickInit(void) {
     int numdevs = 0, i;
     maple_device_t *dev;
@@ -61,33 +75,29 @@ static int DREAMCAST_JoystickInit(void) {
 
     printf("Initializing joysticks...\n");
 
-    // Loop through all potential ports
     for (i = 0; i < MAX_JOYSTICKS; ++i) {
-        dev = maple_enum_type(i, MAPLE_FUNC_CONTROLLER);
+        SYS_Joystick_addr[i] = NULL;
+        SYS_Joystick_port[i] = -1;
+    }
+
+    // Loop through all potential ports. A Puru is a subunit of its own
+    // controller port, so pairing is resolved per port: maple_enum_type(n, f)
+    // indexes devices matching f across all ports and units, not port n.
+    for (i = 0; i < MAPLE_PORT_COUNT; ++i) {
+        dev = SDL_DreamcastMaplePortDevice(i, MAPLE_FUNC_CONTROLLER);
         if (dev) {
-            SYS_Joystick_addr[numdevs++] = dev;
-            rumble_dev = maple_enum_type(i, MAPLE_FUNC_PURUPURU);  // Check for rumble functionality
+            SYS_Joystick_addr[numdevs] = dev;
+            SYS_Joystick_port[numdevs] = i;
+            rumble_dev = SDL_DreamcastMaplePortDevice(i, MAPLE_FUNC_PURUPURU);  // Check for rumble functionality
             if (rumble_dev) {
-                SYS_Rumble_device[numdevs - 1] = rumble_dev;  // Store rumble device if present
                 printf("Rumble device found at port %d\n", i);
             } else {
-                SYS_Rumble_device[numdevs - 1] = NULL;  // No rumble support at this port
                 printf("No rumble device at port %d\n", i);
             }
             printf("Joystick found at port %d\n", i);
+            ++numdevs;
         } else {
             printf("No joystick at port %d\n", i);
-        }
-    }
-
-    // Fallback to a default controller if no joystick is found
-    if (numdevs == 0) {
-        printf("No joysticks detected, defaulting to 1 controller.\n");
-        SYS_Joystick_addr[0] = maple_enum_type(0, MAPLE_FUNC_CONTROLLER);
-        rumble_dev = maple_enum_type(0, MAPLE_FUNC_PURUPURU);
-        if (SYS_Joystick_addr[0]) {
-            SYS_Rumble_device[0] = rumble_dev;
-            numdevs = 1;
         }
     }
 
@@ -156,8 +166,14 @@ static SDL_JoystickID DREAMCAST_JoystickGetDeviceInstanceID(int device_index)
 
 static int DREAMCAST_JoystickOpen(SDL_Joystick *joystick, int device_index)
 {
-    maple_device_t *dev = SYS_Joystick_addr[device_index];
-    if (!dev) {
+    maple_device_t *dev;
+
+    if (device_index < 0 || device_index >= MAX_JOYSTICKS) {
+        return SDL_SetError("Invalid joystick index %d", device_index);
+    }
+
+    dev = SYS_Joystick_addr[device_index];
+    if (!dev || !dev->valid) {
         return SDL_SetError("No joystick found at index %d", device_index);
     }
 
@@ -185,14 +201,22 @@ static int DREAMCAST_JoystickRumble(SDL_Joystick *joystick,
                                       Uint16 low_frequency_rumble,
                                       Uint16 high_frequency_rumble)
 {
-    maple_device_t *dev = SYS_Joystick_addr[joystick->instance_id];
-    maple_device_t *rumble_dev = SYS_Rumble_device[joystick->instance_id];
+    maple_device_t *dev;
+    maple_device_t *rumble_dev;
+
+    if (!joystick || joystick->instance_id < 0 || joystick->instance_id >= MAX_JOYSTICKS) {
+        return SDL_Unsupported();
+    }
+
+    dev = SYS_Joystick_addr[joystick->instance_id];
+    rumble_dev = SDL_DreamcastMaplePortDevice(SYS_Joystick_port[joystick->instance_id], MAPLE_FUNC_PURUPURU);
 
     SDL_Log("DREAMCAST_JoystickRumble: instance_id=%d, low_frequency_rumble=%d, high_frequency_rumble=%d\n",
             joystick->instance_id, low_frequency_rumble, high_frequency_rumble);
 
-    /* Check if the device supports rumble */
-    if (!dev || !rumble_dev) {
+    /* Check if the device supports rumble. A detached device keeps its pointer
+       but clears valid, and purupuru_rumble_raw() asserts on a NULL device. */
+    if (!dev || !dev->valid || !rumble_dev || !rumble_dev->valid) {
         // SDL_Log("Device or rumble device not found or not open. instance_id=%d\n", joystick->instance_id);
         return SDL_Unsupported();
     }
@@ -281,7 +305,17 @@ static void DREAMCAST_JoystickUpdate(SDL_Joystick *joystick) {
     cont_state_t *state;
     int buttons, i, changed, hat;
 
+    if (!joystick || !joystick->hwdata) {
+        return;
+    }
+    if (joystick->instance_id < 0 || joystick->instance_id >= MAX_JOYSTICKS) {
+        return;
+    }
+
     dev = SYS_Joystick_addr[joystick->instance_id];
+    if (!dev || !dev->valid) {
+        return;
+    }
 
     // Get current state from the device
     if (!(state = (cont_state_t *)maple_dev_status(dev))) {

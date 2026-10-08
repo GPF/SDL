@@ -1,0 +1,42 @@
+TARGET = maple_puru_pairing
+OBJS = maple_puru_pairing.o
+
+SDL2_PREFIX ?= $(KOS_BASE)/addons
+SDL2_INCLUDEDIR ?= $(SDL2_PREFIX)/include/SDL2
+SDL2_LIBDIR ?= $(SDL2_PREFIX)/lib/dreamcast
+# Generated SDL_config.h lives here for an in-tree CMake build (empty falls
+# back to the normal header directory).
+SDL2_CONFIG_INCLUDEDIR ?= $(SDL2_INCLUDEDIR)
+
+all: check-sdl2 $(TARGET).bin
+
+include $(KOS_BASE)/Makefile.rules
+
+.PHONY: check-sdl2
+check-sdl2:
+	@test -f $(SDL2_INCLUDEDIR)/SDL.h || \
+		(echo "SDL2 headers are not available in $(SDL2_INCLUDEDIR)"; exit 1)
+	@test -f $(SDL2_CONFIG_INCLUDEDIR)/SDL_config.h || \
+		(echo "SDL_config.h is not available in $(SDL2_CONFIG_INCLUDEDIR)"; exit 1)
+	@test -f $(SDL2_LIBDIR)/libSDL2.a || \
+		(echo "SDL2 library is not available in $(SDL2_LIBDIR)"; exit 1)
+	@sh-elf-nm $(SDL2_LIBDIR)/libSDL2.a | grep -q '[[:space:]]_SDL_DreamcastJoystickInstanceIDForPort$$' || \
+		(echo "Requested SDL2 does not include the Dreamcast joystick/haptic mapping helper."; exit 1)
+
+clean:
+	rm -f $(OBJS) $(TARGET).elf $(TARGET).bin $(TARGET).map
+
+maple_puru_pairing.o: maple_puru_pairing.c
+	kos-cc -I$(SDL2_INCLUDEDIR) -I$(SDL2_CONFIG_INCLUDEDIR) -DDREAMCAST -D__DREAMCAST__ \
+		-Wall -Wextra -Werror $(EXTRA_CFLAGS) -c $< -o $@
+
+$(TARGET).elf: $(OBJS)
+	kos-cc -o $(TARGET).elf $(OBJS) -Wl,-Map,$(TARGET).map \
+		$(SDL2_LIBDIR)/libSDL2.a $(SDL2_LIBDIR)/libSDL2main.a \
+		-lGL -lm -lkosutils -lpthread
+
+$(TARGET).bin: $(TARGET).elf
+	$(KOS_OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin
+
+run: $(TARGET).bin
+	$(KOS_LOADER) $(TARGET).bin
