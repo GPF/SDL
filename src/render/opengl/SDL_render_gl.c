@@ -1239,7 +1239,7 @@ SDL_Texture *SDL_LoadDreamcastTexture_IO(SDL_Renderer *renderer,
         data->formattype = upload_type;
     }
 
-    if (GL_CheckError("Dreamcast .dt texture upload", renderer) < 0) {
+    if (!GL_CheckError("Dreamcast .dt texture upload", renderer)) {
         goto done;
     }
 

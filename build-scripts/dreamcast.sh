@@ -2,7 +2,7 @@
 set -e
 
 SOURCE_DIR="${PWD}/.."
-BUILD_DIR="${PWD}/dcbuild"
+BUILD_DIR="${BUILD_DIR:-${PWD}/dcbuild}"
 BUILD_JOBS="$(nproc)"
 
 INSTALL_PREFIX="/opt/toolchains/dc/kos/addons"
@@ -12,8 +12,9 @@ INSTALL_INCLUDEDIR="include"
 ENABLE_TESTS=OFF
 ENABLE_TEST_LIBRARY=OFF
 ENABLE_EXAMPLES=OFF
-ENABLE_OPENGL=ON
+ENABLE_OPENGL=OFF
 ENABLE_GPU=OFF
+ENABLE_PVR=ON
 ENABLE_PVR_TESTS=OFF
 ENABLE_CAMERA=OFF
 ENABLE_DIALOG=OFF
@@ -27,6 +28,9 @@ usage() {
     cat <<EOF
 Usage: $0 [options] [clean|install|uninstall|distclean]
 
+Environment:
+  BUILD_DIR=PATH  build directory (default: ./dcbuild). Use a separate one for variant builds.
+
 Install layout options:
   --prefix PATH, --install-prefix PATH
       CMake install prefix. Defaults to /opt/toolchains/dc/kos/addons.
@@ -38,8 +42,9 @@ Install layout options:
 Feature options:
   --enable-tests | --disable-tests
   --enable-examples | --disable-examples
-  --enable-opengl | --disable-opengl
+  --enable-opengl | --disable-opengl (GLdc integration; disabled by default)
   --enable-gpu | --disable-gpu
+  --enable-pvr | --disable-pvr (native PVR render driver; on by default)
   --enable-pvr-tests | --disable-pvr-tests (failure injection only)
   --enable-camera | --disable-camera
   --enable-dialog | --disable-dialog
@@ -109,7 +114,9 @@ while [[ "$#" -gt 0 ]]; do
         --disable-opengl) ENABLE_OPENGL=OFF ;;
         --enable-gpu) ENABLE_GPU=ON ;;
         --disable-gpu) ENABLE_GPU=OFF ;;
-        --enable-pvr-tests) ENABLE_PVR_TESTS=ON ;;
+        --enable-pvr) ENABLE_PVR=ON ;;
+        --disable-pvr) ENABLE_PVR=OFF; ENABLE_PVR_TESTS=OFF ;;
+        --enable-pvr-tests) ENABLE_PVR=ON; ENABLE_PVR_TESTS=ON ;;
         --disable-pvr-tests) ENABLE_PVR_TESTS=OFF ;;
         --enable-camera) ENABLE_CAMERA=ON ;;
         --disable-camera) ENABLE_CAMERA=OFF ;;
@@ -182,7 +189,7 @@ kos-cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
     -DSDL_EXAMPLES:BOOL="$ENABLE_EXAMPLES" \
     -DSDL_OPENGL:BOOL="$ENABLE_OPENGL" \
     -DSDL_GPU:BOOL="$ENABLE_GPU" \
-    -DSDL_VIDEO_RENDER_DREAMCAST_PVR:BOOL=ON \
+    -DSDL_VIDEO_RENDER_DREAMCAST_PVR:BOOL="$ENABLE_PVR" \
     -DSDL_VIDEO_RENDER_DREAMCAST_PVR_TESTS:BOOL="$ENABLE_PVR_TESTS" \
     -DSDL_CAMERA:BOOL="$ENABLE_CAMERA" \
     -DSDL_DIALOG:BOOL="$ENABLE_DIALOG" \

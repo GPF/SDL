@@ -194,6 +194,14 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
         mode.format = SDL_PIXELFORMAT_ARGB1555;
         mode.refresh_rate = refresh_rate;
         mode.pixel_density = 1.0f;
+        SDL_AddFullscreenDisplayMode(display, &mode);
+    } else if (pvr_video) {
+        mode.w = target_w;
+        mode.h = target_h;
+        mode.format = SDL_PIXELFORMAT_RGB565;
+        mode.refresh_rate = refresh_rate;
+        mode.pixel_density = 1.0f;
+        SDL_AddFullscreenDisplayMode(display, &mode);
     } else if (DREAMCAST_IsTexturedVideoMode(video_mode_hint)) {
         const int textured_modes[][2] = {
             {320, 240}, {512, 256}, {640, 480}, {1024, 512}
@@ -261,7 +269,7 @@ bool DREAMCAST_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
     mode.refresh_rate = refresh_rate;
     mode.pixel_density = 1.0f;
 
-    if (SDL_SetWindowFullscreenMode(window, &mode) < 0) {
+    if (!SDL_SetWindowFullscreenMode(window, &mode)) {
         SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Failed to set fullscreen mode: %s", SDL_GetError());
         SDL_free(dreamcast_window);
         window->internal = NULL;

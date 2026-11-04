@@ -79,7 +79,6 @@ void SDL_DC_Default60Hz(bool value)
 static bool DREAMCAST_VideoInit(SDL_VideoDevice *_this);
 void DREAMCAST_VideoQuit(SDL_VideoDevice *_this);
 // static bool DREAMCAST_GetDisplayModes(SDL_VideoDevice *_this, SDL_VideoDisplay *display);
-static bool DREAMCAST_SetDisplayMode(SDL_VideoDevice *_this, SDL_VideoDisplay *display, SDL_DisplayMode *mode);
 
 
 /* DREAMCAST driver bootstrap functions */
@@ -336,14 +335,6 @@ else if (textured_video) {
             mode.w, mode.h, SDL_GetHint(SDL_HINT_DC_SCREEN_WIDTH_TEXTURED), SDL_GetHint(SDL_HINT_DC_SCREEN_HEIGHT_TEXTURED));
     return true;
 }
-
-static bool DREAMCAST_SetDisplayMode(SDL_VideoDevice *_this, SDL_VideoDisplay *display, SDL_DisplayMode *mode) {
-        SDL_Log("DREAMCAST_SetDisplayMode: not used in SDL3, using default mode %dx%d",
-                mode->w, mode->h);
-    return true;
-}
-
-
 
 // static bool DREAMCAST_SetDisplayMode(SDL_VideoDevice *_this, SDL_VideoDisplay *display, SDL_DisplayMode *mode) {
 //     int pixel_mode;
