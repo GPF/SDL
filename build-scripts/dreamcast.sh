@@ -8,7 +8,7 @@ BUILD_DIR="${PWD}/dcbuild"
 INSTALL_PREFIX="${KOS_BASE}/addons"
 INSTALL_LIBDIR="lib/dreamcast"
 INSTALL_INCLUDEDIR="include"
-ENABLE_OPENGL=ON
+ENABLE_OPENGL=OFF
 ENABLE_PVR_RENDERER=ON
 ENABLE_SDL_TEST=OFF
 ENABLE_SDL_TESTS=OFF
@@ -31,7 +31,7 @@ Install layout options:
 
 Feature options:
   --enable-opengl | --disable-opengl
-      Include or strip SDL OpenGL renderer/context support. Enabled by default.
+      Include or strip SDL OpenGL renderer/context support. Disabled by default.
   --enable-pvr-renderer | --disable-pvr-renderer
       Include or strip the native PVR renderer independently. Enabled by default.
   --enable-sdl-test | --disable-sdl-test
