@@ -51,4 +51,11 @@ void DC_PVR_SetTextureScaleMode(SDL_Renderer *renderer, SDL_Texture *texture,
 void DC_PVR_DestroyTexture(SDL_Renderer *renderer, SDL_Texture *texture);
 void DC_PVR_FreeTextureData(DC_PVR_TextureData *data, SDL_bool free_vram);
 
+/* Texture VRAM lifetime (SDL_render_dreamcast_pvr.c). */
+void DC_PVR_RetireTexture(SDL_Renderer *renderer, DC_PVR_TextureData *texture);
+void DC_PVR_RetireVRAM(SDL_Renderer *renderer, DC_PVR_DeferredVRAM *entry, Uint64 gen);
+SDL_bool DC_PVR_TextureIsIdle(SDL_Renderer *renderer, DC_PVR_TextureData *texture);
+int DC_PVR_WaitTextureIdle(SDL_Renderer *renderer, DC_PVR_TextureData *texture);
+SDL_bool DC_PVR_ReclaimForAllocation(SDL_Renderer *renderer);
+
 #endif /* SDL_render_dreamcast_pvr_h_ */

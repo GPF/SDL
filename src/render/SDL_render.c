@@ -1479,6 +1479,17 @@ SDL_Texture *SDL_CreateTexture(SDL_Renderer *renderer, Uint32 format, int access
         int closest_format;
 
         if (texture_is_fourcc_and_target == SDL_FALSE) {
+#if SDL_VIDEO_RENDER_DREAMCAST_PVR
+            /* Dreamcast PVR render targets are stored as RGB565. Choose that
+             * native target directly for SDL's standard ARGB8888 request;
+             * otherwise alpha-preserving format matching selects ARGB1555,
+             * which is not a valid PVR render-target format. */
+            if (access == SDL_TEXTUREACCESS_TARGET &&
+                SDL_strcmp(renderer->info.name, DC_PVR_RENDERER_NAME) == 0 &&
+                format == SDL_PIXELFORMAT_ARGB8888) {
+                closest_format = SDL_PIXELFORMAT_RGB565;
+            } else
+#endif
             closest_format = GetClosestSupportedFormat(renderer, format);
         } else {
             closest_format = renderer->info.texture_formats[0];

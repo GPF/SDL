@@ -56,3 +56,30 @@ transparent to SDL callers, but all strided textures used in one presented
 frame must share the same stride. POT textures may be mixed with them. `.dt`,
 target, twiddled, VQ, and mipmapped textures retain their existing POT or
 preformatted paths.
+
+## PVR scene completion and texture retirement
+
+`SDL_RenderPresent()` finishes the active PVR list and scene without waiting
+for that scene's raster work to finish. Texture VRAM is retired by scene
+generation: a destroyed or replaced allocation remains reserved until KOS
+scene ordering proves that no pending render can still read it. Reclamation
+runs at scene boundaries and texture destruction. Blocking drains remain for
+allocation pressure, writes to VRAM still sampled by a pending scene, and
+renderer shutdown.
+
+This removes a scheduler wait from the common Present path; it does not by
+itself make a frame render faster. On 640x480 VGA hardware, a warmed 30-frame
+A/B showed Present time fall from 10.57 ms to 0.01 ms for 8 quads and from
+70.27 ms to 0.01 ms for 20 fullscreen quads. The corresponding whole-frame
+readings were 16.71 ms versus 16.82 ms and 81.04 ms versus 78.50 ms. Since the
+wait moves to the next scene's start, and SDL2 has no public renderer flush to
+fence each workload, treat these figures as diagnostic evidence of wait
+relocation rather than a frame-rate improvement.
+The workloads ran sequentially without an SDL2 renderer flush between them, so
+each interval can include synchronization from the preceding workload.
+
+The native `.dt` churn check passed on hardware: 20 load/destroy iterations
+restored the exact 5,943,016-byte VRAM baseline. The texture DMA fixture also
+passed its update-after-scene-reference and destruction pages. See
+`test/dreamcast/test/pvr_dt_texture/README.md` and
+`test/dreamcast/test/pvr_texture_dma/README.md` for those fixture contracts.

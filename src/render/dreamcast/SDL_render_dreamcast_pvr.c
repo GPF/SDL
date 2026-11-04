@@ -61,33 +61,198 @@ int DC_PVR_Submit(const void *data, size_t size)
     return 0;
 }
 
-static void DC_PVR_ReleaseDeferredTextures(DC_PVR_RenderData *data, SDL_bool free_vram)
+/* ---- Texture VRAM retirement by scene generation -------------------------
+ *
+ * Invariant: the VRAM behind a destroyed texture stays allocated until every PVR
+ * scene that could still fetch it has finished rendering. pvr_mem_free() writes
+ * allocator metadata into the block and a new texture can be uploaded over it, so
+ * an early free corrupts any scene still to be rendered.
+ *
+ * Nothing here sleeps to establish that at destroy or present time. Scenes are
+ * numbered in submission order, and a destroyed texture is tagged with the latest
+ * scene begun (the last one that could reference it). What KallistiOS lets us
+ * conclude without waiting (pvr_scene.c):
+ *
+ *  1. A render starts only when no render is in progress, so renders run strictly
+ *     one after another in scene order.
+ *  2. A scene enters the TA at its first pvr_list_begin(). That call runs
+ *     pvr_start_ta_rendering(), which waits for the previous scene's render to
+ *     have started (ta_busy clear). pvr_scene_begin() alone does not wait.
+ *  3. So once scene m has entered, render m-1 has started and, by (1), every
+ *     render up to m-2 is complete.
+ *  4. After scene m is finished, pvr_check_ready() == 0 (note: 0 means ready) says
+ *     render m has started, so every render up to m-1 is complete.
+ *
+ * (2) rests on pvr_wait_ready(), which gives up after 100 ms without reporting it
+ * to pvr_start_ta_rendering(); a render stalled that long is already a hardware or
+ * system failure, and the blocking drain below checks its results. This path also
+ * requires PVR vertex-buffer double buffering to stay enabled: with a single
+ * vertex buffer, pvr_start_ta_rendering() waits for the previous render to
+ * complete, which is the barrier this design removes.
+ *
+ * Reclamation therefore needs only these cheap checks and runs at scene entry,
+ * scene finish and texture destruction. A blocking drain is used only when an
+ * allocation fails, before a CPU write into texture VRAM that a recent scene
+ * sampled, and at renderer shutdown.
+ */
+static void DC_PVR_NoteSceneBegun(DC_PVR_RenderData *data)
 {
-    DC_PVR_TextureData *texture = data->deferred_textures;
+    data->scenes_begun++;
+    data->scene_entered = SDL_FALSE;
+}
 
-    data->deferred_textures = NULL;
-    while (texture) {
-        DC_PVR_TextureData *next = texture->next_deferred;
-
-        DC_PVR_FreeTextureData(texture, free_vram);
-        texture = next;
+static void DC_PVR_NoteSceneEntered(DC_PVR_RenderData *data)
+{
+    if (!data->scene_entered) {
+        data->scene_entered = SDL_TRUE;
+        data->scenes_entered = data->scenes_begun;
     }
 }
 
-static void DC_PVR_ReleaseDeferredVRAM(DC_PVR_RenderData *data, SDL_bool free_vram)
+/* Highest scene number whose render is proven complete without waiting. */
+static Uint64 DC_PVR_CompletedScenes(DC_PVR_RenderData *data)
 {
-    DC_PVR_DeferredVRAM *entry = data->deferred_vram;
+    const Uint64 m = data->scenes_entered; /* latest scene that has entered the TA */
+    const SDL_bool m_is_open = data->scene_active && data->scene_entered &&
+                               data->scenes_begun == m;
+    Uint64 done = (m >= 2) ? (m - 2) : 0; /* (3) */
 
-    data->deferred_vram = NULL;
-    while (entry) {
-        DC_PVR_DeferredVRAM *next = entry->next;
-
-        if (free_vram && entry->vram) {
-            pvr_mem_free(entry->vram);
-        }
-        SDL_free(entry);
-        entry = next;
+    if (m >= 1 && !m_is_open && pvr_check_ready() == 0) {
+        done = m - 1; /* (4) */
     }
+    if (done > data->scenes_completed) {
+        data->scenes_completed = done;
+    }
+    return data->scenes_completed;
+}
+
+static void DC_PVR_ReclaimRetired(DC_PVR_RenderData *data, Uint64 completed,
+                                  SDL_bool free_vram)
+{
+    DC_PVR_TextureData **texture_link = &data->retired_textures;
+    DC_PVR_DeferredVRAM **vram_link = &data->retired_vram;
+
+    while (*texture_link) {
+        DC_PVR_TextureData *texture = *texture_link;
+
+        if (texture->retire_gen <= completed) {
+            *texture_link = texture->next_deferred;
+            DC_PVR_FreeTextureData(texture, free_vram);
+        } else {
+            texture_link = &texture->next_deferred;
+        }
+    }
+
+    while (*vram_link) {
+        DC_PVR_DeferredVRAM *entry = *vram_link;
+
+        if (entry->retire_gen <= completed) {
+            *vram_link = entry->next;
+            if (free_vram && entry->vram) {
+                pvr_mem_free(entry->vram);
+            }
+            SDL_free(entry);
+        } else {
+            vram_link = &entry->next;
+        }
+    }
+}
+
+static void DC_PVR_ReclaimCompleted(DC_PVR_RenderData *data)
+{
+    if (data->retired_textures || data->retired_vram) {
+        DC_PVR_ReclaimRetired(data, DC_PVR_CompletedScenes(data), SDL_TRUE);
+    }
+}
+
+/* Blocks until every scene that has entered the TA, except one still open, has
+ * finished rendering. Returns SDL_FALSE if a KallistiOS wait timed out. */
+static int DC_PVR_WaitScenesComplete(DC_PVR_RenderData *data)
+{
+    const SDL_bool open_entered = data->scene_active && data->scene_entered;
+    Uint64 done;
+
+    if (data->scenes_entered > 0) {
+        /* ta_busy belongs to the latest entered scene. If that scene is finished,
+         * wait for its render to start; if it is open, render m-1 has already
+         * started (2) and waiting for ta_busy would never end. */
+        if (!open_entered && pvr_wait_ready() < 0) {
+            return SDL_SetError("Timed out waiting for the Dreamcast PVR Tile Accelerator");
+        }
+        if (pvr_wait_render_done() < 0) {
+            return SDL_SetError("Timed out waiting for Dreamcast PVR scene completion");
+        }
+    }
+    done = open_entered ? (data->scenes_entered - 1) : data->scenes_entered;
+    if (done > data->scenes_completed) {
+        data->scenes_completed = done;
+    }
+    return 0;
+}
+
+void DC_PVR_RetireTexture(SDL_Renderer *renderer, DC_PVR_TextureData *texture)
+{
+    DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
+
+    /* Exact: the last scene that actually sampled this VRAM. A destroyed texture
+     * cannot be referenced by any later scene, so a never-sampled allocation is
+     * reclaimable at once. */
+    texture->retire_gen = texture->last_used_gen;
+    texture->next_deferred = data->retired_textures;
+    data->retired_textures = texture;
+    DC_PVR_ReclaimCompleted(data);
+}
+
+void DC_PVR_RetireVRAM(SDL_Renderer *renderer, DC_PVR_DeferredVRAM *entry, Uint64 gen)
+{
+    DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
+
+    entry->retire_gen = gen;
+    entry->next = data->retired_vram;
+    data->retired_vram = entry;
+    DC_PVR_ReclaimCompleted(data);
+}
+
+/* CPU writes into texture VRAM (uploads) must not land while a scene that sampled
+ * the texture can still be rendering. Free when already proven, wait otherwise. */
+SDL_bool DC_PVR_TextureIsIdle(SDL_Renderer *renderer, DC_PVR_TextureData *texture)
+{
+    DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
+
+    return (texture->last_used_gen == 0 ||
+            texture->last_used_gen <= DC_PVR_CompletedScenes(data)) ? SDL_TRUE : SDL_FALSE;
+}
+
+int DC_PVR_WaitTextureIdle(SDL_Renderer *renderer, DC_PVR_TextureData *texture)
+{
+    DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
+
+    if (DC_PVR_TextureIsIdle(renderer, texture)) {
+        return 0;
+    }
+    if (DC_PVR_WaitScenesComplete(data) < 0) {
+        return -1;
+    }
+    if (!DC_PVR_TextureIsIdle(renderer, texture)) {
+        return SDL_SetError("Dreamcast PVR texture is still referenced by an open scene");
+    }
+    return 0;
+}
+
+/* Called when pvr_mem_malloc() fails: retired VRAM that is only waiting for a
+ * render to finish becomes allocatable after a blocking drain. */
+SDL_bool DC_PVR_ReclaimForAllocation(SDL_Renderer *renderer)
+{
+    DC_PVR_RenderData *data = (DC_PVR_RenderData *)renderer->driverdata;
+
+    if (!data->retired_textures && !data->retired_vram) {
+        return SDL_FALSE;
+    }
+    if (DC_PVR_WaitScenesComplete(data) < 0) {
+        return SDL_FALSE;
+    }
+    DC_PVR_ReclaimRetired(data, data->scenes_completed, SDL_TRUE);
+    return SDL_TRUE;
 }
 
 static void DC_PVR_ClearTextureSceneReferences(SDL_Renderer *renderer)
@@ -162,6 +327,8 @@ static int DC_PVR_BeginList(SDL_Renderer *renderer, int list_type)
     }
     data->list_active = SDL_TRUE;
     data->active_list_type = list_type;
+    DC_PVR_NoteSceneEntered(data);
+    DC_PVR_ReclaimCompleted(data);
     return 0;
 }
 #endif
@@ -202,6 +369,12 @@ static int DC_PVR_FinishActiveScene(SDL_Renderer *renderer)
         return SDL_SetError("Could not finish the Dreamcast PVR scene");
     }
     data->scene_active = SDL_FALSE;
+    /* pvr_scene_finish() opens any list that was never opened, so the scene has
+     * entered the TA by now. No wait here: renders run in submission order, so a
+     * finished scene only has to be ordered before later scenes. VRAM that a
+     * pending render may still read is released by the retire list once that
+     * render is proven complete (see DC_PVR_CompletedScenes). */
+    DC_PVR_NoteSceneEntered(data);
 
     /* Central commit: after successful finish, swap target current/next and,
      * in the full preservation prototype only, logical-screen current/next.
@@ -232,6 +405,7 @@ static int DC_PVR_FinishActiveScene(SDL_Renderer *renderer)
     }
 
     data->header_valid = SDL_FALSE;
+    DC_PVR_ReclaimCompleted(data);
     return 0;
 }
 
@@ -354,6 +528,7 @@ static int DC_PVR_BeginSceneForCurrentTarget(SDL_Renderer *renderer)
             data->scene_kind = DC_PVR_SCENE_PHYSICAL;
         }
         data->scene_active = SDL_TRUE;
+        DC_PVR_NoteSceneBegun(data);
         data->header_valid = SDL_FALSE;
     }
     if (!data->list_active) {
@@ -363,6 +538,7 @@ static int DC_PVR_BeginSceneForCurrentTarget(SDL_Renderer *renderer)
         }
         data->list_active = SDL_TRUE;
         data->active_list_type = PVR_LIST_TR_POLY;
+        DC_PVR_NoteSceneEntered(data);
 
         /* Emit preservation seed only after list begin. Skip if current is
          * undefined or if the destination is already the current allocation. */
@@ -387,6 +563,7 @@ static int DC_PVR_BeginSceneForCurrentTarget(SDL_Renderer *renderer)
             }
         }
     }
+    DC_PVR_ReclaimCompleted(data);
     return 0;
 }
 
@@ -572,7 +749,10 @@ int DC_PVR_EmitHeader(SDL_Renderer *renderer, SDL_Texture *texture,
     data->header_list_type = list_type;
     data->header_valid = SDL_TRUE;
     if (texture) {
-        ((DC_PVR_TextureData *)texture->driverdata)->referenced_in_scene = SDL_TRUE;
+        DC_PVR_TextureData *texturedata = (DC_PVR_TextureData *)texture->driverdata;
+
+        texturedata->referenced_in_scene = SDL_TRUE;
+        texturedata->last_used_gen = data->scenes_begun;
     }
     return 0;
 }
@@ -720,13 +900,10 @@ static int DC_PVR_RenderPresent(SDL_Renderer *renderer)
         if (data->scene_active && DC_PVR_FinishActiveScene(renderer) < 0) {
             return -1;
         }
-        if (pvr_wait_render_done() < 0) {
-            data->pvr_failed = SDL_TRUE;
-            return SDL_SetError("Timed out waiting for Dreamcast PVR rendering");
-        }
-        DC_PVR_ReleaseDeferredTextures(data, SDL_TRUE);
-        DC_PVR_ReleaseDeferredVRAM(data, SDL_TRUE);
+        /* Present returns before the frame is rendered. Retired VRAM is released
+         * once the scene that could have referenced it is proven complete. */
         DC_PVR_ClearTextureSceneReferences(renderer);
+        DC_PVR_ReclaimCompleted(data);
         if (data->current_target) {
             SDL_SetError("Dreamcast PVR cannot present while a render target is selected; select the screen and draw it before presenting");
             SDL_LogError(SDL_LOG_CATEGORY_RENDER, "%s", SDL_GetError());
@@ -752,17 +929,13 @@ static int DC_PVR_RenderPresent(SDL_Renderer *renderer)
     }
     data->scene_active = SDL_FALSE;
     data->header_valid = SDL_FALSE;
+    DC_PVR_NoteSceneEntered(data);
 #if SDL_DC_PVR_OPAQUE_PREFIX_ROUTING
     data->opaque_prefix_open = SDL_TRUE;
     data->active_list_type = -1;
 #endif
-    if (pvr_wait_render_done() < 0) {
-        data->pvr_failed = SDL_TRUE;
-        return SDL_SetError("Timed out waiting for Dreamcast PVR rendering");
-    }
-    DC_PVR_ReleaseDeferredTextures(data, SDL_TRUE);
-    DC_PVR_ReleaseDeferredVRAM(data, SDL_TRUE);
     DC_PVR_ClearTextureSceneReferences(renderer);
+    DC_PVR_ReclaimCompleted(data);
     DC_PVR_ResetFrameStride(data);
     return 0;
 }
@@ -804,10 +977,17 @@ static void DC_PVR_DestroyRenderer(SDL_Renderer *renderer)
             data->scene_active = SDL_FALSE;
             data->scene_target = NULL;
             data->scene_kind = DC_PVR_SCENE_NONE;
-            if (pvr_wait_render_done() < 0) {
-                synchronized = SDL_FALSE;
-                SDL_LogError(SDL_LOG_CATEGORY_RENDER, "Dreamcast PVR cleanup synchronization failed");
-            }
+            DC_PVR_NoteSceneEntered(data);
+        }
+    }
+    /* Every submitted render must be complete before any VRAM is freed, whether
+     * or not a scene was open: renders are no longer waited for at scene finish.
+     * This is the blocking drain, and it precedes pvr_shutdown(), which
+     * invalidates the PVR memory allocator. */
+    if (data->pvr_owned && synchronized && !data->scene_active) {
+        if (DC_PVR_WaitScenesComplete(data) < 0) {
+            synchronized = SDL_FALSE;
+            SDL_LogError(SDL_LOG_CATEGORY_RENDER, "Dreamcast PVR cleanup synchronization failed");
         }
     }
     if (data->pvr_owned) {
@@ -816,11 +996,9 @@ static void DC_PVR_DestroyRenderer(SDL_Renderer *renderer)
                 SDL_LogError(SDL_LOG_CATEGORY_RENDER, "Dreamcast PVR recovery shutdown failed");
             }
             data->pvr_owned = SDL_FALSE;
-            DC_PVR_ReleaseDeferredTextures(data, SDL_FALSE);
-            DC_PVR_ReleaseDeferredVRAM(data, SDL_FALSE);
+            DC_PVR_ReclaimRetired(data, ~(Uint64)0, SDL_FALSE);
         } else {
-            DC_PVR_ReleaseDeferredTextures(data, SDL_TRUE);
-            DC_PVR_ReleaseDeferredVRAM(data, SDL_TRUE);
+            DC_PVR_ReclaimRetired(data, ~(Uint64)0, SDL_TRUE);
             /* Render completion precedes the vblank handler's page flip. Keep
              * that handler installed through one vblank before PVR shutdown. */
             vid_waitvbl();
@@ -830,8 +1008,7 @@ static void DC_PVR_DestroyRenderer(SDL_Renderer *renderer)
             data->pvr_owned = SDL_FALSE;
         }
     } else {
-        DC_PVR_ReleaseDeferredTextures(data, SDL_FALSE);
-        DC_PVR_ReleaseDeferredVRAM(data, SDL_FALSE);
+        DC_PVR_ReclaimRetired(data, ~(Uint64)0, SDL_FALSE);
     }
     data->current_target = NULL;
     data->scene_target = NULL;

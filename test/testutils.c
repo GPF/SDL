@@ -144,33 +144,39 @@ LoadTexture(SDL_Renderer *renderer, const char *file, SDL_bool transparent,
         if (height_out) {
             *height_out = temp->h;
         }
-#ifdef __DREAMCAST__        
-        SDL_Surface* converted_surface1 = SDL_ConvertSurfaceFormat(temp, SDL_PIXELFORMAT_ARGB8888, 0);
-// Extract the color of the first pixel
-Uint32 *pixels = (Uint32 *)converted_surface1->pixels;
-Uint32 pixel0Color = pixels[0] & 0x00FFFFFF; // Extract only RGB from pixel 0
+#ifdef __DREAMCAST__
+        {
+            SDL_Surface *converted_surface1;
 
-// Loop through pixels to set transparency and swap BGR to RGB
-for (int y = 0; y < converted_surface1->h; ++y) {
-    for (int x = 0; x < converted_surface1->w; ++x) {
-        int pixelIndex = y * converted_surface1->w + x;
+            if (transparent) {
+                converted_surface1 = SDL_ConvertSurfaceFormat(temp, SDL_PIXELFORMAT_ARGB8888, 0);
+                if (converted_surface1) {
+                    Uint32 *pixels = (Uint32 *)converted_surface1->pixels;
+                    Uint32 pixel0Color = pixels[0] & 0x00FFFFFF;
+                    int y;
 
-        // Swap BGR to RGB
-        // Uint32 pixel = pixels[pixelIndex];
-        // Uint8 r = pixel & 0xFF;
-        // Uint8 g = (pixel >> 8) & 0xFF;
-        // Uint8 b = (pixel >> 16) & 0xFF;
-        // pixels[pixelIndex] = (pixel & 0xFF000000) | (r << 16) | (g << 8) | b;
+                    for (y = 0; y < converted_surface1->h; ++y) {
+                        int x;
+                        for (x = 0; x < converted_surface1->w; ++x) {
+                            int pixelIndex = y * converted_surface1->w + x;
 
-        // Set transparency based on first pixel color
-        if ((pixels[pixelIndex] & 0x00FFFFFF) == pixel0Color) {
-            pixels[pixelIndex] = (pixels[pixelIndex] & 0x00FFFFFF); // Fully transparent
-        } else {
-            pixels[pixelIndex] |= 0xFF000000; // Fully opaque
+                            if ((pixels[pixelIndex] & 0x00FFFFFF) == pixel0Color) {
+                                pixels[pixelIndex] &= 0x00FFFFFF;
+                            } else {
+                                pixels[pixelIndex] |= 0xFF000000;
+                            }
+                        }
+                    }
+                }
+            } else {
+                converted_surface1 = SDL_ConvertSurfaceFormat(temp, SDL_PIXELFORMAT_RGB24, 0);
+            }
+
+            if (converted_surface1) {
+                texture = SDL_CreateTextureFromSurface(renderer, converted_surface1);
+                SDL_FreeSurface(converted_surface1);
+            }
         }
-    }
-}        
-        texture = SDL_CreateTextureFromSurface(renderer, converted_surface1);
 #else
         texture = SDL_CreateTextureFromSurface(renderer, temp);
 #endif

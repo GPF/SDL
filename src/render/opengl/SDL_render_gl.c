@@ -631,8 +631,8 @@ convert_format(GL_RenderData *renderdata, Uint32 pixel_format,
         break;        
     case SDL_PIXELFORMAT_ARGB8888:
         *internalFormat = GL_RGBA;
-        *format = GL_RGBA;
-        *type = GL_UNSIGNED_BYTE;  // Dreamcast-specific handling for ARGB8888
+        *format = GL_BGRA;
+        *type = GL_UNSIGNED_BYTE;
         break;
 #else
     case SDL_PIXELFORMAT_ARGB8888:
@@ -681,7 +681,6 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 #ifdef __DREAMCAST__
     Uint32 dreamcast_original_format = texture->format;
     SDL_bool dreamcast_strided = SDL_FALSE;
-    SDL_Log("GL_CreateTexture: incoming format=%s, texture w=%d, h=%d", SDL_GetPixelFormatName(texture->format), texture->w, texture->h);
 #endif
 
     GL_ActivateRenderer(renderer);
@@ -695,6 +694,10 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     }
 
 #ifdef __DREAMCAST__
+    if (texture->access == SDL_TEXTUREACCESS_TARGET) {
+        texture->format = SDL_PIXELFORMAT_RGB565;
+    }
+
     if (texture->access != SDL_TEXTUREACCESS_STREAMING &&
         texture->format != SDL_PIXELFORMAT_RGB565 &&
         texture->format != SDL_PIXELFORMAT_ARGB1555 &&
@@ -707,8 +710,6 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     if (texture->format == SDL_PIXELFORMAT_BGR24) {
         texture->format = SDL_PIXELFORMAT_RGB24;
     }
-
-    SDL_Log("GL_CreateTexture: after DC format fix=%s", SDL_GetPixelFormatName(texture->format));
 #endif
     if (!convert_format(renderdata, texture->format, &internalFormat,
                         &format, &type)) {
@@ -787,7 +788,12 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 
         dreamcast_strided = GL_DreamcastCanUseStridedTexture(texture);
 
-        if (dreamcast_strided) {
+        if (texture->access == SDL_TEXTUREACCESS_TARGET) {
+            texture_w = texture->w;
+            texture_h = texture->h;
+            data->texw = 1.0f;
+            data->texh = 1.0f;
+        } else if (dreamcast_strided) {
             texture_w = texture->w;
             texture_h = texture->h;
             data->texw = 1.0f;
@@ -797,8 +803,6 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
             SDL_Log("Dreamcast: using GL_KOS_texture_non_power_of_two: w=%d, h=%d",
              texture_w, texture_h);
         } else if (!isPowerOfTwoWidth || !isPowerOfTwoHeight) {
-            int oldtexture_w = texture->w;
-            int oldtexture_h = texture->h;
             int texturebpp;
             int newStride;
 
@@ -809,9 +813,6 @@ static int GL_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
             // Normalize texw and texh after adjustment to power-of-two
             data->texw = (GLfloat)(texture->w) / texture_w;
             data->texh = (GLfloat)(texture->h) / texture_h;
-
-            SDL_Log("Dreamcast: Adjusted texture size to power-of-two: oldw=%d, oldh=%d, w=%d, h=%d, maxSize=%d\n", oldtexture_w, oldtexture_h, texture_w, texture_h, maxSize);
-
             texture->scaleMode = SDL_ScaleModeNearest;
 
             texturebpp = SDL_BYTESPERPIXEL(texture->format);
@@ -1512,10 +1513,15 @@ static int SetDrawState(GL_RenderData *data, const SDL_RenderCommand *cmd, const
                          istarget ? viewport->y : (data->drawstate.drawableh - viewport->y - viewport->h),
                          viewport->w, viewport->h);
         if (viewport->w && viewport->h) {
-            data->glOrtho((GLdouble)0, (GLdouble)viewport->w,
-                          (GLdouble)istarget ? 0 : viewport->h,
-                          (GLdouble)istarget ? viewport->h : 0,
-                          0.0, 1.0);
+            if (istarget) {
+                data->glOrtho((GLdouble)0, (GLdouble)viewport->w,
+                              (GLdouble)0, (GLdouble)viewport->h,
+                              0.0, 1.0);
+            } else {
+                data->glOrtho((GLdouble)0, (GLdouble)viewport->w,
+                              (GLdouble)viewport->h, (GLdouble)0,
+                              0.0, 1.0);
+            }
         }
         data->glMatrixMode(GL_MODELVIEW);
         data->drawstate.viewport_dirty = SDL_FALSE;
@@ -1738,9 +1744,6 @@ static int GL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, vo
             break;
         }
 
-        case SDL_RENDERCMD_FILL_RECTS: /* unused */
-            break;
-
         case SDL_RENDERCMD_COPY: /* unused */
             break;
 
@@ -1787,6 +1790,7 @@ static int GL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, vo
             break;
         }
 
+        case SDL_RENDERCMD_FILL_RECTS:
         case SDL_RENDERCMD_DRAW_POINTS:
         case SDL_RENDERCMD_GEOMETRY:
         {
@@ -1820,7 +1824,7 @@ static int GL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, vo
 
             if (ret == 0) {
                 const GLfloat *verts = (GLfloat *)(((Uint8 *)vertices) + cmd->data.draw.first);
-                int op = GL_TRIANGLES; /* SDL_RENDERCMD_GEOMETRY */
+                int op = GL_TRIANGLES;
                 if (thiscmdtype == SDL_RENDERCMD_DRAW_POINTS) {
                     op = GL_POINTS;
                 }
@@ -1828,7 +1832,7 @@ static int GL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, vo
                 if (thiscmdtype == SDL_RENDERCMD_DRAW_POINTS) {
                     /* SetDrawState handles glEnableClientState. */
                     data->glVertexPointer(2, GL_FLOAT, sizeof(float) * 2, verts);
-                } else {
+                } else if (thiscmdtype == SDL_RENDERCMD_GEOMETRY) {
                     /* SetDrawState handles glEnableClientState. */
                     if (thistexture) {
                         data->glVertexPointer(2, GL_FLOAT, sizeof(float) * 5, verts + 0);
@@ -1838,6 +1842,12 @@ static int GL_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, vo
                         data->glVertexPointer(2, GL_FLOAT, sizeof(float) * 3, verts + 0);
                         data->glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(float) * 3, verts + 2);
                     }
+                } else {
+                    /* FILL_RECTS uses the same vertex layout as the non-textured
+                       geometry path, but the vertices are already expanded into
+                       triangles by GL_QueueFillRects. */
+                    data->glVertexPointer(2, GL_FLOAT, sizeof(float) * 3, verts + 0);
+                    data->glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(float) * 3, verts + 2);
                 }
 
                 data->glDrawArrays(op, 0, (GLsizei)count);
@@ -2453,7 +2463,6 @@ if (!data->context) {
     renderer->rect_index_order[5] = 2;
 
     if (SDL_GL_ExtensionSupported("GL_EXT_framebuffer_object")) {
-        data->GL_EXT_framebuffer_object_supported = SDL_TRUE;
         data->glGenFramebuffersEXT = (PFNGLGENFRAMEBUFFERSEXTPROC)
             SDL_GL_GetProcAddress("glGenFramebuffersEXT");
         data->glDeleteFramebuffersEXT = (PFNGLDELETEFRAMEBUFFERSEXTPROC)
@@ -2464,7 +2473,12 @@ if (!data->context) {
             SDL_GL_GetProcAddress("glBindFramebufferEXT");
         data->glCheckFramebufferStatusEXT = (PFNGLCHECKFRAMEBUFFERSTATUSEXTPROC)
             SDL_GL_GetProcAddress("glCheckFramebufferStatusEXT");
-        renderer->info.flags |= SDL_RENDERER_TARGETTEXTURE;
+        if (data->glGenFramebuffersEXT && data->glDeleteFramebuffersEXT &&
+            data->glFramebufferTexture2DEXT && data->glBindFramebufferEXT &&
+            data->glCheckFramebufferStatusEXT) {
+            data->GL_EXT_framebuffer_object_supported = SDL_TRUE;
+            renderer->info.flags |= SDL_RENDERER_TARGETTEXTURE;
+        }
     }
     data->framebuffers = NULL;
 
@@ -2502,18 +2516,17 @@ SDL_RenderDriver GL_RenderDriver = {
     GL_CreateRenderer,
     { "opengl",
       (SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE),
-      4,
 #ifdef __DREAMCAST__
+      5,
       {
         SDL_PIXELFORMAT_RGB565,
         SDL_PIXELFORMAT_ARGB1555,
         SDL_PIXELFORMAT_ARGB4444,
         SDL_PIXELFORMAT_RGB24,
         SDL_PIXELFORMAT_RGB888,
-        SDL_PIXELFORMAT_ARGB8888,
-        SDL_PIXELFORMAT_XRGB8888,
       },
 #else
+      4,
       { SDL_PIXELFORMAT_ARGB8888,
         SDL_PIXELFORMAT_ABGR8888,
         SDL_PIXELFORMAT_RGB888,

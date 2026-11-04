@@ -80,7 +80,20 @@ static int DC_PVR_NextPowerOfTwo(int value)
     return result;
 }
 
-static int DC_PVR_PrepareVRAMReplacement(DC_PVR_TextureData *data,
+static pvr_ptr_t DC_PVR_MallocWithReclaim(SDL_Renderer *renderer, size_t size)
+{
+    pvr_ptr_t vram = pvr_mem_malloc(size);
+
+    /* An allocation failure is not proof that no retired VRAM is reclaimable:
+     * retired blocks only wait for a render to finish. Drain once and retry. */
+    if (!vram && DC_PVR_ReclaimForAllocation(renderer)) {
+        vram = pvr_mem_malloc(size);
+    }
+    return vram;
+}
+
+static int DC_PVR_PrepareVRAMReplacement(SDL_Renderer *renderer,
+                                         DC_PVR_TextureData *data,
                                          pvr_ptr_t *replacement,
                                          DC_PVR_DeferredVRAM **deferred)
 {
@@ -91,7 +104,7 @@ static int DC_PVR_PrepareVRAMReplacement(DC_PVR_TextureData *data,
     if (!entry) {
         return SDL_OutOfMemory();
     }
-    vram = pvr_mem_malloc(data->allocation_size);
+    vram = DC_PVR_MallocWithReclaim(renderer, data->allocation_size);
     if (!vram) {
         SDL_free(entry);
         return SDL_SetError("Could not allocate replacement Dreamcast PVR texture VRAM");
@@ -103,16 +116,19 @@ static int DC_PVR_PrepareVRAMReplacement(DC_PVR_TextureData *data,
     return 0;
 }
 
-static void DC_PVR_CommitVRAMReplacement(DC_PVR_RenderData *renderdata,
+static void DC_PVR_CommitVRAMReplacement(SDL_Renderer *renderer,
                                          DC_PVR_TextureData *data,
                                          pvr_ptr_t replacement,
                                          DC_PVR_DeferredVRAM *deferred)
 {
+    DC_PVR_RenderData *renderdata = (DC_PVR_RenderData *)renderer->driverdata;
+    /* The old allocation was sampled by the scene recorded in last_used_gen; the
+     * fresh replacement has not been sampled by any scene yet. */
+    DC_PVR_RetireVRAM(renderer, deferred, data->last_used_gen);
     data->vram = replacement;
     data->sample_vram = replacement;
+    data->last_used_gen = 0;
     data->referenced_in_scene = SDL_FALSE;
-    deferred->next = renderdata->deferred_vram;
-    renderdata->deferred_vram = deferred;
     renderdata->header_valid = SDL_FALSE;
     renderdata->header_texture = NULL;
 }
@@ -324,7 +340,7 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     data->current_valid = SDL_FALSE;
     if (texture->access == SDL_TEXTUREACCESS_TARGET) {
         data->pixels = NULL;
-        vram_next = pvr_mem_malloc(data->allocation_size);
+        vram_next = DC_PVR_MallocWithReclaim(renderer, data->allocation_size);
         if (!vram_next) {
             if (data->pixels) {
                 SDL_free(data->pixels);
@@ -360,7 +376,7 @@ int DC_PVR_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
         return SDL_SetError("Injected Dreamcast PVR texture VRAM allocation failure");
     }
 #endif
-    data->vram = pvr_mem_malloc(data->allocation_size);
+    data->vram = DC_PVR_MallocWithReclaim(renderer, data->allocation_size);
     if (!data->vram) {
         if (data->vram_next) {
             pvr_mem_free(data->vram_next);
@@ -409,7 +425,7 @@ int DC_PVR_CreateDreamcastTexture(SDL_Renderer *renderer, SDL_Texture *texture,
         return SDL_SetError("Injected Dreamcast PVR texture VRAM allocation failure");
     }
 #endif
-    vram = pvr_mem_malloc(dt->payload_size);
+    vram = DC_PVR_MallocWithReclaim(renderer, dt->payload_size);
     if (!vram) {
         SDL_free(data);
         return SDL_SetError("Could not allocate Dreamcast .dt texture VRAM");
@@ -450,7 +466,6 @@ int DC_PVR_CreateDreamcastTexture(SDL_Renderer *renderer, SDL_Texture *texture,
 int DC_PVR_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
                                 const SDL_Rect *rect, const void *pixels, int pitch)
 {
-    DC_PVR_RenderData *renderdata = (DC_PVR_RenderData *)renderer->driverdata;
     DC_PVR_TextureData *data = (DC_PVR_TextureData *)texture->driverdata;
     DC_PVR_DeferredVRAM *deferred = NULL;
     pvr_ptr_t upload_vram = data ? data->vram : NULL;
@@ -486,12 +501,16 @@ int DC_PVR_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
         return SDL_SetError("Dreamcast PVR texture update pitch is too small");
     }
 
-    /* RunCommandQueue may already have submitted headers that reference the
-     * current allocation. Preserve that immutable backing until presentation
-     * completes, while later draws use a full-backing replacement. */
-    if (data->referenced_in_scene &&
-        DC_PVR_PrepareVRAMReplacement(data, &upload_vram, &deferred) < 0) {
-        return -1;
+    /* Write fence: a CPU write must not land on VRAM a scene that sampled it can
+     * still be reading. Replacement backing avoids blocking; the blocking fence is
+     * the fallback when no replacement can be allocated. */
+    if (!DC_PVR_TextureIsIdle(renderer, data)) {
+        if (DC_PVR_PrepareVRAMReplacement(renderer, data, &upload_vram, &deferred) < 0) {
+            if (DC_PVR_WaitTextureIdle(renderer, data) < 0) {
+                return -1;
+            }
+            SDL_ClearError();
+        }
     }
 
     destination = (Uint8 *)data->pixels + (size_t)rect->y * data->cpu_pitch + (size_t)rect->x * 2;
@@ -507,13 +526,13 @@ int DC_PVR_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
      * helper validates the physical aligned range; strided textures and
      * referenced allocations always fall through to full-backing upload. */
 #if SDL_DC_PVR_PARTIAL_UPLOAD
-    if (!data->referenced_in_scene) {
+    if (DC_PVR_TextureIsIdle(renderer, data)) {
         if (DC_PVR_PartialUpload(data, upload_vram,
                                  rect->x, rect->y, rect->w, rect->h)) {
             data->uploaded = SDL_TRUE;
             data->dirty = SDL_FALSE;
             if (deferred) {
-                DC_PVR_CommitVRAMReplacement(renderdata, data, upload_vram, deferred);
+                DC_PVR_CommitVRAMReplacement(renderer, data, upload_vram, deferred);
             }
             return 0;
         }
@@ -524,7 +543,7 @@ int DC_PVR_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture,
      * source is 32-byte aligned; falls back to SQ on failure. */
     DC_PVR_UploadToVRAM(data, upload_vram, data->allocation_size);
     if (deferred) {
-        DC_PVR_CommitVRAMReplacement(renderdata, data, upload_vram, deferred);
+        DC_PVR_CommitVRAMReplacement(renderer, data, upload_vram, deferred);
     }
     data->uploaded = SDL_TRUE;
     data->dirty = SDL_FALSE;
@@ -536,7 +555,6 @@ int DC_PVR_LockTexture(SDL_Renderer *renderer, SDL_Texture *texture,
 {
     DC_PVR_TextureData *data = (DC_PVR_TextureData *)texture->driverdata;
 
-    (void)renderer;
     if (!data || !data->pixels || !data->vram) {
         return SDL_SetError("Dreamcast PVR texture lock has invalid backend state");
     }
@@ -556,10 +574,14 @@ int DC_PVR_LockTexture(SDL_Renderer *renderer, SDL_Texture *texture,
         return SDL_SetError("Dreamcast PVR texture lock is outside the logical texture");
     }
 
-    if (data->referenced_in_scene &&
-        DC_PVR_PrepareVRAMReplacement(data, &data->lock_replacement_vram,
-                                      &data->lock_deferred_vram) < 0) {
-        return -1;
+    if (!DC_PVR_TextureIsIdle(renderer, data)) {
+        if (DC_PVR_PrepareVRAMReplacement(renderer, data, &data->lock_replacement_vram,
+                                          &data->lock_deferred_vram) < 0) {
+            if (DC_PVR_WaitTextureIdle(renderer, data) < 0) {
+                return -1;
+            }
+            SDL_ClearError();
+        }
     }
 
     data->locked = SDL_TRUE;
@@ -572,7 +594,6 @@ int DC_PVR_LockTexture(SDL_Renderer *renderer, SDL_Texture *texture,
 
 void DC_PVR_UnlockTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 {
-    DC_PVR_RenderData *renderdata = (DC_PVR_RenderData *)renderer->driverdata;
     DC_PVR_TextureData *data = (DC_PVR_TextureData *)texture->driverdata;
     pvr_ptr_t upload_vram;
 
@@ -581,13 +602,16 @@ void DC_PVR_UnlockTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     }
 
     data->dirty = SDL_TRUE;
-    if (data->referenced_in_scene && !data->lock_replacement_vram) {
-        if (DC_PVR_PrepareVRAMReplacement(data,
+    if (!DC_PVR_TextureIsIdle(renderer, data) && !data->lock_replacement_vram) {
+        if (DC_PVR_PrepareVRAMReplacement(renderer, data,
                                           &data->lock_replacement_vram,
                                           &data->lock_deferred_vram) < 0) {
-            data->locked = SDL_FALSE;
-            SDL_zero(data->locked_rect);
-            return;
+            if (DC_PVR_WaitTextureIdle(renderer, data) < 0) {
+                data->locked = SDL_FALSE;
+                SDL_zero(data->locked_rect);
+                return;
+            }
+            SDL_ClearError();
         }
     }
     upload_vram = data->lock_replacement_vram ? data->lock_replacement_vram
@@ -597,7 +621,7 @@ void DC_PVR_UnlockTexture(SDL_Renderer *renderer, SDL_Texture *texture)
      * helper validates the physical aligned range; strided textures and
      * referenced allocations always fall through to full-backing upload. */
 #if SDL_DC_PVR_PARTIAL_UPLOAD
-    if (!data->referenced_in_scene) {
+    if (DC_PVR_TextureIsIdle(renderer, data)) {
         if (DC_PVR_PartialUpload(data, upload_vram,
                                  data->locked_rect.x,
                                  data->locked_rect.y,
@@ -608,7 +632,7 @@ void DC_PVR_UnlockTexture(SDL_Renderer *renderer, SDL_Texture *texture)
             data->locked = SDL_FALSE;
             SDL_zero(data->locked_rect);
             if (data->lock_deferred_vram) {
-                DC_PVR_CommitVRAMReplacement(renderdata, data, upload_vram,
+                DC_PVR_CommitVRAMReplacement(renderer, data, upload_vram,
                                              data->lock_deferred_vram);
                 data->lock_replacement_vram = NULL;
                 data->lock_deferred_vram = NULL;
@@ -620,7 +644,7 @@ void DC_PVR_UnlockTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 
     DC_PVR_UploadToVRAM(data, upload_vram, data->allocation_size);
     if (data->lock_deferred_vram) {
-        DC_PVR_CommitVRAMReplacement(renderdata, data, upload_vram,
+        DC_PVR_CommitVRAMReplacement(renderer, data, upload_vram,
                                      data->lock_deferred_vram);
         data->lock_replacement_vram = NULL;
         data->lock_deferred_vram = NULL;
@@ -672,12 +696,10 @@ void DC_PVR_DestroyTexture(SDL_Renderer *renderer, SDL_Texture *texture)
         renderdata->header_valid = SDL_FALSE;
         renderdata->header_texture = NULL;
     }
-    if (renderdata->scene_active) {
-        data->next_deferred = renderdata->deferred_textures;
-        renderdata->deferred_textures = data;
-    } else {
-        DC_PVR_FreeTextureData(data, SDL_TRUE);
-    }
+    /* Retire rather than free: the allocation stays owned until the last scene
+     * that sampled it is proven complete. A never-sampled texture is reclaimed
+     * immediately by DC_PVR_ReclaimCompleted(). */
+    DC_PVR_RetireTexture(renderer, data);
     texture->driverdata = NULL;
 }
 

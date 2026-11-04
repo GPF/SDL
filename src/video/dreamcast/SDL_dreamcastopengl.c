@@ -28,6 +28,7 @@
 #include <kos.h>
 #include "GL/gl.h"
 #include "GL/glu.h"
+#include "GL/glext.h"
 #include "GL/glkos.h"
 
 #ifdef __DREAMCAST__
@@ -59,7 +60,6 @@ void glBlendFuncSeparate(GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlp
         glAlphaFunc(GL_GREATER, 0.5f);  // This checks if alpha is greater than 0.5
     } else {
         // If no alpha blending is required, disable alpha test
-        SDL_Log("Disabling alpha test");
         glDisable(GL_ALPHA_TEST);
     }
 }
@@ -140,6 +140,11 @@ const static struct {
     DEF(glDeleteTextures),
     DEF(glColorPointer),
     DEF(glPointSize),    
+    DEF(glGenFramebuffersEXT),
+    DEF(glDeleteFramebuffersEXT),
+    DEF(glFramebufferTexture2DEXT),
+    DEF(glBindFramebufferEXT),
+    DEF(glCheckFramebufferStatusEXT),
     // These next 5 functions are stubbed out above since GLdc doesn't implement them currently
     DEF(glRasterPos2i),
     DEF(glGetPointerv),

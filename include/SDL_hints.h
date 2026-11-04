@@ -2268,7 +2268,7 @@ extern "C" {
  * This choice can impact the performance and method of updating the display.
  *
  * - "SDL_DC_DIRECT_VIDEO": Uses direct framebuffer access without DMA.
- * - "SDL_DC_DMA_VIDEO": Uses DMA for transferring video data (default).
+ * - "SDL_DC_DMA_VIDEO": Uses DMA for transferring video data.
  * - "SDL_DC_TEXTURED_VIDEO": Uses a power-of-two non-twiddled PVR texture.
  *    SDL_HINT_DC_SCREEN_WIDTH_TEXTURED and SDL_HINT_DC_SCREEN_HEIGHT_TEXTURED
  *    must be set to the intended screen width and height rendered into the texture for the SDL_DC_TEXTURED_VIDEO mode.
@@ -2277,6 +2277,7 @@ extern "C" {
  *    should match the logical surface size, and width should be 32-byte aligned.
  * - "SDL_DC_DREAMCAST_PVR_VIDEO": Uses the native Dreamcast PVR SDL renderer.
  *    This is a non-OpenGL mode and does not create a software framebuffer.
+ *    This is the default if no mode hint is supplied.
  */
 #define SDL_HINT_DC_VIDEO_MODE "SDL_DC_VIDEO_MODE"
 #define SDL_HINT_DC_SCREEN_WIDTH_TEXTURED  "SDL_DC_SCREEN_WIDTH_TEXTURED"

@@ -35,7 +35,9 @@ typedef enum DC_PVR_TextureLayout
 
 typedef struct DC_PVR_TextureData
 {
-    struct DC_PVR_TextureData *next_deferred;
+    struct DC_PVR_TextureData *next_deferred; /* retire list link */
+    Uint64 retire_gen;            /* last scene that could reference this VRAM */
+    Uint64 last_used_gen;         /* latest scene that sampled this texture */
     void *pixels;
     pvr_ptr_t vram;
     pvr_ptr_t sample_vram;
@@ -71,6 +73,7 @@ typedef struct DC_PVR_DeferredVRAM
 {
     struct DC_PVR_DeferredVRAM *next;
     pvr_ptr_t vram;
+    Uint64 retire_gen;            /* last scene that could reference this VRAM */
 } DC_PVR_DeferredVRAM;
 
 typedef struct DC_PVR_RenderData
@@ -101,8 +104,18 @@ typedef struct DC_PVR_RenderData
     int preferred_stride_px;
     int frame_stride_px;
     Uint32 stride_generation;
-    DC_PVR_TextureData *deferred_textures;
-    DC_PVR_DeferredVRAM *deferred_vram;
+    /* Texture VRAM retirement. Scenes are numbered when they begin; a scene
+     * "enters" the Tile Accelerator at its first pvr_list_begin(), which is
+     * where KallistiOS waits for the previous render to have started. Retired
+     * textures and replacement VRAM are tagged with the last scene that could
+     * reference them and freed once that scene's render is proven complete
+     * without waiting. See DC_PVR_CompletedScenes(). */
+    DC_PVR_TextureData *retired_textures;
+    DC_PVR_DeferredVRAM *retired_vram;
+    Uint64 scenes_begun;
+    Uint64 scenes_entered;
+    Uint64 scenes_completed; /* highest scene proven complete; monotonic */
+    SDL_bool scene_entered;      /* the open scene has entered the TA */
     SDL_Texture *current_target;
     SDL_Texture *scene_target;
     int scene_kind;

@@ -6,7 +6,7 @@
  * cost of both screen-only workloads (A-D) and target-texture workloads (E-F).
  *
  * Measures end-to-end frame cost (SDL command execution + scene finish +
- * SDL_RenderPresent + pvr_wait_render_done + vsync) using the KOS high-
+ * SDL_RenderPresent + vsync) using the KOS high-
  * resolution monotonic timer.
  */
 
@@ -773,8 +773,8 @@ int main(int argc, char **argv)
     printf("  timer description: %s\n", g_timer_desc);
     printf("  timer scope: measured interval covers SDL command ingestion,\n");
     printf("               command execution, RTT scene finish (if any),\n");
-    printf("               physical presentation scene, pvr_wait_render_done(),\n");
-    printf("               and one explicit vid_waitvbl().\n");
+    printf("               physical presentation scene, and one explicit\n");
+    printf("               vid_waitvbl(); Present does not wait for raster completion.\n");
     printf("  warmup frames:    %d\n", WARMUP_FRAMES);
     printf("  measured frames:  %d\n", MEASURED_FRAMES);
     printf("  timer resolution: %lu us\n",

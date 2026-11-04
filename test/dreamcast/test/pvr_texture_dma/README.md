@@ -11,7 +11,7 @@ size is a multiple of 32, and that SQ fallback works when DMA fails.
 |------|---------|
 | 1 | Static RGB565, ARGB1555, and ARGB4444 textures with the 8×8 minimum 128-byte POT backing and a 16×16 512-byte backing |
 | 2 | Partial UpdateTexture with padded source pitch; streaming LockTexture/UnlockTexture; update-after-scene-reference replacement |
-| 3 | Forced SQ fallback (via hint); texture destruction and VRAM recovery |
+| 3 | Forced SQ fallback (via hint); texture destruction and continued allocation |
 
 ## Build
 
@@ -51,6 +51,11 @@ and texture-destruction recovery workload.
 The PVR presentation path is three-buffered. The screenshot build waits three
 vblanks after each present before calling `vid_screen_shot()`, so each PPM
 captures the current page rather than the previous framebuffer.
+
+This fixture exercises texture replacement and destruction while scene work is
+pending, then verifies that later texture allocations and draws still succeed.
+It does not compare exact free-VRAM byte counts; the native `.dt` churn fixture
+performs that allocator check.
 
 ## Files
 

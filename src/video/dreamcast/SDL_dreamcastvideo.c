@@ -44,6 +44,12 @@
 #include "SDL_hints.h"
 #include "../../events/SDL_events_c.h"
 
+#if SDL_VIDEO_RENDER_DREAMCAST_PVR
+#define SDL_DC_DEFAULT_VIDEO_MODE "SDL_DC_DREAMCAST_PVR_VIDEO"
+#else
+#define SDL_DC_DEFAULT_VIDEO_MODE "SDL_DC_OPENGL_VIDEO"
+#endif
+
 #include "SDL_dreamcastvideo.h"
 #include "SDL_dreamcastevents_c.h"
 #include "SDL_dreamcastframebuffer_c.h"
@@ -148,8 +154,19 @@ static SDL_VideoDevice *DREAMCAST_CreateDevice(void)
 {
     SDL_VideoDevice *device;
     const char *video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
+
+    if (video_mode_hint == NULL) {
+        SDL_Log("No video mode hint set, defaulting to %s mode", SDL_DC_DEFAULT_VIDEO_MODE);
+        SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, SDL_DC_DEFAULT_VIDEO_MODE);
+        video_mode_hint = SDL_GetHint(SDL_HINT_DC_VIDEO_MODE);
+    }
+
     int use_opengl = (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") == 0);
     int use_native_pvr = (video_mode_hint && SDL_strcmp(video_mode_hint, "SDL_DC_DREAMCAST_PVR_VIDEO") == 0);
+
+    if (use_native_pvr && SDL_GetHint(SDL_HINT_RENDER_DRIVER) == NULL) {
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "Dreamcast PVR");
+    }
 
     if (!DREAMCAST_Available()) {
         SDL_SetError("Dreamcast video driver is not available.");
@@ -283,12 +300,9 @@ int DREAMCAST_VideoInit(_THIS) {
         SDL_SetError("Failed to add video display");
         return -1;
     }
-    if (video_mode_hint == NULL || SDL_strcmp(video_mode_hint, "SDL_DC_OPENGL_VIDEO") != 0) {
-        if (video_mode_hint == NULL) {
-            SDL_Log("No video mode hint set, defaulting to SDL_DC_DMA_VIDEO mode, with SDL_HINT_VIDEO_DOUBLE_BUFFER enabled");
-            SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, "SDL_DC_DMA_VIDEO"); // Default video mode
-            SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1"); // Default double buffering
-        }
+    if (video_mode_hint == NULL) {
+        SDL_Log("No video mode hint set, defaulting to %s mode", SDL_DC_DEFAULT_VIDEO_MODE);
+        SDL_SetHint(SDL_HINT_DC_VIDEO_MODE, SDL_DC_DEFAULT_VIDEO_MODE); // Default video mode
     }
     // SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");
     SDL_Log("SDL2 Dreamcast video initialized: %dx%d", width, height);
@@ -338,9 +352,11 @@ int DREAMCAST_SetDisplayMode(_THIS, SDL_VideoDisplay *display, SDL_DisplayMode *
         mode->h = 480;
     }
 
-    if (use_opengl || use_native_pvr) {
+    if (use_opengl) {
         mode->w = 640;
         mode->h = 480;
+    }
+    if (use_opengl || use_native_pvr) {
         mode->format = SDL_PIXELFORMAT_RGB565;
     }
   

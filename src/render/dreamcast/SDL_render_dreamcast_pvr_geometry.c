@@ -302,6 +302,26 @@ static int DC_PVR_ClipTriangle(const DC_PVR_Vertex triangle[3],
 /* KOS release flags include -ffast-math, which permits the compiler to fold
  * isfinite() to true. Check IEEE-754 exponent bits so malformed public
  * geometry is still rejected in the actual Dreamcast build. */
+/* True when every vertex is inside the bounds by the same test the clipper uses
+ * (left/top inclusive, right/bottom exclusive). Callers have checked finiteness. */
+static SDL_bool DC_PVR_TriangleInsideBounds(const DC_PVR_Vertex triangle[3],
+                                            const DC_PVR_GeometryBounds *bounds)
+{
+    const float left = (float)bounds->left;
+    const float top = (float)bounds->top;
+    const float right = (float)bounds->right;
+    const float bottom = (float)bounds->bottom;
+    int i;
+
+    for (i = 0; i < 3; ++i) {
+        if (!(triangle[i].x >= left && triangle[i].x < right &&
+              triangle[i].y >= top && triangle[i].y < bottom)) {
+            return SDL_FALSE;
+        }
+    }
+    return SDL_TRUE;
+}
+
 static SDL_bool DC_PVR_FloatIsFinite(float value)
 {
     Uint32 bits;
@@ -355,6 +375,39 @@ static int DC_PVR_EmitClippedTriangle(const DC_PVR_Vertex triangle[3],
         if (!DC_PVR_VertexIsFinite(&triangle[i])) {
             return 0;
         }
+    }
+
+    /* Fast path: a triangle entirely inside the bounds needs no clipping. Clipping
+     * would only rotate the vertex array, so the result is the input in cyclic
+     * order starting at the geometric fan anchor, which is what is emitted here.
+     * Finiteness was checked above and nothing is interpolated, so the second
+     * finiteness pass and the area finiteness check are not needed either. A
+     * fully inside triangle has integer bounds, so its doubled area is finite. */
+    if (DC_PVR_TriangleInsideBounds(triangle, bounds)) {
+        const DC_PVR_Vertex *a, *b, *c;
+        double area;
+
+        for (i = 1; i < 3; ++i) {
+            if (triangle[i].y < triangle[fan_anchor].y ||
+                (triangle[i].y == triangle[fan_anchor].y &&
+                 triangle[i].x < triangle[fan_anchor].x)) {
+                fan_anchor = i;
+            }
+        }
+        a = &triangle[fan_anchor];
+        b = &triangle[(fan_anchor + 1) % 3];
+        c = &triangle[(fan_anchor + 2) % 3];
+        area = ((double)b->x - a->x) * ((double)c->y - a->y) -
+               ((double)b->y - a->y) * ((double)c->x - a->x);
+        if (area == 0.0) {
+            return 0;
+        }
+        if (DC_PVR_EmitVertex(a, PVR_CMD_VERTEX) < 0 ||
+            DC_PVR_EmitVertex(b, PVR_CMD_VERTEX) < 0 ||
+            DC_PVR_EmitVertex(c, PVR_CMD_VERTEX_EOL) < 0) {
+            return -1;
+        }
+        return 0;
     }
 
     clipped_count = DC_PVR_ClipTriangle(triangle, bounds, buffers, &clipped);
@@ -674,10 +727,45 @@ static SDL_bool DC_PVR_QuadIntersectsBounds(const DC_PVR_Vertex quad[4],
                ? SDL_TRUE : SDL_FALSE;
 }
 
+/* True for an exactly axis-aligned rectangle with positive width and height, lying
+ * entirely inside the bounds, with finite coordinates. The only callers build quads
+ * from finite x, y, width, height (and u = v = 0), so u and v need no check here.
+ * Such a quad splits into the two triangles [q0, q1, q2] and [q0, q2, q3]: the lowest
+ * vertex of each is q0 (q1 is to its right, q2 and q3 below), their areas are
+ * width * height > 0, and nothing needs clipping, so the generic per-triangle
+ * checks and the clipper would reproduce exactly this sequence. */
+static SDL_bool DC_PVR_RectQuadFastPath(const DC_PVR_Vertex quad[4],
+                                        const DC_PVR_GeometryBounds *bounds)
+{
+    const DC_PVR_Vertex *top_left = &quad[0];
+    const DC_PVR_Vertex *bottom_right = &quad[2];
+
+    return (quad[1].x == bottom_right->x && quad[1].y == top_left->y &&
+            quad[3].x == top_left->x && quad[3].y == bottom_right->y &&
+            bottom_right->x > top_left->x && bottom_right->y > top_left->y &&
+            DC_PVR_FloatIsFinite(top_left->x) && DC_PVR_FloatIsFinite(top_left->y) &&
+            DC_PVR_FloatIsFinite(bottom_right->x) && DC_PVR_FloatIsFinite(bottom_right->y) &&
+            top_left->x >= (float)bounds->left && top_left->y >= (float)bounds->top &&
+            bottom_right->x < (float)bounds->right && bottom_right->y < (float)bounds->bottom)
+               ? SDL_TRUE : SDL_FALSE;
+}
+
 static int DC_PVR_EmitClippedQuad(const DC_PVR_Vertex quad[4],
                                   const DC_PVR_GeometryBounds *bounds)
 {
     DC_PVR_Vertex triangle[3];
+
+    if (DC_PVR_RectQuadFastPath(quad, bounds)) {
+        if (DC_PVR_EmitVertex(&quad[0], PVR_CMD_VERTEX) < 0 ||
+            DC_PVR_EmitVertex(&quad[1], PVR_CMD_VERTEX) < 0 ||
+            DC_PVR_EmitVertex(&quad[2], PVR_CMD_VERTEX_EOL) < 0 ||
+            DC_PVR_EmitVertex(&quad[0], PVR_CMD_VERTEX) < 0 ||
+            DC_PVR_EmitVertex(&quad[2], PVR_CMD_VERTEX) < 0 ||
+            DC_PVR_EmitVertex(&quad[3], PVR_CMD_VERTEX_EOL) < 0) {
+            return -1;
+        }
+        return 0;
+    }
 
     triangle[0] = quad[0];
     triangle[1] = quad[1];

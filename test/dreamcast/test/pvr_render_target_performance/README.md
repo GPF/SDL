@@ -21,7 +21,7 @@ commands and ends after one explicit `vid_waitvbl()` returns. It includes:
 - SDL command queue execution;
 - RTT scene finish (when active);
 - physical presentation scene;
-- `pvr_wait_render_done()` inside the renderer's `SDL_RenderPresent` path; and
+- renderer presentation and synchronization performed by the active backend; and
 - one explicit vertical-blank wait after presentation.
 
 This is a wall-clock measurement of the full frame path, not an isolated
@@ -272,11 +272,14 @@ enables `vid_screen_shot()` calls. Each ELF captures exactly once at the end.
 
 ## 13. Measurement Limitations
 
-- The timer measures wall-clock time including SDL API ingestion, render-done
+- The timer measures wall-clock time including SDL API ingestion, backend
   synchronization, and an explicit vblank wait, not isolated GPU execution.
 - The timer does not separate SDL command queue execution from PVR submission
   from scene finish — it captures the full path.
-- `pvr_wait_render_done()` latency is included.
+- The scene-generation retirement implementation does not wait for the current
+  PVR render inside `SDL_RenderPresent()`. A following scene can absorb that
+  wait at scene start, so this per-frame interval does not isolate the current
+  frame's raster completion.
 - Background KOS activity (network, filesystem) may add jitter.
 - The test does not measure upload bandwidth, texture-read bandwidth, or
   fill-rate separately.
