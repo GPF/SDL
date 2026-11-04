@@ -135,6 +135,11 @@ int main(int argc, char **argv)
 
     if (texture) {
         SDL_FRect dst = { 192.0f, 112.0f, 256.0f, 256.0f };
+#ifdef DT_SCALE_NEAREST
+        /* Diagnostic variant only: build with -DDT_SCALE_NEAREST to check whether
+         * the residual brightness offset comes from linear filtering. */
+        SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
+#endif
         for (int frame = 0; frame < 3; ++frame) {
             if (!SDL_RenderClear(renderer) || !SDL_RenderTexture(renderer, texture, NULL, &dst) ||
                 !SDL_RenderPresent(renderer)) {
